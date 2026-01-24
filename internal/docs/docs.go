@@ -2823,6 +2823,9 @@ const docTemplate = `{
                 },
                 "rows": {
                     "type": "integer"
+                },
+                "user_id": {
+                    "type": "string"
                 }
             }
         },
@@ -2880,9 +2883,6 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "name": {
-                    "type": "string"
-                },
-                "pty_status": {
                     "type": "string"
                 },
                 "rows": {

@@ -1,0 +1,71 @@
+const API_BASE = "/api";
+
+async function request<T>(endpoint: string, options?: RequestInit): Promise<T> {
+  const res = await fetch(`${API_BASE}${endpoint}`, {
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    ...options,
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error(err.error || "Request failed");
+  }
+  return res.json();
+}
+
+export interface CPUStats {
+  usagePercent: number;
+  cores: number;
+  modelName: string;
+}
+
+export interface MemoryStats {
+  total: number;
+  used: number;
+  available: number;
+  usedPercent: number;
+}
+
+export interface LoadAverage {
+  load1: number;
+  load5: number;
+  load15: number;
+}
+
+export interface SystemStats {
+  cpu: CPUStats;
+  memory: MemoryStats;
+  loadAvg: LoadAverage;
+  uptime: number;
+  numProcess: number;
+  os: string;
+  arch: string;
+  hostname: string;
+}
+
+export interface ProcessInfo {
+  pid: number;
+  name: string;
+  username: string;
+  cpuPercent: number;
+  memPercent: number;
+  memRss: number;
+  status: string;
+  createTime: number;
+  cmdline: string;
+  ppid: number;
+  numThreads: number;
+}
+
+export const processApi = {
+  systemStats: () => request<SystemStats>("/system/stats"),
+
+  list: () => request<{ processes: ProcessInfo[] }>("/process"),
+
+  detail: (pid: number) => request<ProcessInfo>(`/process/${pid}`),
+
+  kill: (pid: number, signal?: string) =>
+    request<{ ok: boolean }>(`/process/${pid}/kill`, {
+      method: "POST",
+      body: JSON.stringify({ signal: signal || "SIGTERM" }),
+    }),
+};

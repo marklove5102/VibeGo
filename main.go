@@ -92,6 +92,7 @@ func main() {
 	handler.NewFileHandler().Register(api)
 	handler.NewTerminalHandler(db, cfg.DefaultShell).Register(api)
 	handler.NewGitHandler().Register(api)
+	handler.NewProcessHandler().Register(api)
 
 	distFS, err := ui.GetDistFS()
 	if err == nil {
