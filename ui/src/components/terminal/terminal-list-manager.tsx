@@ -215,7 +215,7 @@ const TerminalListManager: React.FC<TerminalListManagerProps> = ({
                     <div className="flex items-center gap-0.5">
                       <button
                         onClick={(e) => startEditing(e, terminal)}
-                        className="p-2 rounded-md text-ide-mute hover:bg-ide-bg hover:text-ide-text opacity-0 group-hover:opacity-100 transition-opacity"
+                        className="p-2 rounded-md text-ide-mute hover:bg-ide-bg hover:text-ide-text"
                       >
                         <Edit2 size={14} />
                       </button>
