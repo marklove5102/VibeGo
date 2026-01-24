@@ -1,13 +1,13 @@
-export { AppView, type Locale, type Theme, useAppStore } from "./appStore";
-export { type EditorTab, useEditorStore } from "./editorStore";
+export { AppView, type Locale, type Theme, useAppStore } from "./app-store";
+export { type EditorTab, useEditorStore } from "./editor-store";
 export {
   type FileItem,
   type SortField,
   type SortOrder,
   useFileManagerStore,
   type ViewMode,
-} from "./fileManagerStore";
-export { type FileNode, useFileStore } from "./fileStore";
+} from "./file-manager-store";
+export { type FileNode, useFileStore } from "./file-store";
 export {
   type GenericGroup,
   type GroupPage,
@@ -21,13 +21,13 @@ export {
   type TerminalGroup,
   useFrameStore,
   type ViewType,
-} from "./frameStore";
-export { type GitFileNode, useGitStore } from "./gitStore";
+} from "./frame-store";
+export { type GitFileNode, useGitStore } from "./git-store";
 export {
   getLanguageFromExtension,
   getPreviewType,
   type PreviewType,
   usePreviewStore,
-} from "./previewStore";
-export { useSessionStore } from "./sessionStore";
-export { type TerminalSession, useTerminalStore } from "./terminalStore";
+} from "./preview-store";
+export { useSessionStore } from "./session-store";
+export { type TerminalSession, useTerminalStore } from "./terminal-store";

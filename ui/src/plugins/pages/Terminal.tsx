@@ -1,6 +1,6 @@
 import { Terminal } from "lucide-react";
 import type React from "react";
-import TerminalPage from "@/components/TerminalPage";
+import TerminalPage from "@/components/terminal/terminal-page";
 import { type PluginViewProps, registerPlugin } from "../registry";
 
 const TerminalPluginView: React.FC<PluginViewProps> = ({ context }) => {

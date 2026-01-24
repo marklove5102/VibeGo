@@ -1,19 +1,16 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { fileApi } from "@/api/file";
-import DiffView from "@/components/DiffView";
-import DirectoryPicker from "@/components/DirectoryPicker";
-import FileManager from "@/components/FileManager";
+import { DirectoryPicker, NewPageMenu, ProjectMenu } from "@/components/common";
+import { FileManager } from "@/components/file";
 import { AppFrame, NewGroupMenu } from "@/components/frame";
-import GitView from "@/components/GitView";
-import HomePage from "@/components/HomePage";
-import NewPageMenu from "@/components/NewPageMenu";
-import ProjectMenu from "@/components/ProjectMenu";
+import { DiffView, GitView } from "@/components/git";
+import { HomePage } from "@/components/home";
 import { FilePreview } from "@/components/preview";
-import SettingsPage from "@/components/SettingsPage";
-import TerminalPage from "@/components/TerminalPage";
+import { SettingsPage } from "@/components/settings";
+import { TerminalPage } from "@/components/terminal";
 import { useSettingsStore } from "@/lib/settings";
 import { pluginRegistry } from "@/plugins/registry";
-import { initTerminalCleanup } from "@/services/terminalCleanupService";
+import { initTerminalCleanup } from "@/services/terminal-cleanup-service";
 import {
   type FileItem,
   type Locale,
@@ -24,7 +21,7 @@ import {
   usePreviewStore,
   useSessionStore,
 } from "@/stores";
-import type { GenericGroup, PluginGroup } from "@/stores/frameStore";
+import type { GenericGroup, PluginGroup } from "@/stores/frame-store";
 import "@/plugins";
 
 const App: React.FC = () => {

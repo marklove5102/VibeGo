@@ -3,7 +3,7 @@ import { createRoot } from "react-dom/client";
 import "@/index.css";
 import "@/lib/monaco";
 import "@fontsource-variable/jetbrains-mono";
-import App from "@/App.tsx";
+import App from "@/app.tsx";
 
 const isCancelError = (error: unknown): boolean => {
   if (error instanceof DOMException) {

@@ -1,6 +1,6 @@
 import { Activity, RefreshCw, Square } from "lucide-react";
 import React, { useEffect } from "react";
-import { useFrameStore } from "@/stores/frameStore";
+import { useFrameStore } from "@/stores/frame-store";
 import { type PluginViewProps, registerPlugin } from "../registry";
 
 const ProcessMonitorView: React.FC<PluginViewProps> = ({ isActive }) => {
