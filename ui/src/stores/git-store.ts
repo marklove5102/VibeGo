@@ -68,7 +68,7 @@ interface GitState {
   gitFetch: () => Promise<boolean>;
   gitPull: () => Promise<boolean>;
   gitPush: () => Promise<boolean>;
-  stash: (message?: string) => Promise<boolean>;
+  stash: (message?: string, files?: string[]) => Promise<boolean>;
   stashPop: (index?: number) => Promise<boolean>;
   stashDrop: (index?: number) => Promise<boolean>;
   discardFile: (path: string) => Promise<void>;
@@ -491,12 +491,12 @@ export const useGitStore = create<GitState>((set, get) => ({
     }
   },
 
-  stash: async (message) => {
+  stash: async (message, files) => {
     const { currentPath, fetchStashes } = get();
     if (!currentPath) return false;
     set({ isLoading: true, error: null });
     try {
-      const res = await gitApi.stash(currentPath, message);
+      const res = await gitApi.stash(currentPath, message, files);
       if (res.status) {
         const nodes = statusFilesToNodes(res.status.files);
         set({ allFiles: nodes, checkedFiles: new Set(nodes.map((n) => n.path)) });

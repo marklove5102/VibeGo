@@ -77,6 +77,8 @@
     "cancel": "Cancel",
     "confirm": "Discard",
     "stash": "Stash",
+    "stashAll": "Stash all changes",
+    "stashFile": "Stash this file",
     "stashes": "Stashes",
     "pop": "Pop",
     "drop": "Drop",

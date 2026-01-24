@@ -203,14 +203,22 @@ func (h *GitHandler) Status(c *gin.Context) {
 
 	var fileStatuses []FileStatus
 	for path, s := range status {
-		if s.Staging != git.Unmodified {
+		if s.Staging == git.Untracked && s.Worktree == git.Untracked {
+			fileStatuses = append(fileStatuses, FileStatus{
+				Path:   path,
+				Status: string(s.Worktree),
+				Staged: false,
+			})
+			continue
+		}
+		if s.Staging != git.Unmodified && s.Staging != git.Untracked {
 			fileStatuses = append(fileStatuses, FileStatus{
 				Path:   path,
 				Status: string(s.Staging),
 				Staged: true,
 			})
 		}
-		if s.Worktree != git.Unmodified {
+		if s.Worktree != git.Unmodified && s.Worktree != git.Untracked {
 			fileStatuses = append(fileStatuses, FileStatus{
 				Path:   path,
 				Status: string(s.Worktree),
@@ -1297,21 +1305,11 @@ func (h *GitHandler) getRepoRoot(path string) (string, error) {
 }
 
 type GitStashRequest struct {
-	Path    string `json:"path" binding:"required"`
-	Message string `json:"message"`
+	Path    string   `json:"path" binding:"required"`
+	Message string   `json:"message"`
+	Files   []string `json:"files"`
 }
 
-// Stash godoc
-// @Summary Stash changes
-// @Description Stash current working directory changes (uses git CLI as go-git lacks native stash support)
-// @Tags Git
-// @Accept json
-// @Produce json
-// @Param request body GitStashRequest true "Stash request"
-// @Success 200 {object} map[string]interface{}
-// @Failure 400 {object} map[string]string
-// @Failure 500 {object} map[string]string
-// @Router /api/git/stash [post]
 func (h *GitHandler) Stash(c *gin.Context) {
 	var req GitStashRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -1325,9 +1323,13 @@ func (h *GitHandler) Stash(c *gin.Context) {
 		return
 	}
 
-	args := []string{"stash", "push"}
+	args := []string{"stash", "push", "--include-untracked"}
 	if req.Message != "" {
 		args = append(args, "-m", req.Message)
+	}
+	if len(req.Files) > 0 {
+		args = append(args, "--")
+		args = append(args, req.Files...)
 	}
 
 	cmd := exec.Command("git", args...)

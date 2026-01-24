@@ -77,6 +77,8 @@
     "cancel": "取消",
     "confirm": "放弃",
     "stash": "贮藏",
+    "stashAll": "贮藏所有更改",
+    "stashFile": "贮藏此文件",
     "stashes": "贮藏列表",
     "pop": "恢复",
     "drop": "删除",

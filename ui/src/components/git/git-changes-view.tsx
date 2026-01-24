@@ -19,7 +19,7 @@ interface GitChangesViewProps {
   onToggleAll: () => void;
   onDiscardFile: (path: string) => void;
   onConflictClick: (path: string) => void;
-  onStash: () => void;
+  onStash: (message?: string, files?: string[]) => void;
   onStashPop: (index: number) => void;
   onStashDrop: (index: number) => void;
 }
@@ -142,17 +142,23 @@ const GitChangesView: React.FC<GitChangesViewProps> = ({
 
         {hasChanges && (
           <>
-            <div
-              className="flex items-center gap-2 px-3 py-2 border-b border-ide-border bg-ide-panel/30 cursor-pointer"
-              onClick={onToggleAll}
-            >
-              {allChecked ? (
-                <SquareCheck size={16} className="text-ide-accent shrink-0" />
-              ) : (
-                <Square size={16} className="text-ide-mute shrink-0" />
-              )}
-              <span className="text-xs text-ide-mute font-medium flex-1">{t("git.selectAll")}</span>
-              <span className="text-xs text-ide-mute">{allFiles.length}</span>
+            <div className="flex items-center gap-2 px-3 py-2 border-b border-ide-border bg-ide-panel/30">
+              <div className="flex items-center gap-2 flex-1 cursor-pointer" onClick={onToggleAll}>
+                {allChecked ? (
+                  <SquareCheck size={16} className="text-ide-accent shrink-0" />
+                ) : (
+                  <Square size={16} className="text-ide-mute shrink-0" />
+                )}
+                <span className="text-xs text-ide-mute font-medium flex-1">{t("git.selectAll")}</span>
+                <span className="text-xs text-ide-mute">{allFiles.length}</span>
+              </div>
+              <button
+                className="p-1 hover:bg-purple-500/20 rounded text-ide-mute hover:text-purple-400 transition-colors shrink-0"
+                onClick={() => onStash()}
+                title={t("git.stashAll")}
+              >
+                <Archive size={14} />
+              </button>
             </div>
 
             <div>
@@ -185,6 +191,13 @@ const GitChangesView: React.FC<GitChangesViewProps> = ({
                         <span className="text-[10px] text-ide-mute/70 truncate leading-tight">{file.path}</span>
                       )}
                     </div>
+                    <button
+                      className="p-1 hover:bg-purple-500/20 rounded text-ide-mute hover:text-purple-400 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+                      onClick={(e) => { e.stopPropagation(); onStash(undefined, [file.path]); }}
+                      title={t("git.stashFile")}
+                    >
+                      <Archive size={12} />
+                    </button>
                     {file.status !== "untracked" && (
                       <button
                         className="p-1 hover:bg-red-500/20 rounded text-ide-mute hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
@@ -292,26 +305,16 @@ const GitChangesView: React.FC<GitChangesViewProps> = ({
           <span className="text-[10px] text-ide-mute">{t("git.amend")}</span>
         </label>
 
-        <div className="flex gap-2">
-          <button
-            disabled={!canCommit || isLoading}
-            onClick={handleCommit}
-            className="flex-1 bg-ide-accent text-ide-bg font-bold py-2 text-sm flex items-center justify-center gap-2 rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-ide-accent/80 transition-colors"
-            title="Ctrl+Enter"
-          >
-            <Check size={14} />
-            {t("git.commitTo")} {currentBranch}
-            {checkedCount > 0 && <span className="text-xs opacity-80">({checkedCount})</span>}
-          </button>
-          <button
-            disabled={!hasChanges || isLoading}
-            onClick={() => onStash()}
-            className="px-3 py-2 bg-purple-500/20 text-purple-400 font-bold text-sm flex items-center justify-center gap-1 rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-purple-500/30 transition-colors"
-            title={t("git.stash")}
-          >
-            <Archive size={14} />
-          </button>
-        </div>
+        <button
+          disabled={!canCommit || isLoading}
+          onClick={handleCommit}
+          className="w-full bg-ide-accent text-ide-bg font-bold py-2 text-sm flex items-center justify-center gap-2 rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-ide-accent/80 transition-colors"
+          title="Ctrl+Enter"
+        >
+          <Check size={14} />
+          {t("git.commitTo")} {currentBranch}
+          {checkedCount > 0 && <span className="text-xs opacity-80">({checkedCount})</span>}
+        </button>
       </div>
 
       {discardConfirm && (

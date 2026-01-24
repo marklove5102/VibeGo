@@ -237,10 +237,10 @@ export const gitApi = {
       body: JSON.stringify({ path, remote }),
     }),
 
-  stash: (path: string, message?: string) =>
+  stash: (path: string, message?: string, files?: string[]) =>
     request<{ ok: boolean; message: string; status: StatusPayload }>("/git/stash", {
       method: "POST",
-      body: JSON.stringify({ path, message }),
+      body: JSON.stringify({ path, message, files }),
     }),
 
   stashList: (path: string) =>

@@ -31,10 +31,14 @@ func collectFileStatus(repo *git.Repository) []FileStatus {
 	}
 	var files []FileStatus
 	for p, s := range status {
-		if s.Staging != git.Unmodified {
+		if s.Staging == git.Untracked && s.Worktree == git.Untracked {
+			files = append(files, FileStatus{Path: p, Status: string(s.Worktree), Staged: false})
+			continue
+		}
+		if s.Staging != git.Unmodified && s.Staging != git.Untracked {
 			files = append(files, FileStatus{Path: p, Status: string(s.Staging), Staged: true})
 		}
-		if s.Worktree != git.Unmodified {
+		if s.Worktree != git.Unmodified && s.Worktree != git.Untracked {
 			files = append(files, FileStatus{Path: p, Status: string(s.Worktree), Staged: false})
 		}
 	}
