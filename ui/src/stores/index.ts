@@ -9,10 +9,12 @@ export {
 } from "./fileManagerStore";
 export { type FileNode, useFileStore } from "./fileStore";
 export {
-  type FolderGroup,
+  type GenericGroup,
+  type GroupPage,
   type GroupType,
   type HomeGroup,
   type PageGroup,
+  type PageType,
   type PluginGroup,
   type SettingsGroup,
   type TabItem,

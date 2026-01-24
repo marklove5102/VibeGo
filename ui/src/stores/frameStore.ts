@@ -1,9 +1,9 @@
 import type { ReactNode } from "react";
 import { create } from "zustand";
 
-export type GroupType = "home" | "folder" | "terminal" | "plugin" | "settings";
+export type GroupType = "home" | "group" | "terminal" | "plugin" | "settings";
 
-export type ViewType = "files" | "git" | "terminal";
+export type PageType = "files" | "git" | "terminal";
 
 export interface TopBarButton {
   icon: ReactNode;
@@ -60,17 +60,21 @@ export interface TabItem {
 
 const EMPTY_TABS: TabItem[] = [];
 
-export interface FolderGroup {
-  type: "folder";
+export interface GroupPage {
+  id: string;
+  type: PageType;
+  label: string;
+  path?: string;
+  tabs: TabItem[];
+  activeTabId: string | null;
+}
+
+export interface GenericGroup {
+  type: "group";
   id: string;
   name: string;
-  path: string;
-  activeView: ViewType;
-  views: {
-    files: { tabs: TabItem[]; activeTabId: string | null };
-    git: { tabs: TabItem[]; activeTabId: string | null };
-    terminal: { tabs: TabItem[]; activeTabId: string | null };
-  };
+  pages: GroupPage[];
+  activePageId: string | null;
 }
 
 export interface TerminalGroup {
@@ -102,7 +106,9 @@ export interface HomeGroup {
   name: string;
 }
 
-export type PageGroup = HomeGroup | FolderGroup | TerminalGroup | PluginGroup | SettingsGroup;
+export type PageGroup = HomeGroup | GenericGroup | TerminalGroup | PluginGroup | SettingsGroup;
+
+export type ViewType = PageType;
 
 interface FrameState {
   groups: PageGroup[];
@@ -124,13 +130,16 @@ interface FrameState {
   setActiveGroup: (id: string) => void;
   getActiveGroup: () => PageGroup | undefined;
 
-  setFolderView: (groupId: string, view: ViewType) => void;
-  getCurrentView: () => ViewType | null;
-  setCurrentView: (view: ViewType) => void;
+  setActivePage: (groupId: string, pageId: string) => void;
+  getCurrentPage: () => GroupPage | null;
+  getCurrentPageType: () => PageType | null;
 
-  addTab: (groupId: string, tab: TabItem, view?: ViewType) => void;
-  removeTab: (groupId: string, tabId: string, view?: ViewType) => void;
-  setActiveTab: (groupId: string, tabId: string | null, view?: ViewType) => void;
+  addPageToGroup: (groupId: string, page: Omit<GroupPage, "tabs" | "activeTabId">) => void;
+  removePageFromGroup: (groupId: string, pageId: string) => void;
+
+  addTab: (groupId: string, tab: TabItem, pageId?: string) => void;
+  removeTab: (groupId: string, tabId: string, pageId?: string) => void;
+  setActiveTab: (groupId: string, tabId: string | null, pageId?: string) => void;
 
   getCurrentTabs: () => TabItem[];
   getCurrentActiveTabId: () => string | null;
@@ -140,20 +149,27 @@ interface FrameState {
 
   pinTab: (tabId: string) => void;
   openPreviewTab: (tab: TabItem) => void;
+
+  setFolderView: (groupId: string, view: ViewType) => void;
+  getCurrentView: () => ViewType | null;
+  setCurrentView: (view: ViewType) => void;
 }
 
-const createDefaultFolder = (path: string, name?: string): FolderGroup => ({
-  type: "folder",
-  id: `folder-${Date.now()}`,
-  name: name || path.split("/").pop() || "Folder",
-  path,
-  activeView: "files",
-  views: {
-    files: { tabs: [], activeTabId: null },
-    git: { tabs: [], activeTabId: null },
-    terminal: { tabs: [], activeTabId: null },
-  },
-});
+const createFolderGroup = (path: string, name?: string): GenericGroup => {
+  const groupId = `group-${Date.now()}`;
+  const folderName = name || path.split("/").pop() || "Folder";
+  return {
+    type: "group",
+    id: groupId,
+    name: folderName,
+    pages: [
+      { id: `${groupId}-files`, type: "files", label: "Files", path, tabs: [], activeTabId: null },
+      { id: `${groupId}-git`, type: "git", label: "Git", path, tabs: [], activeTabId: null },
+      { id: `${groupId}-terminal`, type: "terminal", label: "Terminal", path, tabs: [], activeTabId: null },
+    ],
+    activePageId: `${groupId}-files`,
+  };
+};
 
 const createTerminalGroup = (name?: string): TerminalGroup => ({
   type: "terminal",
@@ -184,10 +200,11 @@ const createHomeGroup = (): HomeGroup => ({
   name: "Home",
 });
 
-const getGroupTabs = (group: PageGroup, view?: ViewType): TabItem[] => {
-  if (group.type === "folder") {
-    const v = view || group.activeView;
-    return group.views[v].tabs;
+const getGroupTabs = (group: PageGroup, pageId?: string): TabItem[] => {
+  if (group.type === "group") {
+    const targetPageId = pageId || group.activePageId;
+    const page = group.pages.find((p) => p.id === targetPageId);
+    return page?.tabs || EMPTY_TABS;
   }
   if (group.type === "settings" || group.type === "home") {
     return EMPTY_TABS;
@@ -195,15 +212,21 @@ const getGroupTabs = (group: PageGroup, view?: ViewType): TabItem[] => {
   return group.tabs;
 };
 
-const getGroupActiveTabId = (group: PageGroup, view?: ViewType): string | null => {
-  if (group.type === "folder") {
-    const v = view || group.activeView;
-    return group.views[v].activeTabId;
+const getGroupActiveTabId = (group: PageGroup, pageId?: string): string | null => {
+  if (group.type === "group") {
+    const targetPageId = pageId || group.activePageId;
+    const page = group.pages.find((p) => p.id === targetPageId);
+    return page?.activeTabId || null;
   }
   if (group.type === "settings" || group.type === "home") {
     return null;
   }
   return group.activeTabId;
+};
+
+const getActivePage = (group: PageGroup): GroupPage | null => {
+  if (group.type !== "group") return null;
+  return group.pages.find((p) => p.id === group.activePageId) || null;
 };
 
 export const useFrameStore = create<FrameState>((set, get) => ({
@@ -237,8 +260,15 @@ export const useFrameStore = create<FrameState>((set, get) => ({
   },
 
   addFolderGroup: (path, name, id) => {
-    const group = createDefaultFolder(path, name);
-    if (id) group.id = id;
+    const group = createFolderGroup(path, name);
+    if (id) {
+      group.id = id;
+      group.pages = group.pages.map((p) => ({
+        ...p,
+        id: `${id}-${p.type}`,
+      }));
+      group.activePageId = `${id}-files`;
+    }
     set((s) => {
       const groupsWithoutHome = s.groups.filter((g) => g.type !== "home");
       return {
@@ -296,15 +326,76 @@ export const useFrameStore = create<FrameState>((set, get) => ({
     return groups.find((g) => g.id === activeGroupId);
   },
 
+  setActivePage: (groupId, pageId) =>
+    set((s) => ({
+      groups: s.groups.map((g) =>
+        g.type === "group" && g.id === groupId ? { ...g, activePageId: pageId } : g
+      ),
+    })),
+
+  getCurrentPage: () => {
+    const group = get().getActiveGroup();
+    if (!group) return null;
+    return getActivePage(group);
+  },
+
+  getCurrentPageType: () => {
+    const group = get().getActiveGroup();
+    if (!group) return null;
+    if (group.type === "group") {
+      const page = getActivePage(group);
+      return page?.type || null;
+    }
+    if (group.type === "terminal") return "terminal";
+    return null;
+  },
+
+  addPageToGroup: (groupId, page) =>
+    set((s) => ({
+      groups: s.groups.map((g) => {
+        if (g.type !== "group" || g.id !== groupId) return g;
+        const exists = g.pages.find((p) => p.id === page.id);
+        if (exists) return { ...g, activePageId: page.id };
+        return {
+          ...g,
+          pages: [...g.pages, { ...page, tabs: [], activeTabId: null }],
+          activePageId: page.id,
+        };
+      }),
+    })),
+
+  removePageFromGroup: (groupId, pageId) =>
+    set((s) => ({
+      groups: s.groups.map((g) => {
+        if (g.type !== "group" || g.id !== groupId) return g;
+        const pages = g.pages.filter((p) => p.id !== pageId);
+        const activePageId =
+          g.activePageId === pageId
+            ? pages.length > 0
+              ? pages[0].id
+              : null
+            : g.activePageId;
+        return { ...g, pages, activePageId };
+      }),
+    })),
+
   setFolderView: (groupId, view) =>
     set((s) => ({
-      groups: s.groups.map((g) => (g.type === "folder" && g.id === groupId ? { ...g, activeView: view } : g)),
+      groups: s.groups.map((g) => {
+        if (g.type !== "group" || g.id !== groupId) return g;
+        const page = g.pages.find((p) => p.type === view);
+        if (!page) return g;
+        return { ...g, activePageId: page.id };
+      }),
     })),
 
   getCurrentView: () => {
     const group = get().getActiveGroup();
     if (!group) return null;
-    if (group.type === "folder") return group.activeView;
+    if (group.type === "group") {
+      const page = getActivePage(group);
+      return page?.type || null;
+    }
     if (group.type === "terminal") return "terminal";
     return null;
   },
@@ -312,31 +403,25 @@ export const useFrameStore = create<FrameState>((set, get) => ({
   setCurrentView: (view) => {
     const { activeGroupId, setFolderView, getActiveGroup } = get();
     const group = getActiveGroup();
-    if (group?.type === "folder" && activeGroupId) {
+    if (group?.type === "group" && activeGroupId) {
       setFolderView(activeGroupId, view);
     }
   },
 
-  addTab: (groupId, tab, view) =>
+  addTab: (groupId, tab, pageId) =>
     set((s) => ({
       groups: s.groups.map((g) => {
         if (g.id !== groupId) return g;
-        if (g.type === "folder") {
-          const v = view || g.activeView;
-          const viewData = g.views[v];
-          const exists = viewData.tabs.find((t) => t.id === tab.id);
-          if (exists) {
-            return {
-              ...g,
-              views: { ...g.views, [v]: { ...viewData, activeTabId: tab.id } },
-            };
-          }
+        if (g.type === "group") {
+          const targetPageId = pageId || g.activePageId;
           return {
             ...g,
-            views: {
-              ...g.views,
-              [v]: { tabs: [tab, ...viewData.tabs], activeTabId: tab.id },
-            },
+            pages: g.pages.map((p) => {
+              if (p.id !== targetPageId) return p;
+              const exists = p.tabs.find((t) => t.id === tab.id);
+              if (exists) return { ...p, activeTabId: tab.id };
+              return { ...p, tabs: [tab, ...p.tabs], activeTabId: tab.id };
+            }),
           };
         }
         if (g.type === "settings" || g.type === "home") return g;
@@ -346,22 +431,27 @@ export const useFrameStore = create<FrameState>((set, get) => ({
       }),
     })),
 
-  removeTab: (groupId, tabId, view) =>
+  removeTab: (groupId, tabId, pageId) =>
     set((s) => ({
       groups: s.groups.map((g) => {
         if (g.id !== groupId) return g;
-        if (g.type === "folder") {
-          const v = view || g.activeView;
-          const viewData = g.views[v];
-          const removeIndex = viewData.tabs.findIndex((t) => t.id === tabId);
-          const tabs = viewData.tabs.filter((t) => t.id !== tabId);
-          const activeTabId =
-            viewData.activeTabId === tabId
-              ? tabs.length > 0
-                ? tabs[Math.min(removeIndex, tabs.length - 1)].id
-                : null
-              : viewData.activeTabId;
-          return { ...g, views: { ...g.views, [v]: { tabs, activeTabId } } };
+        if (g.type === "group") {
+          const targetPageId = pageId || g.activePageId;
+          return {
+            ...g,
+            pages: g.pages.map((p) => {
+              if (p.id !== targetPageId) return p;
+              const removeIndex = p.tabs.findIndex((t) => t.id === tabId);
+              const tabs = p.tabs.filter((t) => t.id !== tabId);
+              const activeTabId =
+                p.activeTabId === tabId
+                  ? tabs.length > 0
+                    ? tabs[Math.min(removeIndex, tabs.length - 1)].id
+                    : null
+                  : p.activeTabId;
+              return { ...p, tabs, activeTabId };
+            }),
+          };
         }
         if (g.type === "settings" || g.type === "home") return g;
         const removeIndex = g.tabs.findIndex((t: TabItem) => t.id === tabId);
@@ -376,15 +466,15 @@ export const useFrameStore = create<FrameState>((set, get) => ({
       }),
     })),
 
-  setActiveTab: (groupId, tabId, view) =>
+  setActiveTab: (groupId, tabId, pageId) =>
     set((s) => ({
       groups: s.groups.map((g) => {
         if (g.id !== groupId) return g;
-        if (g.type === "folder") {
-          const v = view || g.activeView;
+        if (g.type === "group") {
+          const targetPageId = pageId || g.activePageId;
           return {
             ...g,
-            views: { ...g.views, [v]: { ...g.views[v], activeTabId: tabId } },
+            pages: g.pages.map((p) => (p.id !== targetPageId ? p : { ...p, activeTabId: tabId })),
           };
         }
         if (g.type === "settings" || g.type === "home") return g;
@@ -423,18 +513,14 @@ export const useFrameStore = create<FrameState>((set, get) => ({
     set((s) => ({
       groups: s.groups.map((g) => {
         if (g.id !== s.activeGroupId) return g;
-        if (g.type === "folder") {
-          const v = g.activeView;
-          const viewData = g.views[v];
+        if (g.type === "group") {
           return {
             ...g,
-            views: {
-              ...g.views,
-              [v]: {
-                ...viewData,
-                tabs: viewData.tabs.map((t) => (t.id === tabId ? { ...t, pinned: true } : t)),
-              },
-            },
+            pages: g.pages.map((p) =>
+              p.id !== g.activePageId
+                ? p
+                : { ...p, tabs: p.tabs.map((t) => (t.id === tabId ? { ...t, pinned: true } : t)) }
+            ),
           };
         }
         if (g.type === "settings" || g.type === "home") return g;
@@ -453,26 +539,22 @@ export const useFrameStore = create<FrameState>((set, get) => ({
       groups: s.groups.map((g) => {
         if (g.id !== activeGroupId) return g;
 
-        if (g.type === "folder") {
-          const v = g.activeView;
-          const viewData = g.views[v];
-          const existingTab = viewData.tabs.find((t) => t.id === tab.id);
-          if (existingTab) {
-            return {
-              ...g,
-              views: { ...g.views, [v]: { ...viewData, activeTabId: tab.id } },
-            };
-          }
-          const previewTabIndex = viewData.tabs.findIndex((t) => !t.pinned);
-          let newTabs: TabItem[];
-          if (previewTabIndex !== -1) {
-            newTabs = viewData.tabs.map((t, i) => (i === previewTabIndex ? { ...tab, pinned: false } : t));
-          } else {
-            newTabs = [{ ...tab, pinned: false }, ...viewData.tabs];
-          }
+        if (g.type === "group") {
           return {
             ...g,
-            views: { ...g.views, [v]: { tabs: newTabs, activeTabId: tab.id } },
+            pages: g.pages.map((p) => {
+              if (p.id !== g.activePageId) return p;
+              const existingTab = p.tabs.find((t) => t.id === tab.id);
+              if (existingTab) return { ...p, activeTabId: tab.id };
+              const previewTabIndex = p.tabs.findIndex((t) => !t.pinned);
+              let newTabs: TabItem[];
+              if (previewTabIndex !== -1) {
+                newTabs = p.tabs.map((t, i) => (i === previewTabIndex ? { ...tab, pinned: false } : t));
+              } else {
+                newTabs = [{ ...tab, pinned: false }, ...p.tabs];
+              }
+              return { ...p, tabs: newTabs, activeTabId: tab.id };
+            }),
           };
         }
 

@@ -15,6 +15,7 @@ interface TerminalState {
   addTerminal: (groupId: string, terminal: TerminalSession) => void;
   removeTerminal: (groupId: string, terminalId: string) => void;
   clearAllTerminals: (groupId: string) => void;
+  clearGroupData: (groupId: string) => void;
   getActiveId: (groupId: string) => string | null;
   setActiveId: (groupId: string, terminalId: string | null) => void;
   updateTerminal: (groupId: string, id: string, updates: Partial<TerminalSession>) => void;
@@ -95,6 +96,18 @@ export const useTerminalStore = create<TerminalState>((set, get) => ({
         [groupId]: null,
       },
     })),
+
+  clearGroupData: (groupId) =>
+    set((s) => {
+      const { [groupId]: _t, ...restTerminals } = s.terminalsByGroup;
+      const { [groupId]: _a, ...restActiveIds } = s.activeIdByGroup;
+      const { [groupId]: _l, ...restListManager } = s.listManagerOpenByGroup;
+      return {
+        terminalsByGroup: restTerminals,
+        activeIdByGroup: restActiveIds,
+        listManagerOpenByGroup: restListManager,
+      };
+    }),
 
   getActiveId: (groupId) => {
     return get().activeIdByGroup[groupId] || null;

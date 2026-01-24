@@ -90,7 +90,7 @@ const ProjectMenu: React.FC<ProjectMenuProps> = ({
   };
 
   const handleCloseFolder = async () => {
-    if (activeGroup?.type === "folder") {
+    if (activeGroup?.type === "group") {
       if (currentSessionId) {
         await deleteSession(currentSessionId);
       } else {
@@ -204,7 +204,7 @@ const ProjectMenu: React.FC<ProjectMenuProps> = ({
     title?: string;
   }> = [];
 
-  if (activeGroup?.type === "folder") {
+  if (activeGroup?.type === "group") {
     contextItems.push({
       id: "close-folder",
       icon: <XCircle size={20} />,

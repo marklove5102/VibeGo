@@ -1,7 +1,8 @@
 import { create } from "zustand";
 import { type SessionInfo, sessionApi } from "../api/session";
+import { cleanupAllTerminals } from "../services/terminalCleanupService";
 import { useFileManagerStore } from "./fileManagerStore";
-import { type FolderGroup, type PluginGroup, useFrameStore } from "./frameStore";
+import { type GenericGroup, type GroupPage, type PluginGroup, useFrameStore } from "./frameStore";
 import { type TerminalSession, useTerminalStore } from "./terminalStore";
 
 const CURRENT_SESSION_KEY = "current_session_id";
@@ -10,11 +11,11 @@ let autoSaveUnsub: (() => void) | null = null;
 let autoSaveTimer: ReturnType<typeof setTimeout> | null = null;
 
 export interface SessionState {
-  openFolders: Array<{
+  openGroups: Array<{
     id: string;
-    path: string;
     name: string;
-    views: FolderGroup["views"];
+    pages: GroupPage[];
+    activePageId: string | null;
   }>;
   openPlugins: Array<{
     id: string;
@@ -23,6 +24,7 @@ export interface SessionState {
   }>;
   terminalsByGroup: Record<string, TerminalSession[]>;
   activeTerminalByGroup: Record<string, string | null>;
+  listManagerOpenByGroup: Record<string, boolean>;
   settingsOpen?: boolean;
   activeGroupId: string | null;
 }
@@ -62,16 +64,16 @@ function setStoredSessionId(id: string | null): void {
 function buildSessionState(): SessionState {
   const frameState = useFrameStore.getState();
   const terminalState = useTerminalStore.getState();
-  const folderGroups = frameState.groups.filter((g): g is FolderGroup => g.type === "folder");
+  const genericGroups = frameState.groups.filter((g): g is GenericGroup => g.type === "group");
   const pluginGroups = frameState.groups.filter((g): g is PluginGroup => g.type === "plugin");
   const settingsGroup = frameState.groups.find((g) => g.type === "settings");
 
   return {
-    openFolders: folderGroups.map((g) => ({
+    openGroups: genericGroups.map((g) => ({
       id: g.id,
-      path: g.path,
       name: g.name,
-      views: g.views,
+      pages: g.pages,
+      activePageId: g.activePageId,
     })),
     openPlugins: pluginGroups.map((g) => ({
       id: g.id,
@@ -80,8 +82,93 @@ function buildSessionState(): SessionState {
     })),
     terminalsByGroup: terminalState.terminalsByGroup,
     activeTerminalByGroup: terminalState.activeIdByGroup,
+    listManagerOpenByGroup: terminalState.listManagerOpenByGroup,
     settingsOpen: !!settingsGroup,
     activeGroupId: frameState.activeGroupId,
+  };
+}
+
+interface LegacySessionState {
+  openFolders?: Array<{
+    id: string;
+    path: string;
+    name: string;
+    views: {
+      files: { tabs: unknown[]; activeTabId: string | null };
+      git: { tabs: unknown[]; activeTabId: string | null };
+      terminal: { tabs: unknown[]; activeTabId: string | null };
+    };
+  }>;
+  openGroups?: SessionState["openGroups"];
+  openPlugins?: SessionState["openPlugins"];
+  terminalsByGroup?: Record<string, TerminalSession[]>;
+  activeTerminalByGroup?: Record<string, string | null>;
+  listManagerOpenByGroup?: Record<string, boolean>;
+  settingsOpen?: boolean;
+  activeGroupId?: string | null;
+}
+
+function migrateFromLegacy(legacy: LegacySessionState): SessionState {
+  if (legacy.openGroups) {
+    return {
+      openGroups: legacy.openGroups,
+      openPlugins: legacy.openPlugins || [],
+      terminalsByGroup: legacy.terminalsByGroup || {},
+      activeTerminalByGroup: legacy.activeTerminalByGroup || {},
+      listManagerOpenByGroup: legacy.listManagerOpenByGroup || {},
+      settingsOpen: legacy.settingsOpen,
+      activeGroupId: legacy.activeGroupId || null,
+    };
+  }
+
+  const openGroups: SessionState["openGroups"] = (legacy.openFolders || []).map((folder) => {
+    const groupId = folder.id.replace("folder-", "group-");
+    return {
+      id: groupId,
+      name: folder.name,
+      pages: [
+        {
+          id: `${groupId}-files`,
+          type: "files" as const,
+          label: "Files",
+          path: folder.path,
+          tabs: (folder.views?.files?.tabs || []) as GroupPage["tabs"],
+          activeTabId: folder.views?.files?.activeTabId || null,
+        },
+        {
+          id: `${groupId}-git`,
+          type: "git" as const,
+          label: "Git",
+          path: folder.path,
+          tabs: (folder.views?.git?.tabs || []) as GroupPage["tabs"],
+          activeTabId: folder.views?.git?.activeTabId || null,
+        },
+        {
+          id: `${groupId}-terminal`,
+          type: "terminal" as const,
+          label: "Terminal",
+          path: folder.path,
+          tabs: (folder.views?.terminal?.tabs || []) as GroupPage["tabs"],
+          activeTabId: folder.views?.terminal?.activeTabId || null,
+        },
+      ],
+      activePageId: `${groupId}-files`,
+    };
+  });
+
+  let activeGroupId = legacy.activeGroupId || null;
+  if (activeGroupId?.startsWith("folder-")) {
+    activeGroupId = activeGroupId.replace("folder-", "group-");
+  }
+
+  return {
+    openGroups,
+    openPlugins: legacy.openPlugins || [],
+    terminalsByGroup: legacy.terminalsByGroup || {},
+    activeTerminalByGroup: legacy.activeTerminalByGroup || {},
+    listManagerOpenByGroup: legacy.listManagerOpenByGroup || {},
+    settingsOpen: legacy.settingsOpen,
+    activeGroupId,
   };
 }
 
@@ -96,8 +183,10 @@ function restoreSessionState(state: SessionState): void {
 
   let lastAddedGroupId: string | null = null;
 
-  state.openFolders.forEach((folder) => {
-    lastAddedGroupId = frameStore.addFolderGroup(folder.path, folder.name, folder.id);
+  state.openGroups.forEach((group) => {
+    const firstFilesPage = group.pages.find((p) => p.type === "files");
+    const path = firstFilesPage?.path || "";
+    lastAddedGroupId = frameStore.addFolderGroup(path, group.name, group.id);
   });
 
   state.openPlugins.forEach((plugin) => {
@@ -124,6 +213,12 @@ function restoreSessionState(state: SessionState): void {
     });
   }
 
+  if (state.listManagerOpenByGroup) {
+    Object.entries(state.listManagerOpenByGroup).forEach(([groupId, open]) => {
+      terminalStore.setListManagerOpen(groupId, open);
+    });
+  }
+
   const currentGroups = useFrameStore.getState().groups;
 
   if (state.activeGroupId && state.activeGroupId !== "home") {
@@ -145,12 +240,21 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
 
   initAutoSave: () => {
     if (autoSaveUnsub) return;
-    autoSaveUnsub = useFrameStore.subscribe(() => {
+
+    const scheduleAutoSave = () => {
       if (autoSaveTimer) clearTimeout(autoSaveTimer);
       autoSaveTimer = setTimeout(() => {
         get().saveCurrentSession();
       }, 1000);
-    });
+    };
+
+    const frameUnsub = useFrameStore.subscribe(scheduleAutoSave);
+    const terminalUnsub = useTerminalStore.subscribe(scheduleAutoSave);
+
+    autoSaveUnsub = () => {
+      frameUnsub();
+      terminalUnsub();
+    };
   },
 
   loadSessions: async () => {
@@ -201,21 +305,22 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
       const groupId = frameStore.addFolderGroup(folderPath, folderName);
 
       const state: SessionState = {
-        openFolders: [
+        openGroups: [
           {
             id: groupId,
-            path: folderPath,
             name: folderName,
-            views: {
-              files: { tabs: [], activeTabId: null },
-              git: { tabs: [], activeTabId: null },
-              terminal: { tabs: [], activeTabId: null },
-            },
+            pages: [
+              { id: `${groupId}-files`, type: "files", label: "Files", path: folderPath, tabs: [], activeTabId: null },
+              { id: `${groupId}-git`, type: "git", label: "Git", path: folderPath, tabs: [], activeTabId: null },
+              { id: `${groupId}-terminal`, type: "terminal", label: "Terminal", path: folderPath, tabs: [], activeTabId: null },
+            ],
+            activePageId: `${groupId}-files`,
           },
         ],
         openPlugins: [],
         terminalsByGroup: {},
         activeTerminalByGroup: {},
+        listManagerOpenByGroup: {},
         activeGroupId: groupId,
       };
 
@@ -233,29 +338,29 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
   switchSession: async (id: string) => {
     set({ loading: true, error: null });
     try {
+      await cleanupAllTerminals();
+
       const detail = await sessionApi.get(id);
       let state: SessionState = {
-        openFolders: [],
+        openGroups: [],
         openPlugins: [],
         terminalsByGroup: {},
         activeTerminalByGroup: {},
+        listManagerOpenByGroup: {},
         activeGroupId: null,
       };
 
       if (detail.state && detail.state !== "{}") {
         try {
           const parsed = JSON.parse(detail.state);
-          state = {
-            ...parsed,
-            terminalsByGroup: parsed.terminalsByGroup || {},
-            activeTerminalByGroup: parsed.activeTerminalByGroup || {},
-          };
+          state = migrateFromLegacy(parsed);
         } catch {
           state = {
-            openFolders: [],
+            openGroups: [],
             openPlugins: [],
             terminalsByGroup: {},
             activeTerminalByGroup: {},
+            listManagerOpenByGroup: {},
             activeGroupId: null,
           };
         }

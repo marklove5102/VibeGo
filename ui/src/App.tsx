@@ -12,6 +12,8 @@ import { FilePreview } from "@/components/preview";
 import SettingsPage from "@/components/SettingsPage";
 import TerminalPage from "@/components/TerminalPage";
 import { useSettingsStore } from "@/lib/settings";
+import { pluginRegistry } from "@/plugins/registry";
+import { initTerminalCleanup } from "@/services/terminalCleanupService";
 import {
   type FileItem,
   type Locale,
@@ -22,6 +24,7 @@ import {
   usePreviewStore,
   useSessionStore,
 } from "@/stores";
+import type { GenericGroup, PluginGroup } from "@/stores/frameStore";
 import "@/plugins";
 
 const App: React.FC = () => {
@@ -35,7 +38,7 @@ const App: React.FC = () => {
   const fontFamily = useSettingsStore((s) => s.settings.fontFamily);
 
   const activeGroup = useFrameStore((s) => s.getActiveGroup());
-  const currentView = useFrameStore((s) => s.getCurrentView());
+  const currentPage = useFrameStore((s) => s.getCurrentPage());
   const activeTabId = useFrameStore((s) => s.getCurrentActiveTabId());
   const tabs = useFrameStore((s) => s.getCurrentTabs());
   const addCurrentTab = useFrameStore((s) => s.addCurrentTab);
@@ -53,6 +56,7 @@ const App: React.FC = () => {
 
   useEffect(() => {
     initSettings();
+    initTerminalCleanup();
   }, [initSettings]);
 
   const initSession = useSessionStore((s) => s.initSession);
@@ -143,8 +147,9 @@ const App: React.FC = () => {
   const handleTabAction = useCallback(async () => {
     if (!activeGroup) return;
 
-    if (activeGroup.type === "folder") {
-      switch (currentView) {
+    if (activeGroup.type === "group") {
+      const pageType = currentPage?.type;
+      switch (pageType) {
         case "files":
           if (activeTabId === null) {
             useFileManagerStore.getState().setLoading(true);
@@ -183,7 +188,6 @@ const App: React.FC = () => {
           break;
       }
     } else if (activeGroup.type === "terminal") {
-      // Terminal page handles its own TopBar
     } else if (activeGroup.type === "plugin") {
       addCurrentTab({
         id: `plugin-tab-${Date.now()}`,
@@ -191,7 +195,7 @@ const App: React.FC = () => {
         data: { type: "plugin", pluginId: activeGroup.pluginId },
       });
     }
-  }, [activeGroup, currentView, currentPath, addCurrentTab, tabs.length, activeTabId]);
+  }, [activeGroup, currentPage, currentPath, addCurrentTab, tabs.length, activeTabId]);
 
   const handleOpenDirectory = useCallback(() => {
     setDirectoryPickerOpen(true);
@@ -223,31 +227,36 @@ const App: React.FC = () => {
 
   const activeTab = tabs.find((t) => t.id === activeTabId);
 
-  const renderContent = () => {
-    if (!activeGroup) return null;
-
-    if (activeGroup.type === "home") {
-      return <HomePage onOpenFolder={handleOpenFolder} locale={locale} />;
-    }
-
-    if (activeGroup.type === "settings") {
-      return <SettingsPage />;
-    }
-
-    if (activeGroup.type === "terminal") {
-      return <TerminalPage groupId={activeGroup.id} />;
-    }
-
-    if (activeGroup.type === "plugin") {
+  const renderPluginPage = (group: PluginGroup) => {
+    const plugin = pluginRegistry.get(group.pluginId);
+    if (!plugin) {
       return (
-        <div className="h-full flex items-center justify-center text-ide-mute">Plugin: {activeGroup.pluginId}</div>
+        <div className="h-full flex items-center justify-center text-ide-mute">
+          Plugin not found: {group.pluginId}
+        </div>
       );
     }
+    const PluginView = plugin.view;
+    return (
+      <PluginView
+        isActive={true}
+        context={{
+          groupId: group.id,
+          tabId: activeTabId,
+          isActive: true,
+        }}
+      />
+    );
+  };
 
-    if (activeGroup.type === "folder") {
-      if (currentView === "git") {
+  const renderGroupPage = (group: GenericGroup) => {
+    if (!currentPage) return null;
+    const pagePath = currentPage.path || "";
+
+    switch (currentPage.type) {
+      case "git":
         if (activeTabId === null) {
-          return <GitView path={activeGroup.path} locale={locale} onFileDiff={handleGitDiff} isActive={true} />;
+          return <GitView path={pagePath} locale={locale} onFileDiff={handleGitDiff} isActive={true} />;
         }
         if (activeTab?.data?.type === "diff") {
           return (
@@ -257,13 +266,12 @@ const App: React.FC = () => {
             />
           );
         }
-      }
+        return null;
 
-      if (currentView === "terminal") {
-        return <TerminalPage groupId={activeGroup.id} cwd={activeGroup.path} />;
-      }
+      case "terminal":
+        return <TerminalPage groupId={group.id} cwd={pagePath} />;
 
-      if (currentView === "files") {
+      case "files":
         if (activeTabId !== null && activeTab) {
           const tabFile = activeTab.data?.file as FileItem | undefined;
           return (
@@ -278,17 +286,36 @@ const App: React.FC = () => {
                   isHidden: false,
                   mode: "",
                   modTime: "",
-                  extension: activeTab.title.includes(".") ? "." + activeTab.title.split(".").pop() : "",
+                  extension: activeTab.title.includes(".") ? `.${activeTab.title.split(".").pop()}` : "",
                 }
               }
             />
           );
         }
-        return <FileManager initialPath={activeGroup.path} onFileOpen={handleFileOpen} />;
-      }
-    }
+        return <FileManager initialPath={pagePath} onFileOpen={handleFileOpen} />;
 
-    return null;
+      default:
+        return null;
+    }
+  };
+
+  const renderContent = () => {
+    if (!activeGroup) return null;
+
+    switch (activeGroup.type) {
+      case "home":
+        return <HomePage onOpenFolder={handleOpenFolder} locale={locale} />;
+      case "settings":
+        return <SettingsPage />;
+      case "terminal":
+        return <TerminalPage groupId={activeGroup.id} />;
+      case "plugin":
+        return renderPluginPage(activeGroup);
+      case "group":
+        return renderGroupPage(activeGroup);
+      default:
+        return null;
+    }
   };
 
   return (

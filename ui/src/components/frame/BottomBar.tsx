@@ -1,12 +1,20 @@
 import { Box, Files, FolderOpen, GitGraph, Home, Maximize, Menu, Minimize, Settings, Terminal } from "lucide-react";
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { type BottomBarButton, type PageGroup, useFrameStore, type ViewType } from "@/stores/frameStore";
+import { pluginRegistry } from "@/plugins/registry";
+import {
+  type BottomBarButton,
+  type GenericGroup,
+  type PageGroup,
+  type PageType,
+  type PluginGroup,
+  useFrameStore,
+} from "@/stores/frameStore";
 
 interface BottomBarProps {
   onMenuClick?: () => void;
 }
 
-const VIEW_ICONS: Record<ViewType, React.ReactNode> = {
+const PAGE_TYPE_ICONS: Record<PageType, React.ReactNode> = {
   files: <Files size={18} />,
   git: <GitGraph size={18} />,
   terminal: <Terminal size={18} />,
@@ -14,7 +22,7 @@ const VIEW_ICONS: Record<ViewType, React.ReactNode> = {
 
 const GROUP_TYPE_ICONS = {
   home: <Home size={18} />,
-  folder: <FolderOpen size={18} />,
+  group: <FolderOpen size={18} />,
   terminal: <Terminal size={18} />,
   plugin: <Box size={18} />,
   settings: <Settings size={18} />,
@@ -26,8 +34,17 @@ interface GroupButtonProps {
   isExpanded: boolean;
   hasMultipleGroups: boolean;
   onGroupClick: (groupId: string) => void;
-  onViewClick: (groupId: string, view: ViewType) => void;
+  onPageClick: (groupId: string, pageId: string) => void;
 }
+
+const getPluginIcon = (pluginId: string): React.ReactNode => {
+  const plugin = pluginRegistry.get(pluginId);
+  if (plugin) {
+    const IconComponent = plugin.icon;
+    return <IconComponent size={18} />;
+  }
+  return <Box size={18} />;
+};
 
 const GroupButton: React.FC<GroupButtonProps> = ({
   group,
@@ -35,9 +52,10 @@ const GroupButton: React.FC<GroupButtonProps> = ({
   isExpanded,
   hasMultipleGroups,
   onGroupClick,
-  onViewClick,
+  onPageClick,
 }) => {
-  if (group.type === "folder") {
+  if (group.type === "group") {
+    const genericGroup = group as GenericGroup;
     if (isExpanded) {
       return (
         <div
@@ -45,15 +63,18 @@ const GroupButton: React.FC<GroupButtonProps> = ({
             hasMultipleGroups ? "bg-ide-panel/70 border border-ide-border/30 rounded-md shadow-inner" : ""
           }`}
         >
-          {(["files", "git", "terminal"] as ViewType[]).map((view) => (
+          {genericGroup.pages.map((page) => (
             <button
-              key={view}
-              onClick={() => onViewClick(group.id, view)}
+              key={page.id}
+              onClick={() => onPageClick(group.id, page.id)}
               className={`px-2 h-full rounded flex items-center transition-all ${
-                isActive && group.activeView === view ? "text-ide-accent" : "text-ide-mute hover:text-ide-text"
+                isActive && genericGroup.activePageId === page.id
+                  ? "text-ide-accent"
+                  : "text-ide-mute hover:text-ide-text"
               }`}
+              title={page.label}
             >
-              {VIEW_ICONS[view]}
+              {PAGE_TYPE_ICONS[page.type] || <Box size={18} />}
             </button>
           ))}
         </div>
@@ -67,7 +88,22 @@ const GroupButton: React.FC<GroupButtonProps> = ({
         }`}
         title={group.name}
       >
-        {GROUP_TYPE_ICONS.folder}
+        {GROUP_TYPE_ICONS.group}
+      </button>
+    );
+  }
+
+  if (group.type === "plugin") {
+    const pluginGroup = group as PluginGroup;
+    return (
+      <button
+        onClick={() => onGroupClick(group.id)}
+        className={`px-3 h-full rounded flex items-center gap-2 transition-all ${
+          isActive ? "bg-ide-panel text-ide-accent shadow-sm" : "text-ide-mute hover:text-ide-text"
+        }`}
+        title={group.name}
+      >
+        {getPluginIcon(pluginGroup.pluginId)}
       </button>
     );
   }
@@ -90,7 +126,7 @@ const BottomBar: React.FC<BottomBarProps> = ({ onMenuClick }) => {
   const activeGroupId = useFrameStore((s) => s.activeGroupId);
   const bottomBarConfig = useFrameStore((s) => s.bottomBarConfig);
   const setActiveGroup = useFrameStore((s) => s.setActiveGroup);
-  const setFolderView = useFrameStore((s) => s.setFolderView);
+  const setActivePage = useFrameStore((s) => s.setActivePage);
   const setCurrentActiveTab = useFrameStore((s) => s.setCurrentActiveTab);
 
   const [compactMode] = useState(false);
@@ -115,16 +151,16 @@ const BottomBar: React.FC<BottomBarProps> = ({ onMenuClick }) => {
     [activeGroupId, setActiveGroup, setCurrentActiveTab]
   );
 
-  const handleViewClick = useCallback(
-    (groupId: string, view: ViewType) => {
+  const handlePageClick = useCallback(
+    (groupId: string, pageId: string) => {
       setActiveGroup(groupId);
-      setFolderView(groupId, view);
+      setActivePage(groupId, pageId);
     },
-    [setActiveGroup, setFolderView]
+    [setActiveGroup, setActivePage]
   );
 
   const shouldExpand = (group: PageGroup) => {
-    if (group.type !== "folder") return false;
+    if (group.type !== "group") return false;
     if (compactMode) return activeGroupId === group.id;
     return true;
   };
@@ -189,7 +225,7 @@ const BottomBar: React.FC<BottomBarProps> = ({ onMenuClick }) => {
                 isExpanded={shouldExpand(group)}
                 hasMultipleGroups={hasMultipleGroups}
                 onGroupClick={handleGroupClick}
-                onViewClick={handleViewClick}
+                onPageClick={handlePageClick}
               />
             ))}
           </div>
