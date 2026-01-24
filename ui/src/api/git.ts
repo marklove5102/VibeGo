@@ -31,6 +31,21 @@ export interface GitDiff {
   new: string;
 }
 
+export interface CommitFileInfo {
+  path: string;
+  status: string;
+}
+
+export interface RemoteInfo {
+  name: string;
+  urls: string[];
+}
+
+export interface StashEntry {
+  index: number;
+  message: string;
+}
+
 export const gitApi = {
   init: (path: string) =>
     request<{ ok: boolean }>("/git/init", {
@@ -111,5 +126,95 @@ export const gitApi = {
     request<{ ok: boolean; branch: string }>("/git/switch-branch", {
       method: "POST",
       body: JSON.stringify({ path, branch }),
+    }),
+
+  commitFiles: (path: string, commit: string) =>
+    request<{ files: CommitFileInfo[] }>("/git/commit-files", {
+      method: "POST",
+      body: JSON.stringify({ path, commit }),
+    }),
+
+  commitDiff: (path: string, commit: string, filePath: string) =>
+    request<GitDiff>("/git/commit-diff", {
+      method: "POST",
+      body: JSON.stringify({ path, commit, filePath }),
+    }),
+
+  remotes: (path: string) =>
+    request<{ remotes: RemoteInfo[] }>("/git/remotes", {
+      method: "POST",
+      body: JSON.stringify({ path }),
+    }),
+
+  fetch: (path: string, remote = "origin") =>
+    request<{ ok: boolean }>("/git/fetch", {
+      method: "POST",
+      body: JSON.stringify({ path, remote }),
+    }),
+
+  pull: (path: string, remote = "origin", branch?: string) =>
+    request<{ ok: boolean }>("/git/pull", {
+      method: "POST",
+      body: JSON.stringify({ path, remote, branch }),
+    }),
+
+  push: (path: string, remote = "origin") =>
+    request<{ ok: boolean }>("/git/push", {
+      method: "POST",
+      body: JSON.stringify({ path, remote }),
+    }),
+
+  stash: (path: string, message?: string) =>
+    request<{ ok: boolean; message: string }>("/git/stash", {
+      method: "POST",
+      body: JSON.stringify({ path, message }),
+    }),
+
+  stashList: (path: string) =>
+    request<{ stashes: StashEntry[] }>("/git/stash-list", {
+      method: "POST",
+      body: JSON.stringify({ path }),
+    }),
+
+  stashPop: (path: string, index = 0) =>
+    request<{ ok: boolean }>("/git/stash-pop", {
+      method: "POST",
+      body: JSON.stringify({ path, index }),
+    }),
+
+  stashDrop: (path: string, index = 0) =>
+    request<{ ok: boolean }>("/git/stash-drop", {
+      method: "POST",
+      body: JSON.stringify({ path, index }),
+    }),
+
+  conflicts: (path: string) =>
+    request<{ conflicts: string[] }>("/git/conflicts", {
+      method: "POST",
+      body: JSON.stringify({ path }),
+    }),
+
+  resolveConflict: (path: string, filePath: string, content: string) =>
+    request<{ ok: boolean }>("/git/resolve-conflict", {
+      method: "POST",
+      body: JSON.stringify({ path, filePath, content }),
+    }),
+
+  createBranch: (path: string, branch: string, from?: string) =>
+    request<{ ok: boolean; branch: string }>("/git/create-branch", {
+      method: "POST",
+      body: JSON.stringify({ path, branch, from }),
+    }),
+
+  deleteBranch: (path: string, branch: string) =>
+    request<{ ok: boolean }>("/git/delete-branch", {
+      method: "POST",
+      body: JSON.stringify({ path, branch }),
+    }),
+
+  addPatch: (path: string, filePath: string, patch: string) =>
+    request<{ ok: boolean }>("/git/add-patch", {
+      method: "POST",
+      body: JSON.stringify({ path, filePath, patch }),
     }),
 };

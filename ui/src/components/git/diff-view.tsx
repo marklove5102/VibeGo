@@ -1,72 +1,194 @@
-import React from "react";
+import { DiffEditor } from "@monaco-editor/react";
+import { Columns2, Plus, Rows2 } from "lucide-react";
+import React, { useMemo, useRef, useState } from "react";
+import type * as Monaco from "monaco-editor";
+import "@/lib/monaco";
 
 interface DiffViewProps {
   original: string;
   modified: string;
+  filename?: string;
+  language?: string;
+  allowPartialStaging?: boolean;
+  onStageSelected?: (patch: string) => void;
 }
 
-const DiffView: React.FC<DiffViewProps> = ({ original, modified }) => {
-  // Very naive diff implementation for prototype purposes
-  // In a real app, use a library like 'diff' or 'diff-match-patch'
+const getLanguageFromFilename = (filename?: string): string => {
+  if (!filename) return "plaintext";
+  const ext = filename.split(".").pop()?.toLowerCase();
+  const langMap: Record<string, string> = {
+    ts: "typescript",
+    tsx: "typescript",
+    js: "javascript",
+    jsx: "javascript",
+    json: "json",
+    md: "markdown",
+    css: "css",
+    scss: "scss",
+    less: "less",
+    html: "html",
+    xml: "xml",
+    yaml: "yaml",
+    yml: "yaml",
+    py: "python",
+    go: "go",
+    rs: "rust",
+    java: "java",
+    c: "c",
+    cpp: "cpp",
+    h: "c",
+    hpp: "cpp",
+    sh: "shell",
+    bash: "shell",
+    sql: "sql",
+    graphql: "graphql",
+    vue: "vue",
+    svelte: "svelte",
+    php: "php",
+    rb: "ruby",
+    swift: "swift",
+    kt: "kotlin",
+    scala: "scala",
+    lua: "lua",
+    r: "r",
+    toml: "toml",
+    ini: "ini",
+    dockerfile: "dockerfile",
+    makefile: "makefile",
+  };
+  return langMap[ext || ""] || "plaintext";
+};
 
-  const originalLines = original.split("\n");
-  const modifiedLines = modified.split("\n");
+const DiffView: React.FC<DiffViewProps> = ({ 
+  original, 
+  modified, 
+  filename, 
+  language,
+  allowPartialStaging = false,
+  onStageSelected,
+}) => {
+  const [renderSideBySide, setRenderSideBySide] = useState(true);
+  const editorRef = useRef<Monaco.editor.IStandaloneDiffEditor | null>(null);
+  const [hasSelection, setHasSelection] = useState(false);
 
-  // This is a dummy "diff" logic just for visual representation
-  // It blindly assumes lines map 1:1 unless length differs significantly
-  const maxLines = Math.max(originalLines.length, modifiedLines.length);
+  const detectedLanguage = useMemo(() => {
+    return language || getLanguageFromFilename(filename);
+  }, [language, filename]);
 
-  const renderLines = () => {
-    const output = [];
-    for (let i = 0; i < maxLines; i++) {
-      const org = originalLines[i];
-      const mod = modifiedLines[i];
+  const generatePatch = () => {
+    if (!editorRef.current || !filename) return;
 
-      if (org === mod) {
-        // Unchanged
-        output.push(
-          <div key={i} className="flex text-ide-mute/50">
-            <div className="w-8 text-right pr-2 select-none border-r border-ide-border/50 text-xs leading-6">
-              {i + 1}
-            </div>
-            <div className="pl-2 text-ide-text font-mono text-sm leading-6 whitespace-pre">{mod || ""}</div>
-          </div>
-        );
+    const modifiedEditor = editorRef.current.getModifiedEditor();
+    const selection = modifiedEditor.getSelection();
+    
+    if (!selection || selection.isEmpty()) {
+      return;
+    }
+
+    const startLine = selection.startLineNumber;
+    const endLine = selection.endLineNumber;
+    const originalLines = original.split("\n");
+    const modifiedLines = modified.split("\n");
+
+    let patch = `--- a/${filename}\n+++ b/${filename}\n`;
+    patch += `@@ -${startLine},${endLine - startLine + 1} +${startLine},${endLine - startLine + 1} @@\n`;
+
+    for (let i = startLine - 1; i <= endLine - 1 && i < modifiedLines.length; i++) {
+      const origLine = originalLines[i] || "";
+      const modLine = modifiedLines[i] || "";
+      
+      if (origLine === modLine) {
+        patch += ` ${modLine}\n`;
       } else {
-        // Changed (Visualize as Delete then Add for simplicity)
-        if (org !== undefined) {
-          output.push(
-            <div key={`del-${i}`} className="flex bg-ide-diff-del-bg">
-              <div className="w-8 text-right pr-2 select-none border-r border-ide-border/50 text-xs leading-6 text-ide-diff-del">
-                -
-              </div>
-              <div className="pl-2 text-ide-text font-mono text-sm leading-6 whitespace-pre opacity-70">{org}</div>
-            </div>
-          );
-        }
-        if (mod !== undefined) {
-          output.push(
-            <div key={`add-${i}`} className="flex bg-ide-diff-add-bg">
-              <div className="w-8 text-right pr-2 select-none border-r border-ide-border/50 text-xs leading-6 text-ide-diff-add">
-                +
-              </div>
-              <div className="pl-2 text-ide-text font-mono text-sm leading-6 whitespace-pre">{mod}</div>
-            </div>
-          );
-        }
+        if (origLine) patch += `-${origLine}\n`;
+        if (modLine) patch += `+${modLine}\n`;
       }
     }
-    return output;
+
+    onStageSelected?.(patch);
   };
 
   return (
-    <div className="h-full overflow-auto bg-ide-bg pb-20">
-      <div className="flex sticky top-0 bg-ide-panel border-b border-ide-border p-2 text-xs font-bold text-ide-mute z-10 mb-2">
-        <div className="flex-1 text-center">Base</div>
-        <div className="w-px bg-ide-border mx-2"></div>
-        <div className="flex-1 text-center">Head</div>
+    <div className="h-full flex flex-col bg-ide-bg">
+      <div className="flex items-center justify-between px-3 py-1.5 border-b border-ide-border bg-ide-panel/50">
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-ide-mute font-medium">
+            {filename || "Diff View"}
+          </span>
+          <span className="text-[10px] text-ide-mute/60 bg-ide-bg px-1.5 py-0.5 rounded">
+            {detectedLanguage}
+          </span>
+        </div>
+        <div className="flex items-center gap-1">
+          {allowPartialStaging && hasSelection && (
+            <button
+              onClick={generatePatch}
+              className="px-2 py-1 text-xs bg-green-500/20 text-green-400 rounded hover:bg-green-500/30 flex items-center gap-1 mr-2"
+            >
+              <Plus size={12} />
+              Stage Selection
+            </button>
+          )}
+          <button
+            onClick={() => setRenderSideBySide(true)}
+            className={`p-1.5 rounded transition-colors ${
+              renderSideBySide
+                ? "bg-ide-accent/20 text-ide-accent"
+                : "text-ide-mute hover:bg-ide-accent/10 hover:text-ide-text"
+            }`}
+            title="Side by Side"
+          >
+            <Columns2 size={14} />
+          </button>
+          <button
+            onClick={() => setRenderSideBySide(false)}
+            className={`p-1.5 rounded transition-colors ${
+              !renderSideBySide
+                ? "bg-ide-accent/20 text-ide-accent"
+                : "text-ide-mute hover:bg-ide-accent/10 hover:text-ide-text"
+            }`}
+            title="Inline"
+          >
+            <Rows2 size={14} />
+          </button>
+        </div>
       </div>
-      <div className="flex flex-col w-full">{renderLines()}</div>
+      <div className="flex-1 overflow-hidden">
+        <DiffEditor
+          key={`${filename}-${original.length}-${modified.length}`}
+          original={original}
+          modified={modified}
+          language={detectedLanguage}
+          theme="vs-dark"
+          onMount={(editor) => {
+            editorRef.current = editor;
+            const modifiedEditor = editor.getModifiedEditor();
+            modifiedEditor.onDidChangeCursorSelection((e) => {
+              setHasSelection(!e.selection.isEmpty());
+            });
+          }}
+          options={{
+            readOnly: !allowPartialStaging,
+            renderSideBySide,
+            originalEditable: false,
+            minimap: { enabled: false },
+            scrollBeyondLastLine: false,
+            fontSize: 13,
+            lineNumbers: "on",
+            wordWrap: "on",
+            automaticLayout: true,
+            renderOverviewRuler: false,
+            diffWordWrap: "on",
+            ignoreTrimWhitespace: false,
+            renderIndicators: true,
+            renderLineHighlight: "none",
+            scrollbar: {
+              verticalScrollbarSize: 8,
+              horizontalScrollbarSize: 8,
+            },
+          }}
+        />
+      </div>
     </div>
   );
 };

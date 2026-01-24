@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { type GitCommit, type GitDiff, type GitFileStatus, gitApi } from "@/api/git";
+import { type CommitFileInfo, type GitCommit, type GitDiff, type GitFileStatus, type RemoteInfo, type StashEntry, gitApi } from "@/api/git";
 
 export interface GitFileNode {
   id: string;
@@ -25,6 +25,10 @@ interface GitState {
   isLoading: boolean;
   error: string | null;
   activeTab: "changes" | "history";
+  remotes: RemoteInfo[];
+  hasRemote: boolean;
+  stashes: StashEntry[];
+  conflicts: string[];
 
   setCurrentPath: (path: string | null) => void;
   setFiles: (files: GitFileNode[]) => void;
@@ -49,6 +53,21 @@ interface GitState {
   discardFile: (path: string) => Promise<void>;
   commit: () => Promise<boolean>;
   getDiff: (filePath: string) => Promise<GitDiff | null>;
+  getCommitFiles: (commitHash: string) => Promise<CommitFileInfo[]>;
+  getCommitDiff: (commitHash: string, filePath: string) => Promise<GitDiff | null>;
+  fetchRemotes: () => Promise<void>;
+  gitFetch: () => Promise<boolean>;
+  gitPull: () => Promise<boolean>;
+  gitPush: () => Promise<boolean>;
+  fetchStashes: () => Promise<void>;
+  stash: (message?: string) => Promise<boolean>;
+  stashPop: (index?: number) => Promise<boolean>;
+  stashDrop: (index?: number) => Promise<boolean>;
+  fetchConflicts: () => Promise<void>;
+  resolveConflict: (filePath: string, content: string) => Promise<boolean>;
+  createBranch: (branch: string, from?: string) => Promise<boolean>;
+  deleteBranch: (branch: string) => Promise<boolean>;
+  addPatch: (filePath: string, patch: string) => Promise<boolean>;
 }
 
 const mapStatus = (status: string): GitFileNode["status"] => {
@@ -113,6 +132,10 @@ export const useGitStore = create<GitState>((set, get) => ({
   isLoading: false,
   error: null,
   activeTab: "changes",
+  remotes: [],
+  hasRemote: false,
+  stashes: [],
+  conflicts: [],
 
   setCurrentPath: (path) => set({ currentPath: path }),
   setFiles: (files) => set({ files }),
@@ -136,6 +159,10 @@ export const useGitStore = create<GitState>((set, get) => ({
       commitMessage: "",
       isLoading: false,
       error: null,
+      remotes: [],
+      hasRemote: false,
+      stashes: [],
+  conflicts: [],
     }),
 
   fetchStatus: async () => {
@@ -316,6 +343,242 @@ export const useGitStore = create<GitState>((set, get) => ({
     } catch (err) {
       set({ error: err instanceof Error ? err.message : "Failed to get diff" });
       return null;
+    }
+  },
+
+  getCommitFiles: async (commitHash: string) => {
+    const { currentPath } = get();
+    if (!currentPath) return [];
+
+    try {
+      const res = await gitApi.commitFiles(currentPath, commitHash);
+      return res.files;
+    } catch (err) {
+      set({ error: err instanceof Error ? err.message : "Failed to get commit files" });
+      return [];
+    }
+  },
+
+  getCommitDiff: async (commitHash: string, filePath: string) => {
+    const { currentPath } = get();
+    if (!currentPath) return null;
+
+    try {
+      return await gitApi.commitDiff(currentPath, commitHash, filePath);
+    } catch (err) {
+      set({ error: err instanceof Error ? err.message : "Failed to get commit diff" });
+      return null;
+    }
+  },
+
+  fetchRemotes: async () => {
+    const { currentPath } = get();
+    if (!currentPath) return;
+
+    try {
+      const res = await gitApi.remotes(currentPath);
+      set({
+        remotes: res.remotes,
+        hasRemote: res.remotes.length > 0,
+      });
+    } catch (err) {
+      set({ remotes: [], hasRemote: false });
+    }
+  },
+
+  gitFetch: async () => {
+    const { currentPath } = get();
+    if (!currentPath) return false;
+
+    set({ isLoading: true, error: null });
+    try {
+      await gitApi.fetch(currentPath);
+      return true;
+    } catch (err) {
+      set({ error: err instanceof Error ? err.message : "Failed to fetch" });
+      return false;
+    } finally {
+      set({ isLoading: false });
+    }
+  },
+
+  gitPull: async () => {
+    const { currentPath, fetchStatus, fetchLog } = get();
+    if (!currentPath) return false;
+
+    set({ isLoading: true, error: null });
+    try {
+      await gitApi.pull(currentPath);
+      await fetchStatus();
+      await fetchLog();
+      return true;
+    } catch (err) {
+      set({ error: err instanceof Error ? err.message : "Failed to pull" });
+      return false;
+    } finally {
+      set({ isLoading: false });
+    }
+  },
+
+  gitPush: async () => {
+    const { currentPath } = get();
+    if (!currentPath) return false;
+
+    set({ isLoading: true, error: null });
+    try {
+      await gitApi.push(currentPath);
+      return true;
+    } catch (err) {
+      set({ error: err instanceof Error ? err.message : "Failed to push" });
+      return false;
+    } finally {
+      set({ isLoading: false });
+    }
+  },
+
+  fetchStashes: async () => {
+    const { currentPath } = get();
+    if (!currentPath) return;
+
+    try {
+      const res = await gitApi.stashList(currentPath);
+      set({ stashes: res.stashes ?? [] });
+    } catch (err) {
+      set({ stashes: [] });
+    }
+  },
+
+  stash: async (message?: string) => {
+    const { currentPath, fetchStatus, fetchStashes } = get();
+    if (!currentPath) return false;
+
+    set({ isLoading: true, error: null });
+    try {
+      await gitApi.stash(currentPath, message);
+      await fetchStatus();
+      await fetchStashes();
+      return true;
+    } catch (err) {
+      set({ error: err instanceof Error ? err.message : "Failed to stash" });
+      return false;
+    } finally {
+      set({ isLoading: false });
+    }
+  },
+
+  stashPop: async (index = 0) => {
+    const { currentPath, fetchStatus, fetchStashes } = get();
+    if (!currentPath) return false;
+
+    set({ isLoading: true, error: null });
+    try {
+      await gitApi.stashPop(currentPath, index);
+      await fetchStatus();
+      await fetchStashes();
+      return true;
+    } catch (err) {
+      set({ error: err instanceof Error ? err.message : "Failed to pop stash" });
+      return false;
+    } finally {
+      set({ isLoading: false });
+    }
+  },
+
+  stashDrop: async (index = 0) => {
+    const { currentPath, fetchStashes } = get();
+    if (!currentPath) return false;
+
+    set({ isLoading: true, error: null });
+    try {
+      await gitApi.stashDrop(currentPath, index);
+      await fetchStashes();
+      return true;
+    } catch (err) {
+      set({ error: err instanceof Error ? err.message : "Failed to drop stash" });
+      return false;
+    } finally {
+      set({ isLoading: false });
+    }
+  },
+
+  fetchConflicts: async () => {
+    const { currentPath } = get();
+    if (!currentPath) return;
+
+    try {
+      const res = await gitApi.conflicts(currentPath);
+      set({ conflicts: res.conflicts ?? [] });
+    } catch (err) {
+      set({ conflicts: [] });
+    }
+  },
+
+  resolveConflict: async (filePath: string, content: string) => {
+    const { currentPath, fetchStatus, fetchConflicts } = get();
+    if (!currentPath) return false;
+
+    set({ isLoading: true, error: null });
+    try {
+      await gitApi.resolveConflict(currentPath, filePath, content);
+      await fetchStatus();
+      await fetchConflicts();
+      return true;
+    } catch (err) {
+      set({ error: err instanceof Error ? err.message : "Failed to resolve conflict" });
+      return false;
+    } finally {
+      set({ isLoading: false });
+    }
+  },
+
+  createBranch: async (branch: string, from?: string) => {
+    const { currentPath, fetchBranches } = get();
+    if (!currentPath) return false;
+
+    set({ isLoading: true, error: null });
+    try {
+      await gitApi.createBranch(currentPath, branch, from);
+      await fetchBranches();
+      return true;
+    } catch (err) {
+      set({ error: err instanceof Error ? err.message : "Failed to create branch" });
+      return false;
+    } finally {
+      set({ isLoading: false });
+    }
+  },
+
+  deleteBranch: async (branch: string) => {
+    const { currentPath, fetchBranches } = get();
+    if (!currentPath) return false;
+
+    set({ isLoading: true, error: null });
+    try {
+      await gitApi.deleteBranch(currentPath, branch);
+      await fetchBranches();
+      return true;
+    } catch (err) {
+      set({ error: err instanceof Error ? err.message : "Failed to delete branch" });
+      return false;
+    } finally {
+      set({ isLoading: false });
+    }
+  },
+
+  addPatch: async (filePath: string, patch: string) => {
+    const { currentPath, fetchStatus } = get();
+    if (!currentPath) return false;
+
+    set({ isLoading: true, error: null });
+    try {
+      await gitApi.addPatch(currentPath, filePath, patch);
+      await fetchStatus();
+      return true;
+    } catch (err) {
+      set({ error: err instanceof Error ? err.message : "Failed to add patch" });
+      return false;
+    } finally {
+      set({ isLoading: false });
     }
   },
 }));

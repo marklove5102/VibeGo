@@ -1,5 +1,6 @@
-import { Check, ChevronRight, FileText, Minus, Plus, X } from "lucide-react";
-import React, { useCallback } from "react";
+import { AlertTriangle, Archive, Check, ChevronDown, ChevronRight, FileText, Minus, Plus, X } from "lucide-react";
+import React, { useCallback, useEffect, useState } from "react";
+import type { StashEntry } from "@/api/git";
 import type { GitFileNode, Locale } from "@/stores";
 
 interface GitChangesViewProps {
@@ -8,6 +9,8 @@ interface GitChangesViewProps {
   commitMessage: string;
   isLoading: boolean;
   locale: Locale;
+  stashes: StashEntry[];
+  conflicts: string[];
   onFileClick: (file: GitFileNode) => void;
   onStageFile: (path: string) => void;
   onUnstageFile: (path: string) => void;
@@ -16,6 +19,10 @@ interface GitChangesViewProps {
   onUnstageAll: () => void;
   onCommitMessageChange: (msg: string) => void;
   onCommit: () => void;
+  onStash: () => void;
+  onStashPop: (index: number) => void;
+  onStashDrop: (index: number) => void;
+  onConflictClick: (path: string) => void;
 }
 
 const i18n = {
@@ -30,6 +37,16 @@ const i18n = {
     stage: "Stage",
     unstage: "Unstage",
     discard: "Discard",
+    stash: "Stash",
+    stashes: "Stashes",
+    pop: "Pop",
+    drop: "Drop",
+    conflicts: "Conflicts",
+    resolve: "Resolve",
+    discardConfirm: "Discard changes to",
+    discardWarning: "This will permanently discard your changes. This cannot be undone.",
+    cancel: "Cancel",
+    confirm: "Discard",
   },
   zh: {
     staged: "已暂存",
@@ -42,6 +59,16 @@ const i18n = {
     stage: "暂存",
     unstage: "取消暂存",
     discard: "放弃",
+    stash: "贮藏",
+    stashes: "贮藏列表",
+    pop: "恢复",
+    drop: "删除",
+    conflicts: "冲突",
+    resolve: "解决",
+    discardConfirm: "放弃对以下文件的更改",
+    discardWarning: "此操作将永久丢弃您的更改，且无法撤销。",
+    cancel: "取消",
+    confirm: "放弃",
   },
 };
 
@@ -156,6 +183,8 @@ const GitChangesView: React.FC<GitChangesViewProps> = ({
   commitMessage,
   isLoading,
   locale,
+  stashes,
+  conflicts,
   onFileClick,
   onStageFile,
   onUnstageFile,
@@ -164,16 +193,76 @@ const GitChangesView: React.FC<GitChangesViewProps> = ({
   onUnstageAll,
   onCommitMessageChange,
   onCommit,
+  onStash,
+  onStashPop,
+  onStashDrop,
+  onConflictClick,
 }) => {
   const t = i18n[locale] || i18n.en;
+  const [showStashes, setShowStashes] = useState(false);
+  const [discardConfirm, setDiscardConfirm] = useState<string | null>(null);
+  const safeStashes = stashes ?? [];
+  const safeConflicts = conflicts ?? [];
   const hasChanges = stagedFiles.length > 0 || unstagedFiles.length > 0;
-  const canCommit = stagedFiles.length > 0 && commitMessage.trim().length > 0;
+  const canCommit = stagedFiles.length > 0 && commitMessage.trim().length > 0 && safeConflicts.length === 0;
+  const canStash = hasChanges;
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "Enter" && canCommit && !isLoading) {
+        e.preventDefault();
+        onCommit();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [canCommit, isLoading, onCommit]);
+
+  const handleDiscardClick = useCallback((path: string) => {
+    setDiscardConfirm(path);
+  }, []);
+
+  const handleConfirmDiscard = useCallback(() => {
+    if (discardConfirm) {
+      onDiscardFile(discardConfirm);
+      setDiscardConfirm(null);
+    }
+  }, [discardConfirm, onDiscardFile]);
 
   return (
     <div className="flex flex-col h-full bg-ide-bg">
       <div className="flex-1 overflow-y-auto">
-        {!hasChanges && (
+        {!hasChanges && safeConflicts.length === 0 && (
           <div className="flex items-center justify-center h-32 text-ide-mute text-sm">{t.noChanges}</div>
+        )}
+
+        {safeConflicts.length > 0 && (
+          <div className="border-b border-ide-border">
+            <div className="flex items-center justify-between px-3 py-2 bg-red-500/10">
+              <div className="flex items-center gap-1">
+                <AlertTriangle size={14} className="text-red-400" />
+                <span className="text-xs font-bold text-red-400 uppercase">{t.conflicts}</span>
+              </div>
+              <span className="text-xs bg-red-500/20 text-red-400 px-1.5 py-0.5 rounded">
+                {safeConflicts.length}
+              </span>
+            </div>
+            <div className="divide-y divide-ide-border/50">
+              {safeConflicts.map((path) => (
+                <div
+                  key={path}
+                  className="flex items-center gap-2 px-3 py-1.5 hover:bg-ide-accent/10 cursor-pointer group"
+                  onClick={() => onConflictClick(path)}
+                >
+                  <AlertTriangle size={14} className="text-red-400 shrink-0" />
+                  <span className="flex-1 text-xs text-ide-text truncate">{path}</span>
+                  <button className="px-2 py-0.5 text-[10px] bg-ide-accent/20 text-ide-accent rounded hover:bg-ide-accent/30 opacity-0 group-hover:opacity-100 transition-opacity">
+                    {t.resolve}
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
         )}
 
         {unstagedFiles.length > 0 && (
@@ -197,7 +286,7 @@ const GitChangesView: React.FC<GitChangesViewProps> = ({
                   locale={locale}
                   onFileClick={onFileClick}
                   onAction={() => onStageFile(file.path)}
-                  onSecondaryAction={file.status !== "untracked" ? () => onDiscardFile(file.path) : undefined}
+                  onSecondaryAction={file.status !== "untracked" ? () => handleDiscardClick(file.path) : undefined}
                   actionIcon={<Plus size={14} />}
                   secondaryActionIcon={file.status !== "untracked" ? <X size={14} /> : undefined}
                 />
@@ -235,6 +324,47 @@ const GitChangesView: React.FC<GitChangesViewProps> = ({
         )}
       </div>
 
+      {safeStashes.length > 0 && (
+        <div className="border-b border-ide-border">
+          <div
+            className="flex items-center justify-between px-3 py-2 bg-ide-panel/50 cursor-pointer"
+            onClick={() => setShowStashes(!showStashes)}
+          >
+            <div className="flex items-center gap-1">
+              {showStashes ? <ChevronDown size={14} className="text-ide-mute" /> : <ChevronRight size={14} className="text-ide-mute" />}
+              <span className="text-xs font-bold text-ide-mute uppercase">{t.stashes}</span>
+            </div>
+            <span className="text-xs bg-purple-500/20 text-purple-400 px-1.5 py-0.5 rounded">
+              {safeStashes.length}
+            </span>
+          </div>
+          {showStashes && (
+            <div className="divide-y divide-ide-border/50">
+              {safeStashes.map((stash) => (
+                <div key={stash.index} className="flex items-center gap-2 px-3 py-2 hover:bg-ide-accent/10 group">
+                  <Archive size={14} className="text-purple-400 shrink-0" />
+                  <span className="flex-1 text-xs text-ide-text truncate">{stash.message}</span>
+                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button
+                      className="px-2 py-0.5 text-[10px] bg-green-500/20 text-green-400 rounded hover:bg-green-500/30"
+                      onClick={() => onStashPop(stash.index)}
+                    >
+                      {t.pop}
+                    </button>
+                    <button
+                      className="px-2 py-0.5 text-[10px] bg-red-500/20 text-red-400 rounded hover:bg-red-500/30"
+                      onClick={() => onStashDrop(stash.index)}
+                    >
+                      {t.drop}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="shrink-0 border-t border-ide-border bg-ide-panel/30 p-3 space-y-2">
         <textarea
           placeholder={t.commitPlaceholder}
@@ -242,16 +372,59 @@ const GitChangesView: React.FC<GitChangesViewProps> = ({
           onChange={(e) => onCommitMessageChange(e.target.value)}
           className="w-full bg-ide-bg border border-ide-border rounded px-3 py-2 text-sm text-ide-text focus:outline-none focus:border-ide-accent min-h-[60px] resize-none placeholder-ide-mute/50"
         />
-        <button
-          disabled={!canCommit || isLoading}
-          onClick={onCommit}
-          className="w-full bg-ide-accent text-ide-bg font-bold py-2 text-sm flex items-center justify-center gap-2 rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-ide-accent/80 transition-colors"
-        >
-          <Check size={14} />
-          {t.commit}
-          {stagedFiles.length > 0 && <span className="text-xs opacity-80">({stagedFiles.length})</span>}
-        </button>
+        <div className="flex gap-2">
+          <button
+            disabled={!canCommit || isLoading}
+            onClick={onCommit}
+            className="flex-1 bg-ide-accent text-ide-bg font-bold py-2 text-sm flex items-center justify-center gap-2 rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-ide-accent/80 transition-colors"
+            title="Ctrl+Enter"
+          >
+            <Check size={14} />
+            {t.commit}
+            {stagedFiles.length > 0 && <span className="text-xs opacity-80">({stagedFiles.length})</span>}
+          </button>
+          <button
+            disabled={!canStash || isLoading}
+            onClick={onStash}
+            className="px-3 py-2 bg-purple-500/20 text-purple-400 font-bold text-sm flex items-center justify-center gap-1 rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-purple-500/30 transition-colors"
+            title={t.stash}
+          >
+            <Archive size={14} />
+          </button>
+        </div>
       </div>
+
+      {discardConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setDiscardConfirm(null)}>
+          <div
+            className="bg-ide-bg border border-ide-border rounded-lg shadow-xl w-80 p-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-2 mb-3">
+              <AlertTriangle size={20} className="text-red-400" />
+              <span className="text-sm font-medium text-ide-text">{t.discardConfirm}</span>
+            </div>
+            <p className="text-xs text-ide-mute mb-2 font-mono bg-ide-panel px-2 py-1 rounded truncate">
+              {discardConfirm}
+            </p>
+            <p className="text-xs text-red-400 mb-4">{t.discardWarning}</p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setDiscardConfirm(null)}
+                className="flex-1 px-3 py-1.5 text-sm text-ide-mute hover:text-ide-text border border-ide-border rounded"
+              >
+                {t.cancel}
+              </button>
+              <button
+                onClick={handleConfirmDiscard}
+                className="flex-1 px-3 py-1.5 text-sm bg-red-500 text-white rounded hover:bg-red-600"
+              >
+                {t.confirm}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

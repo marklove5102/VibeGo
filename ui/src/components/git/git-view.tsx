@@ -1,17 +1,18 @@
-import { FileText, GitBranch, History, RefreshCw } from "lucide-react";
-import React, { useCallback, useEffect, useMemo } from "react";
+import { ArrowDown, ArrowUp, FileText, GitBranch, History, RefreshCw } from "lucide-react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { GitCommit } from "@/api/git";
-import { useDialog } from "@/components/common";
 import { usePageTopBar } from "@/hooks/use-page-top-bar";
-import { type Locale, useTranslation } from "@/lib/i18n";
+import { type Locale } from "@/lib/i18n";
 import { type GitFileNode, useGitStore } from "@/stores";
+import BranchSelector from "./branch-selector";
 import GitChangesView from "./git-changes-view";
 import GitHistoryView from "./git-history-view";
 
 interface GitViewProps {
   path: string;
   locale: Locale;
-  onFileDiff: (original: string, modified: string, title: string) => void;
+  onFileDiff: (original: string, modified: string, title: string, filename?: string) => void;
+  onConflict?: (repoPath: string, filePath: string) => void;
   isActive?: boolean;
 }
 
@@ -28,10 +29,9 @@ const i18n = {
   },
 };
 
-const GitView: React.FC<GitViewProps> = ({ path, locale, onFileDiff, isActive = true }) => {
+const GitView: React.FC<GitViewProps> = ({ path, locale, onFileDiff, onConflict, isActive = true }) => {
   const t = i18n[locale] || i18n.en;
-  const tCommon = useTranslation(locale);
-  const dialog = useDialog();
+  const [showBranchSelector, setShowBranchSelector] = useState(false);
 
   const {
     stagedFiles,
@@ -44,6 +44,9 @@ const GitView: React.FC<GitViewProps> = ({ path, locale, onFileDiff, isActive = 
     currentBranch,
     branches,
     activeTab,
+    hasRemote,
+    stashes,
+    conflicts,
     setCurrentPath,
     setCommitMessage,
     setActiveTab,
@@ -51,6 +54,9 @@ const GitView: React.FC<GitViewProps> = ({ path, locale, onFileDiff, isActive = 
     fetchStatus,
     fetchLog,
     fetchBranches,
+    fetchRemotes,
+    fetchStashes,
+    fetchConflicts,
     switchBranch,
     stageFile,
     unstageFile,
@@ -61,15 +67,38 @@ const GitView: React.FC<GitViewProps> = ({ path, locale, onFileDiff, isActive = 
     getDiff,
     setSelectedCommit,
     setSelectedCommitFiles,
+    getCommitFiles,
+    getCommitDiff,
+    gitPull,
+    gitPush,
+    stash,
+    stashPop,
+    stashDrop,
+    createBranch,
+    deleteBranch,
   } = useGitStore();
 
+  const prevPathRef = useRef<string | null>(null);
+  const initializedRef = useRef(false);
+
   useEffect(() => {
-    reset();
-    setCurrentPath(path);
-    fetchStatus();
-    fetchLog();
-    fetchBranches();
-  }, [path, setCurrentPath, reset, fetchStatus, fetchLog, fetchBranches]);
+    const pathChanged = prevPathRef.current !== path;
+    if (pathChanged) {
+      reset();
+      setCurrentPath(path);
+      prevPathRef.current = path;
+      initializedRef.current = false;
+    }
+    if (!initializedRef.current) {
+      initializedRef.current = true;
+      fetchStatus();
+      fetchLog();
+      fetchBranches();
+      fetchRemotes();
+      fetchStashes();
+      fetchConflicts();
+    }
+  }, [path, setCurrentPath, reset, fetchStatus, fetchLog, fetchBranches, fetchRemotes, fetchStashes, fetchConflicts]);
 
   const handleRefresh = useCallback(() => {
     fetchStatus();
@@ -78,18 +107,9 @@ const GitView: React.FC<GitViewProps> = ({ path, locale, onFileDiff, isActive = 
     }
   }, [fetchStatus, fetchLog, activeTab]);
 
-  const handleBranchClick = useCallback(async () => {
-    if (branches.length === 0) return;
-
-    const input = await dialog.prompt(
-      tCommon("dialog.selectBranch"),
-      { defaultValue: currentBranch, placeholder: tCommon("dialog.enterBranchName") }
-    );
-
-    if (input && input !== currentBranch && branches.includes(input)) {
-      switchBranch(input);
-    }
-  }, [branches, currentBranch, switchBranch, dialog, tCommon]);
+  const handleBranchClick = useCallback(() => {
+    setShowBranchSelector(true);
+  }, []);
 
   const topBarConfig = useMemo(() => {
     if (!isActive) return null;
@@ -133,6 +153,22 @@ const GitView: React.FC<GitViewProps> = ({ path, locale, onFileDiff, isActive = 
         </div>
       ),
       rightButtons: [
+        ...(hasRemote
+          ? [
+              {
+                icon: <ArrowDown size={18} />,
+                onClick: gitPull,
+                disabled: isLoading,
+                title: "Pull",
+              },
+              {
+                icon: <ArrowUp size={18} />,
+                onClick: gitPush,
+                disabled: isLoading,
+                title: "Push",
+              },
+            ]
+          : []),
         {
           icon: <RefreshCw size={18} className={isLoading ? "animate-spin" : ""} />,
           onClick: handleRefresh,
@@ -148,10 +184,13 @@ const GitView: React.FC<GitViewProps> = ({ path, locale, onFileDiff, isActive = 
     stagedFiles.length,
     unstagedFiles.length,
     isLoading,
+    hasRemote,
     t,
     setActiveTab,
     handleRefresh,
     handleBranchClick,
+    gitPull,
+    gitPush,
   ]);
 
   usePageTopBar(topBarConfig, [topBarConfig]);
@@ -160,7 +199,7 @@ const GitView: React.FC<GitViewProps> = ({ path, locale, onFileDiff, isActive = 
     async (file: GitFileNode) => {
       const diff = await getDiff(file.path);
       if (diff) {
-        onFileDiff(diff.old, diff.new, `${file.name} [DIFF]`);
+        onFileDiff(diff.old, diff.new, `${file.name} [DIFF]`, file.name);
       }
     },
     [getDiff, onFileDiff]
@@ -169,52 +208,95 @@ const GitView: React.FC<GitViewProps> = ({ path, locale, onFileDiff, isActive = 
   const handleCommitSelect = useCallback(
     async (commitInfo: GitCommit) => {
       setSelectedCommit(commitInfo);
-      setSelectedCommitFiles([]);
+      const files = await getCommitFiles(commitInfo.hash);
+      const fileNodes = files.map((f) => ({
+        id: `commit-${commitInfo.hash}-${f.path}`,
+        name: f.path.split("/").pop() || f.path,
+        status: f.status === "A" ? "added" : f.status === "D" ? "deleted" : "modified",
+        path: f.path,
+        staged: false,
+      }));
+      setSelectedCommitFiles(fileNodes as any);
     },
-    [setSelectedCommit, setSelectedCommitFiles]
+    [setSelectedCommit, setSelectedCommitFiles, getCommitFiles]
   );
 
-  const handleHistoryFileClick = useCallback(async (_commit: GitCommit, _filePath: string) => {}, []);
+  const handleHistoryFileClick = useCallback(
+    async (commitInfo: GitCommit, filePath: string) => {
+      const diff = await getCommitDiff(commitInfo.hash, filePath);
+      if (diff) {
+        const fileName = filePath.split("/").pop() || filePath;
+        const shortHash = commitInfo.hash.substring(0, 7);
+        onFileDiff(diff.old, diff.new, `${fileName} @ ${shortHash}`, fileName);
+      }
+    },
+    [getCommitDiff, onFileDiff]
+  );
 
   const handleCommit = useCallback(async () => {
     await commit();
   }, [commit]);
 
+  const handleConflictClick = useCallback(
+    (conflictPath: string) => {
+      onConflict?.(path, conflictPath);
+    },
+    [path, onConflict]
+  );
+
   return (
-    <div className="flex flex-col h-full bg-ide-bg">
-      <div className="flex-1 overflow-hidden">
-        {activeTab === "changes" ? (
-          <GitChangesView
-            stagedFiles={stagedFiles}
-            unstagedFiles={unstagedFiles}
-            commitMessage={commitMessage}
-            isLoading={isLoading}
-            locale={locale}
-            onFileClick={handleFileClick}
-            onStageFile={stageFile}
-            onUnstageFile={unstageFile}
-            onDiscardFile={discardFile}
-            onStageAll={stageAll}
-            onUnstageAll={unstageAll}
-            onCommitMessageChange={setCommitMessage}
-            onCommit={handleCommit}
-          />
-        ) : (
-          <GitHistoryView
-            commits={commits}
-            isLoading={isLoading}
-            locale={locale}
-            onCommitSelect={handleCommitSelect}
-            onFileClick={handleHistoryFileClick}
-            selectedCommitFiles={selectedCommitFiles.map((f) => ({
-              path: f.path,
-              status: f.status,
-            }))}
-            selectedCommitHash={selectedCommit?.hash || null}
-          />
-        )}
+    <>
+      <div className="flex flex-col h-full bg-ide-bg">
+        <div className="flex-1 overflow-hidden">
+          {activeTab === "changes" ? (
+            <GitChangesView
+              stagedFiles={stagedFiles}
+              unstagedFiles={unstagedFiles}
+              commitMessage={commitMessage}
+              isLoading={isLoading}
+              locale={locale}
+              stashes={stashes}
+              conflicts={conflicts}
+              onFileClick={handleFileClick}
+              onStageFile={stageFile}
+              onUnstageFile={unstageFile}
+              onDiscardFile={discardFile}
+              onStageAll={stageAll}
+              onUnstageAll={unstageAll}
+              onCommitMessageChange={setCommitMessage}
+              onCommit={handleCommit}
+              onStash={stash}
+              onStashPop={stashPop}
+              onStashDrop={stashDrop}
+              onConflictClick={handleConflictClick}
+            />
+          ) : (
+            <GitHistoryView
+              commits={commits}
+              isLoading={isLoading}
+              locale={locale}
+              onCommitSelect={handleCommitSelect}
+              onFileClick={handleHistoryFileClick}
+              selectedCommitFiles={selectedCommitFiles.map((f) => ({
+                path: f.path,
+                status: f.status,
+              }))}
+              selectedCommitHash={selectedCommit?.hash || null}
+            />
+          )}
+        </div>
       </div>
-    </div>
+      <BranchSelector
+        isOpen={showBranchSelector}
+        branches={branches}
+        currentBranch={currentBranch}
+        locale={locale}
+        onClose={() => setShowBranchSelector(false)}
+        onSwitch={switchBranch}
+        onCreate={createBranch}
+        onDelete={deleteBranch}
+      />
+    </>
   );
 };
 

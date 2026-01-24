@@ -3,7 +3,7 @@ import { fileApi } from "@/api/file";
 import { DirectoryPicker, NewPageMenu, ProjectMenu, useDialog } from "@/components/common";
 import { FileManager } from "@/components/file";
 import { AppFrame, NewGroupMenu } from "@/components/frame";
-import { DiffView, GitView } from "@/components/git";
+import { ConflictView, DiffView, GitView } from "@/components/git";
 import { HomePage } from "@/components/home";
 import { FilePreview } from "@/components/preview";
 import { SettingsPage } from "@/components/settings";
@@ -18,6 +18,7 @@ import {
   useAppStore,
   useFileManagerStore,
   useFrameStore,
+  useGitStore,
   usePreviewStore,
   useSessionStore,
 } from "@/stores";
@@ -113,7 +114,7 @@ const App: React.FC = () => {
   }, [theme]);
 
   const handleGitDiff = useCallback(
-    (original: string, modified: string, title: string) => {
+    (original: string, modified: string, title: string, filename?: string) => {
       addCurrentTab({
         id: `diff-${Date.now()}`,
         title,
@@ -121,6 +122,23 @@ const App: React.FC = () => {
           type: "diff",
           original,
           modified,
+          filename,
+        },
+      });
+    },
+    [addCurrentTab]
+  );
+
+  const handleConflict = useCallback(
+    (repoPath: string, filePath: string) => {
+      const fileName = filePath.split("/").pop() || filePath;
+      addCurrentTab({
+        id: `conflict-${Date.now()}`,
+        title: `${fileName} [CONFLICT]`,
+        data: {
+          type: "conflict",
+          repoPath,
+          filePath,
         },
       });
     },
@@ -252,13 +270,32 @@ const App: React.FC = () => {
     switch (currentPage.type) {
       case "git":
         if (activeTabId === null) {
-          return <GitView path={pagePath} locale={locale} onFileDiff={handleGitDiff} isActive={true} />;
+          return <GitView path={pagePath} locale={locale} onFileDiff={handleGitDiff} onConflict={handleConflict} isActive={true} />;
         }
         if (activeTab?.data?.type === "diff") {
           return (
             <DiffView
               original={(activeTab.data.original as string) || ""}
               modified={(activeTab.data.modified as string) || ""}
+              filename={(activeTab.data.filename as string) || undefined}
+            />
+          );
+        }
+        if (activeTab?.data?.type === "conflict") {
+          return (
+            <ConflictView
+              repoPath={(activeTab.data.repoPath as string) || ""}
+              filePath={(activeTab.data.filePath as string) || ""}
+              locale={locale}
+              onResolve={async (content) => {
+                const { resolveConflict, fetchStatus, fetchConflicts } = useGitStore.getState();
+                await resolveConflict(activeTab.data.filePath as string, content);
+                await fetchStatus();
+                await fetchConflicts();
+              }}
+              onCancel={() => {
+                useFrameStore.getState().removeCurrentTab(activeTab.id);
+              }}
             />
           );
         }
