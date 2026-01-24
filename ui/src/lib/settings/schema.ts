@@ -108,12 +108,41 @@ export const SETTINGS_SCHEMA: SettingSchema[] = [
     descriptionKey: "settings.editorWordWrap.description",
     defaultValue: "false",
   },
+  {
+    key: "gitUserName",
+    type: "text",
+    category: "git",
+    labelKey: "settings.gitUserName.label",
+    descriptionKey: "settings.gitUserName.description",
+    defaultValue: "",
+  },
+  {
+    key: "gitUserEmail",
+    type: "text",
+    category: "git",
+    labelKey: "settings.gitUserEmail.label",
+    descriptionKey: "settings.gitUserEmail.description",
+    defaultValue: "",
+  },
+  {
+    key: "gitCommitTimeMode",
+    type: "select",
+    category: "git",
+    labelKey: "settings.gitCommitTimeMode.label",
+    descriptionKey: "settings.gitCommitTimeMode.description",
+    defaultValue: "client",
+    options: [
+      { value: "client", label: "settings.gitCommitTimeMode.optionClient" },
+      { value: "increment", label: "settings.gitCommitTimeMode.optionIncrement" },
+    ],
+  },
 ];
 
 export const SETTING_CATEGORIES = [
   { key: "appearance", labelKey: "settings.category.appearance" },
   { key: "fileManager", labelKey: "settings.category.fileManager" },
   { key: "editor", labelKey: "settings.category.editor" },
+  { key: "git", labelKey: "settings.category.git" },
 ];
 
 export function getSettingsByCategory(category: string): SettingSchema[] {

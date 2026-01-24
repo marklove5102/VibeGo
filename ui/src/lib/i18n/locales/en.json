@@ -113,7 +113,8 @@
     "category": {
       "appearance": "Appearance",
       "fileManager": "File Manager",
-      "editor": "Editor"
+      "editor": "Editor",
+      "git": "Git"
     },
     "theme": {
       "label": "Theme",
@@ -146,6 +147,20 @@
     "editorWordWrap": {
       "label": "Word Wrap",
       "description": "Enable word wrapping in editor"
+    },
+    "gitUserName": {
+      "label": "Git User Name",
+      "description": "User name for Git commits"
+    },
+    "gitUserEmail": {
+      "label": "Git Email",
+      "description": "Email address for Git commits"
+    },
+    "gitCommitTimeMode": {
+      "label": "Commit Time Mode",
+      "description": "Use client current time or increment from previous commit time",
+      "optionClient": "Client Time",
+      "optionIncrement": "Increment from Last"
     }
   },
   "menu": {
