@@ -17,11 +17,20 @@ export function useTerminalList() {
 export function useTerminalCreate(groupId: string) {
   const queryClient = useQueryClient();
   const addTerminal = useTerminalStore((s) => s.addTerminal);
+  const getTerminals = useTerminalStore((s) => s.getTerminals);
 
   return useMutation({
     mutationFn: (opts?: { name?: string; cwd?: string; cols?: number; rows?: number }) => terminalApi.create(opts),
     onSuccess: (data) => {
-      const name = data.name || "Terminal";
+      const terminals = getTerminals(groupId);
+      const existingNumbers = terminals
+        .map((t) => {
+          const match = t.name.match(/^Terminal (\d+)$/);
+          return match ? parseInt(match[1], 10) : 0;
+        })
+        .filter((n) => n > 0);
+      const nextNumber = existingNumbers.length > 0 ? Math.max(...existingNumbers) + 1 : 1;
+      const name = `Terminal ${nextNumber}`;
       addTerminal(groupId, { id: data.id, name });
       queryClient.invalidateQueries({ queryKey: terminalKeys.list() });
     },
