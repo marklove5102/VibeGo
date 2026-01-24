@@ -189,49 +189,7 @@ func (h *GitHandler) Status(c *gin.Context) {
 		return
 	}
 
-	w, err := repo.Worktree()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-
-	status, err := w.Status()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-
-	var fileStatuses []FileStatus
-	for path, s := range status {
-		if s.Staging == git.Untracked && s.Worktree == git.Untracked {
-			fileStatuses = append(fileStatuses, FileStatus{
-				Path:   path,
-				Status: string(s.Worktree),
-				Staged: false,
-			})
-			continue
-		}
-		if s.Staging != git.Unmodified && s.Staging != git.Untracked {
-			fileStatuses = append(fileStatuses, FileStatus{
-				Path:   path,
-				Status: string(s.Staging),
-				Staged: true,
-			})
-		}
-		if s.Worktree != git.Unmodified && s.Worktree != git.Untracked {
-			fileStatuses = append(fileStatuses, FileStatus{
-				Path:   path,
-				Status: string(s.Worktree),
-				Staged: false,
-			})
-		}
-	}
-
-	sort.Slice(fileStatuses, func(i, j int) bool {
-		return fileStatuses[i].Path < fileStatuses[j].Path
-	})
-
-	c.JSON(http.StatusOK, gin.H{"files": fileStatuses})
+	c.JSON(http.StatusOK, gin.H{"files": collectFileStatus(repo)})
 }
 
 type GitLogRequest struct {

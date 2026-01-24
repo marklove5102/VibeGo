@@ -25,21 +25,42 @@ func collectFileStatus(repo *git.Repository) []FileStatus {
 	if err != nil {
 		return nil
 	}
-	status, err := w.Status()
+	repoRoot := w.Filesystem.Root()
+	cmd := exec.Command("git", "status", "--porcelain=v1", "-z")
+	cmd.Dir = repoRoot
+	output, err := cmd.Output()
 	if err != nil {
 		return nil
 	}
 	var files []FileStatus
-	for p, s := range status {
-		if s.Staging == git.Untracked && s.Worktree == git.Untracked {
-			files = append(files, FileStatus{Path: p, Status: string(s.Worktree), Staged: false})
+	entries := strings.Split(string(output), "\x00")
+	for i := 0; i < len(entries); i++ {
+		line := entries[i]
+		if line == "" || len(line) < 3 {
 			continue
 		}
-		if s.Staging != git.Unmodified && s.Staging != git.Untracked {
-			files = append(files, FileStatus{Path: p, Status: string(s.Staging), Staged: true})
+		x := line[0]
+		y := line[1]
+		if x == '!' && y == '!' {
+			continue
 		}
-		if s.Worktree != git.Unmodified && s.Worktree != git.Untracked {
-			files = append(files, FileStatus{Path: p, Status: string(s.Worktree), Staged: false})
+		path := line[3:]
+		if (x == 'R' || x == 'C') && i+1 < len(entries) {
+			path = entries[i+1]
+			i++
+		}
+		if path == "" {
+			continue
+		}
+		if x == '?' && y == '?' {
+			files = append(files, FileStatus{Path: path, Status: "?", Staged: false})
+			continue
+		}
+		if x != ' ' && x != '?' {
+			files = append(files, FileStatus{Path: path, Status: string(x), Staged: true})
+		}
+		if y != ' ' && y != '?' {
+			files = append(files, FileStatus{Path: path, Status: string(y), Staged: false})
 		}
 	}
 	sort.Slice(files, func(i, j int) bool { return files[i].Path < files[j].Path })
