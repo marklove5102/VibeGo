@@ -20,8 +20,7 @@ export function useTerminalCreate(groupId: string) {
   const getTerminals = useTerminalStore((s) => s.getTerminals);
 
   return useMutation({
-    mutationFn: (opts?: { name?: string; cwd?: string; cols?: number; rows?: number }) => terminalApi.create(opts),
-    onSuccess: (data) => {
+    mutationFn: (opts?: { cwd?: string; cols?: number; rows?: number }) => {
       const terminals = getTerminals(groupId);
       const existingNumbers = terminals
         .map((t) => {
@@ -31,7 +30,10 @@ export function useTerminalCreate(groupId: string) {
         .filter((n) => n > 0);
       const nextNumber = existingNumbers.length > 0 ? Math.max(...existingNumbers) + 1 : 1;
       const name = `Terminal ${nextNumber}`;
-      addTerminal(groupId, { id: data.id, name });
+      return terminalApi.create({ ...opts, name });
+    },
+    onSuccess: (data) => {
+      addTerminal(groupId, { id: data.id, name: data.name });
       queryClient.invalidateQueries({ queryKey: terminalKeys.list() });
     },
   });
