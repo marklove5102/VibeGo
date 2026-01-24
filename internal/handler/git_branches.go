@@ -2,6 +2,7 @@ package handler
 
 import (
 	"net/http"
+	"os/exec"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -14,17 +15,6 @@ type BranchInfo struct {
 	IsCurrent bool   `json:"isCurrent"`
 }
 
-// Branches godoc
-// @Summary List branches
-// @Description Get list of local branches and current branch
-// @Tags Git
-// @Accept json
-// @Produce json
-// @Param request body GitPathRequest true "Path request"
-// @Success 200 {object} map[string]interface{}
-// @Failure 400 {object} map[string]string
-// @Failure 500 {object} map[string]string
-// @Router /api/git/branches [post]
 func (h *GitHandler) Branches(c *gin.Context) {
 	var req GitPathRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -69,9 +59,12 @@ func (h *GitHandler) Branches(c *gin.Context) {
 		return
 	}
 
+	remoteBranches := collectRemoteBranches(repo)
+
 	c.JSON(http.StatusOK, gin.H{
-		"branches":      branchList,
-		"currentBranch": currentBranch,
+		"branches":       branchList,
+		"remoteBranches": remoteBranches,
+		"currentBranch":  currentBranch,
 	})
 }
 
@@ -80,17 +73,6 @@ type SwitchBranchRequest struct {
 	Branch string `json:"branch" binding:"required"`
 }
 
-// SwitchBranch godoc
-// @Summary Switch branch
-// @Description Checkout to a different branch
-// @Tags Git
-// @Accept json
-// @Produce json
-// @Param request body SwitchBranchRequest true "Switch branch request"
-// @Success 200 {object} map[string]interface{}
-// @Failure 400 {object} map[string]string
-// @Failure 500 {object} map[string]string
-// @Router /api/git/switch-branch [post]
 func (h *GitHandler) SwitchBranch(c *gin.Context) {
 	var req SwitchBranchRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -111,7 +93,7 @@ func (h *GitHandler) SwitchBranch(c *gin.Context) {
 	}
 
 	branchRefName := plumbing.NewBranchReferenceName(req.Branch)
-	
+
 	ref, err := repo.Reference(branchRefName, true)
 	if err != nil {
 		if err == plumbing.ErrReferenceNotFound {
@@ -137,23 +119,120 @@ func (h *GitHandler) SwitchBranch(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"ok": true, "branch": req.Branch})
 }
 
+func (h *GitHandler) SmartSwitchBranch(c *gin.Context) {
+	var req SwitchBranchRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	repoRoot, err := h.getRepoRoot(req.Path)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	repo, err := h.openRepo(req.Path)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	w, err := repo.Worktree()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	status, err := w.Status()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	hasChanges := !status.IsClean()
+	stashed := false
+	stashConflict := false
+
+	if hasChanges {
+		cmd := exec.Command("git", "stash", "push", "-m", "auto-stash: switching to "+req.Branch)
+		cmd.Dir = repoRoot
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "stash failed: " + string(output)})
+			return
+		}
+		stashed = true
+	}
+
+	branchRefName := plumbing.NewBranchReferenceName(req.Branch)
+	ref, err := repo.Reference(branchRefName, true)
+	if err != nil {
+		if stashed {
+			cmd := exec.Command("git", "stash", "pop")
+			cmd.Dir = repoRoot
+			cmd.CombinedOutput()
+		}
+		c.JSON(http.StatusBadRequest, gin.H{"error": "branch not found: " + req.Branch})
+		return
+	}
+
+	repo, _ = h.openRepo(req.Path)
+	w, _ = repo.Worktree()
+	err = w.Checkout(&git.CheckoutOptions{Branch: ref.Name()})
+	if err != nil {
+		if stashed {
+			cmd := exec.Command("git", "stash", "pop")
+			cmd.Dir = repoRoot
+			cmd.CombinedOutput()
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	if stashed {
+		cmd := exec.Command("git", "stash", "pop")
+		cmd.Dir = repoRoot
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			stashConflict = strings.Contains(string(output), "CONFLICT")
+		}
+	}
+
+	repo, _ = h.openRepo(req.Path)
+	files := collectFileStatus(repo)
+	bs := collectBranchStatus(repoRoot)
+
+	c.JSON(http.StatusOK, gin.H{
+		"ok": true, "branch": req.Branch,
+		"stashed": stashed, "stashConflict": stashConflict,
+		"status": gin.H{"files": files}, "branchStatus": bs,
+	})
+}
+
+func (h *GitHandler) BranchStatus(c *gin.Context) {
+	var req GitPathRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	repoRoot, err := h.getRepoRoot(req.Path)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	bs := collectBranchStatus(repoRoot)
+	c.JSON(http.StatusOK, bs)
+}
+
 type CreateBranchRequest struct {
 	Path   string `json:"path" binding:"required"`
 	Branch string `json:"branch" binding:"required"`
 	From   string `json:"from"`
 }
 
-// CreateBranch godoc
-// @Summary Create branch
-// @Description Create a new branch from HEAD or specified source
-// @Tags Git
-// @Accept json
-// @Produce json
-// @Param request body CreateBranchRequest true "Create branch request"
-// @Success 200 {object} map[string]interface{}
-// @Failure 400 {object} map[string]string
-// @Failure 500 {object} map[string]string
-// @Router /api/git/create-branch [post]
 func (h *GitHandler) CreateBranch(c *gin.Context) {
 	var req CreateBranchRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -205,17 +284,6 @@ type DeleteBranchRequest struct {
 	Branch string `json:"branch" binding:"required"`
 }
 
-// DeleteBranch godoc
-// @Summary Delete branch
-// @Description Delete a local branch (cannot delete current branch)
-// @Tags Git
-// @Accept json
-// @Produce json
-// @Param request body DeleteBranchRequest true "Delete branch request"
-// @Success 200 {object} map[string]bool
-// @Failure 400 {object} map[string]string
-// @Failure 500 {object} map[string]string
-// @Router /api/git/delete-branch [post]
 func (h *GitHandler) DeleteBranch(c *gin.Context) {
 	var req DeleteBranchRequest
 	if err := c.ShouldBindJSON(&req); err != nil {

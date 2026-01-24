@@ -288,10 +288,8 @@ const App: React.FC = () => {
               filePath={(activeTab.data.filePath as string) || ""}
               locale={locale}
               onResolve={async (content) => {
-                const { resolveConflict, fetchStatus, fetchConflicts } = useGitStore.getState();
-                await resolveConflict(activeTab.data.filePath as string, content);
-                await fetchStatus();
-                await fetchConflicts();
+                const { resolveConflict } = useGitStore.getState();
+                await resolveConflict(activeTab.data?.filePath as string, content);
               }}
               onCancel={() => {
                 useFrameStore.getState().removeCurrentTab(activeTab.id);

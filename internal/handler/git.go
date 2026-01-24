@@ -55,6 +55,10 @@ func (h *GitHandler) Register(r *gin.RouterGroup) {
 	g.POST("/create-branch", h.CreateBranch)
 	g.POST("/delete-branch", h.DeleteBranch)
 	g.POST("/add-patch", h.AddPatch)
+	g.POST("/commit-selected", h.CommitSelected)
+	g.POST("/amend", h.Amend)
+	g.POST("/branch-status", h.BranchStatus)
+	g.POST("/smart-switch-branch", h.SmartSwitchBranch)
 }
 
 func (h *GitHandler) openRepo(path string) (*git.Repository, error) {
@@ -590,7 +594,9 @@ func (h *GitHandler) Checkout(c *gin.Context) {
 		}
 	}
 
-	c.JSON(http.StatusOK, gin.H{"ok": true})
+	repo2, _ := h.openRepo(req.Path)
+	checkoutFiles := collectFileStatus(repo2)
+	c.JSON(http.StatusOK, gin.H{"ok": true, "status": gin.H{"files": checkoutFiles}})
 }
 
 type GitCommitRequest struct {
@@ -715,7 +721,144 @@ func (h *GitHandler) UndoCommit(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"ok": true})
+	repo2, _ := h.openRepo(req.Path)
+	undoFiles := collectFileStatus(repo2)
+	undoCommits := collectCommitLog(repo2, 20)
+	c.JSON(http.StatusOK, gin.H{"ok": true, "status": gin.H{"files": undoFiles}, "commits": undoCommits})
+}
+
+type CommitSelectedRequest struct {
+	Path        string   `json:"path" binding:"required"`
+	Files       []string `json:"files" binding:"required"`
+	Summary     string   `json:"summary" binding:"required"`
+	Description string   `json:"description"`
+	Author      string   `json:"author"`
+	Email       string   `json:"email"`
+}
+
+func (h *GitHandler) CommitSelected(c *gin.Context) {
+	var req CommitSelectedRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	repo, err := h.openRepo(req.Path)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	w, err := repo.Worktree()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	head, err := repo.Head()
+	if err == nil {
+		_ = w.Reset(&git.ResetOptions{Commit: head.Hash(), Mode: git.MixedReset})
+	}
+
+	for _, file := range req.Files {
+		if _, err := w.Add(file); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to add " + file + ": " + err.Error()})
+			return
+		}
+	}
+
+	message := req.Summary
+	if req.Description != "" {
+		message += "\n\n" + req.Description
+	}
+
+	author := req.Author
+	if author == "" {
+		author = "VibeGo User"
+	}
+	email := req.Email
+	if email == "" {
+		email = "user@vibego.local"
+	}
+
+	hash, err := w.Commit(message, &git.CommitOptions{
+		Author: &object.Signature{Name: author, Email: email, When: time.Now()},
+	})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	repo, _ = h.openRepo(req.Path)
+	files := collectFileStatus(repo)
+	commits := collectCommitLog(repo, 20)
+	repoRoot, _ := h.getRepoRoot(req.Path)
+	bs := collectBranchStatus(repoRoot)
+
+	c.JSON(http.StatusOK, gin.H{
+		"ok": true, "hash": hash.String(),
+		"status": gin.H{"files": files}, "commits": commits, "branchStatus": bs,
+	})
+}
+
+func (h *GitHandler) Amend(c *gin.Context) {
+	var req CommitSelectedRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	repo, err := h.openRepo(req.Path)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	w, err := repo.Worktree()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	head, err := repo.Head()
+	if err == nil {
+		_ = w.Reset(&git.ResetOptions{Commit: head.Hash(), Mode: git.MixedReset})
+	}
+
+	for _, file := range req.Files {
+		if _, err := w.Add(file); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to add " + file + ": " + err.Error()})
+			return
+		}
+	}
+
+	message := req.Summary
+	if req.Description != "" {
+		message += "\n\n" + req.Description
+	}
+
+	repoRoot, err := h.getRepoRoot(req.Path)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	cmd := exec.Command("git", "commit", "--amend", "-m", message)
+	cmd.Dir = repoRoot
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": string(output)})
+		return
+	}
+
+	repo, _ = h.openRepo(req.Path)
+	files := collectFileStatus(repo)
+	commits := collectCommitLog(repo, 20)
+	bs := collectBranchStatus(repoRoot)
+
+	c.JSON(http.StatusOK, gin.H{
+		"ok": true, "status": gin.H{"files": files}, "commits": commits, "branchStatus": bs,
+	})
 }
 
 type GitCommitFilesRequest struct {
@@ -999,7 +1142,9 @@ func (h *GitHandler) Fetch(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"ok": true})
+	fetchRoot, _ := h.getRepoRoot(req.Path)
+	fetchBS := collectBranchStatus(fetchRoot)
+	c.JSON(http.StatusOK, gin.H{"ok": true, "branchStatus": fetchBS})
 }
 
 type GitPullRequest struct {
@@ -1058,7 +1203,16 @@ func (h *GitHandler) Pull(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"ok": true})
+	repo2, _ := h.openRepo(req.Path)
+	pullFiles := collectFileStatus(repo2)
+	pullCommits := collectCommitLog(repo2, 20)
+	pullConflicts := collectConflictFiles(repo2)
+	pullRoot, _ := h.getRepoRoot(req.Path)
+	pullBS := collectBranchStatus(pullRoot)
+	c.JSON(http.StatusOK, gin.H{
+		"ok": true, "status": gin.H{"files": pullFiles},
+		"commits": pullCommits, "conflicts": pullConflicts, "branchStatus": pullBS,
+	})
 }
 
 type GitPushRequest struct {
@@ -1104,7 +1258,9 @@ func (h *GitHandler) Push(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"ok": true})
+	pushRoot, _ := h.getRepoRoot(req.Path)
+	pushBS := collectBranchStatus(pushRoot)
+	c.JSON(http.StatusOK, gin.H{"ok": true, "branchStatus": pushBS})
 }
 
 func (h *GitHandler) getRepoRoot(path string) (string, error) {
@@ -1161,7 +1317,12 @@ func (h *GitHandler) Stash(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"ok": true, "message": strings.TrimSpace(string(output))})
+	repo, errR := h.openRepo(req.Path)
+	stashResult := gin.H{"ok": true, "message": strings.TrimSpace(string(output))}
+	if errR == nil {
+		stashResult["status"] = gin.H{"files": collectFileStatus(repo)}
+	}
+	c.JSON(http.StatusOK, stashResult)
 }
 
 type StashEntry struct {
@@ -1258,7 +1419,12 @@ func (h *GitHandler) StashPop(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"ok": true})
+	repo, errR := h.openRepo(req.Path)
+	popResult := gin.H{"ok": true}
+	if errR == nil {
+		popResult["status"] = gin.H{"files": collectFileStatus(repo)}
+	}
+	c.JSON(http.StatusOK, popResult)
 }
 
 // StashDrop godoc

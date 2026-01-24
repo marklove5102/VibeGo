@@ -91,7 +91,9 @@ func main() {
 	handler.NewSessionHandler(db).Register(api)
 	handler.NewFileHandler().Register(api)
 	handler.NewTerminalHandler(db, cfg.DefaultShell).Register(api)
-	handler.NewGitHandler().Register(api)
+	gitHandler := handler.NewGitHandler()
+	gitHandler.Register(api)
+	handler.NewGitWSHandler(gitHandler).Register(api)
 	handler.NewProcessHandler().Register(api)
 
 	distFS, err := ui.GetDistFS()

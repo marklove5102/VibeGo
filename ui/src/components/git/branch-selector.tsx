@@ -1,11 +1,14 @@
-import { Check, GitBranch, Plus, Search, Trash2, X } from "lucide-react";
+import { ArrowDown, ArrowUp, Check, GitBranch, Globe, Plus, Search, Trash2, X } from "lucide-react";
 import React, { useCallback, useMemo, useState } from "react";
-import type { Locale } from "@/stores";
+import type { Locale } from "@/stores/app-store";
 
 interface BranchSelectorProps {
   isOpen: boolean;
   branches: string[];
+  remoteBranches: string[];
   currentBranch: string;
+  aheadCount: number;
+  behindCount: number;
   locale: Locale;
   onClose: () => void;
   onSwitch: (branch: string) => void;
@@ -18,30 +21,37 @@ const i18n = {
     title: "Branches",
     search: "Search branches...",
     current: "Current",
-    switch: "Switch",
+    local: "Local",
+    remote: "Remote",
     create: "Create Branch",
-    delete: "Delete",
     newBranch: "New branch name...",
     cancel: "Cancel",
     confirm: "Create",
+    ahead: "ahead",
+    behind: "behind",
   },
   zh: {
-    title: "分支",
-    search: "搜索分支...",
-    current: "当前",
-    switch: "切换",
-    create: "创建分支",
-    delete: "删除",
-    newBranch: "新分支名称...",
-    cancel: "取消",
-    confirm: "创建",
+    title: "Branches",
+    search: "Search branches...",
+    current: "Current",
+    local: "Local",
+    remote: "Remote",
+    create: "Create Branch",
+    newBranch: "New branch name...",
+    cancel: "Cancel",
+    confirm: "Create",
+    ahead: "ahead",
+    behind: "behind",
   },
 };
 
 const BranchSelector: React.FC<BranchSelectorProps> = ({
   isOpen,
   branches,
+  remoteBranches,
   currentBranch,
+  aheadCount,
+  behindCount,
   locale,
   onClose,
   onSwitch,
@@ -53,17 +63,19 @@ const BranchSelector: React.FC<BranchSelectorProps> = ({
   const [isCreating, setIsCreating] = useState(false);
   const [newBranchName, setNewBranchName] = useState("");
 
-  const filteredBranches = useMemo(() => {
-    if (!search.trim()) return branches;
+  const localBranches = useMemo(() => {
     const lower = search.toLowerCase();
-    return branches.filter((b) => b.toLowerCase().includes(lower));
-  }, [branches, search]);
+    return branches.filter((b) => b !== currentBranch && (!lower || b.toLowerCase().includes(lower)));
+  }, [branches, currentBranch, search]);
+
+  const filteredRemote = useMemo(() => {
+    const lower = search.toLowerCase();
+    return (remoteBranches ?? []).filter((b) => !lower || b.toLowerCase().includes(lower));
+  }, [remoteBranches, search]);
 
   const handleSwitch = useCallback(
     (branch: string) => {
-      if (branch !== currentBranch) {
-        onSwitch(branch);
-      }
+      if (branch !== currentBranch) onSwitch(branch);
       onClose();
     },
     [currentBranch, onSwitch, onClose]
@@ -80,9 +92,7 @@ const BranchSelector: React.FC<BranchSelectorProps> = ({
   const handleDelete = useCallback(
     (e: React.MouseEvent, branch: string) => {
       e.stopPropagation();
-      if (branch !== currentBranch) {
-        onDelete(branch);
-      }
+      if (branch !== currentBranch) onDelete(branch);
     },
     [currentBranch, onDelete]
   );
@@ -90,9 +100,9 @@ const BranchSelector: React.FC<BranchSelectorProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50" onClick={onClose}>
       <div
-        className="bg-ide-bg border border-ide-border rounded-lg shadow-xl w-80 max-h-96 flex flex-col"
+        className="bg-ide-bg border-t border-ide-border rounded-t-2xl shadow-xl w-full max-w-lg max-h-[70vh] flex flex-col animate-in slide-in-from-bottom duration-200"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-4 py-3 border-b border-ide-border">
@@ -100,13 +110,13 @@ const BranchSelector: React.FC<BranchSelectorProps> = ({
             <GitBranch size={16} className="text-ide-accent" />
             <span className="text-sm font-medium text-ide-text">{t.title}</span>
           </div>
-          <button onClick={onClose} className="text-ide-mute hover:text-ide-text">
+          <button onClick={onClose} className="text-ide-mute hover:text-ide-text p-1">
             <X size={16} />
           </button>
         </div>
 
         <div className="px-3 py-2 border-b border-ide-border">
-          <div className="flex items-center gap-2 bg-ide-panel rounded px-2 py-1.5">
+          <div className="flex items-center gap-2 bg-ide-panel rounded-lg px-3 py-2">
             <Search size={14} className="text-ide-mute" />
             <input
               type="text"
@@ -114,40 +124,83 @@ const BranchSelector: React.FC<BranchSelectorProps> = ({
               onChange={(e) => setSearch(e.target.value)}
               placeholder={t.search}
               className="flex-1 bg-transparent text-sm text-ide-text outline-none placeholder-ide-mute"
+              autoFocus
             />
           </div>
         </div>
 
         <div className="flex-1 overflow-y-auto">
-          {filteredBranches.map((branch) => (
-            <div
-              key={branch}
-              className={`flex items-center justify-between px-4 py-2 cursor-pointer transition-colors ${
-                branch === currentBranch ? "bg-ide-accent/10" : "hover:bg-ide-panel"
-              }`}
-              onClick={() => handleSwitch(branch)}
-            >
-              <div className="flex items-center gap-2 min-w-0">
-                <GitBranch size={14} className={branch === currentBranch ? "text-ide-accent" : "text-ide-mute"} />
-                <span className={`text-sm truncate ${branch === currentBranch ? "text-ide-accent font-medium" : "text-ide-text"}`}>
-                  {branch}
+          <div className="px-3 pt-2 pb-1">
+            <span className="text-[10px] font-bold text-ide-mute uppercase">{t.current}</span>
+          </div>
+          <div className="flex items-center justify-between px-4 py-2.5 bg-ide-accent/10">
+            <div className="flex items-center gap-2 min-w-0">
+              <GitBranch size={14} className="text-ide-accent shrink-0" />
+              <span className="text-sm text-ide-accent font-medium truncate">{currentBranch}</span>
+              <Check size={14} className="text-ide-accent shrink-0" />
+            </div>
+            <div className="flex items-center gap-1.5 shrink-0">
+              {aheadCount > 0 && (
+                <span className="text-[10px] bg-blue-500/20 text-blue-400 px-1.5 py-0.5 rounded flex items-center gap-0.5">
+                  <ArrowUp size={9} /> {aheadCount}
                 </span>
-                {branch === currentBranch && (
-                  <span className="text-[10px] bg-ide-accent/20 text-ide-accent px-1.5 py-0.5 rounded">
-                    {t.current}
-                  </span>
-                )}
-              </div>
-              {branch !== currentBranch && (
-                <button
-                  onClick={(e) => handleDelete(e, branch)}
-                  className="text-ide-mute hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity p-1"
-                >
-                  <Trash2 size={14} />
-                </button>
+              )}
+              {behindCount > 0 && (
+                <span className="text-[10px] bg-orange-500/20 text-orange-400 px-1.5 py-0.5 rounded flex items-center gap-0.5">
+                  <ArrowDown size={9} /> {behindCount}
+                </span>
               )}
             </div>
-          ))}
+          </div>
+
+          {localBranches.length > 0 && (
+            <>
+              <div className="px-3 pt-3 pb-1">
+                <span className="text-[10px] font-bold text-ide-mute uppercase">{t.local}</span>
+              </div>
+              {localBranches.map((branch) => (
+                <div
+                  key={branch}
+                  className="flex items-center justify-between px-4 py-2.5 cursor-pointer hover:bg-ide-panel active:bg-ide-panel/80 transition-colors"
+                  onClick={() => handleSwitch(branch)}
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <GitBranch size={14} className="text-ide-mute shrink-0" />
+                    <span className="text-sm text-ide-text truncate">{branch}</span>
+                  </div>
+                  <button
+                    onClick={(e) => handleDelete(e, branch)}
+                    className="text-ide-mute hover:text-red-400 p-1 opacity-0 group-hover:opacity-100 hover:opacity-100 transition-opacity"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              ))}
+            </>
+          )}
+
+          {filteredRemote.length > 0 && (
+            <>
+              <div className="px-3 pt-3 pb-1">
+                <span className="text-[10px] font-bold text-ide-mute uppercase flex items-center gap-1">
+                  <Globe size={10} /> {t.remote}
+                </span>
+              </div>
+              {filteredRemote.map((branch) => (
+                <div
+                  key={branch}
+                  className="flex items-center gap-2 px-4 py-2 cursor-pointer hover:bg-ide-panel transition-colors"
+                  onClick={() => {
+                    const localName = branch.includes("/") ? branch.split("/").slice(1).join("/") : branch;
+                    handleSwitch(localName);
+                  }}
+                >
+                  <Globe size={14} className="text-ide-mute shrink-0" />
+                  <span className="text-sm text-ide-mute truncate">{branch}</span>
+                </div>
+              ))}
+            </>
+          )}
         </div>
 
         <div className="border-t border-ide-border p-3">
@@ -158,39 +211,22 @@ const BranchSelector: React.FC<BranchSelectorProps> = ({
                 value={newBranchName}
                 onChange={(e) => setNewBranchName(e.target.value)}
                 placeholder={t.newBranch}
-                className="w-full bg-ide-panel border border-ide-border rounded px-3 py-1.5 text-sm text-ide-text outline-none focus:border-ide-accent"
+                className="w-full bg-ide-panel border border-ide-border rounded-lg px-3 py-2 text-sm text-ide-text outline-none focus:border-ide-accent"
                 autoFocus
                 onKeyDown={(e) => {
                   if (e.key === "Enter") handleCreate();
-                  if (e.key === "Escape") {
-                    setIsCreating(false);
-                    setNewBranchName("");
-                  }
+                  if (e.key === "Escape") { setIsCreating(false); setNewBranchName(""); }
                 }}
               />
               <div className="flex gap-2">
-                <button
-                  onClick={() => {
-                    setIsCreating(false);
-                    setNewBranchName("");
-                  }}
-                  className="flex-1 px-3 py-1.5 text-sm text-ide-mute hover:text-ide-text"
-                >
-                  {t.cancel}
-                </button>
-                <button
-                  onClick={handleCreate}
-                  disabled={!newBranchName.trim()}
-                  className="flex-1 px-3 py-1.5 text-sm bg-ide-accent text-ide-bg rounded disabled:opacity-50"
-                >
-                  {t.confirm}
-                </button>
+                <button onClick={() => { setIsCreating(false); setNewBranchName(""); }} className="flex-1 px-3 py-2 text-sm text-ide-mute hover:text-ide-text rounded-lg">{t.cancel}</button>
+                <button onClick={handleCreate} disabled={!newBranchName.trim()} className="flex-1 px-3 py-2 text-sm bg-ide-accent text-ide-bg rounded-lg disabled:opacity-50">{t.confirm}</button>
               </div>
             </div>
           ) : (
             <button
               onClick={() => setIsCreating(true)}
-              className="w-full flex items-center justify-center gap-2 px-3 py-1.5 text-sm text-ide-accent hover:bg-ide-accent/10 rounded"
+              className="w-full flex items-center justify-center gap-2 px-3 py-2 text-sm text-ide-accent hover:bg-ide-accent/10 rounded-lg"
             >
               <Plus size={14} />
               {t.create}

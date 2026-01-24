@@ -1,73 +1,85 @@
 import { create } from "zustand";
-import { type CommitFileInfo, type GitCommit, type GitDiff, type GitFileStatus, type RemoteInfo, type StashEntry, gitApi } from "@/api/git";
+import {
+  type BranchStatusInfo,
+  type CommitFileInfo,
+  type GitCommit,
+  type GitDiff,
+  type GitFileStatus,
+  type StashEntry,
+  gitApi,
+} from "@/api/git";
 
 export interface GitFileNode {
-  id: string;
+  path: string;
   name: string;
   status: "modified" | "added" | "deleted" | "renamed" | "copied" | "untracked";
-  path: string;
-  staged: boolean;
-  originalContent?: string;
-  modifiedContent?: string;
 }
 
 interface GitState {
   currentPath: string | null;
-  files: GitFileNode[];
-  stagedFiles: GitFileNode[];
-  unstagedFiles: GitFileNode[];
+  allFiles: GitFileNode[];
+  checkedFiles: Set<string>;
+  summary: string;
+  description: string;
+  isAmend: boolean;
   currentBranch: string;
   branches: string[];
+  remoteBranches: string[];
+  aheadCount: number;
+  behindCount: number;
+  upstreamBranch: string | null;
+  hasRemote: boolean;
   commits: GitCommit[];
   selectedCommit: GitCommit | null;
-  selectedCommitFiles: GitFileNode[];
-  commitMessage: string;
-  isLoading: boolean;
-  error: string | null;
+  selectedCommitFiles: CommitFileInfo[];
   activeTab: "changes" | "history";
-  remotes: RemoteInfo[];
-  hasRemote: boolean;
   stashes: StashEntry[];
   conflicts: string[];
+  lastCommitHash: string | null;
+  showPostCommit: boolean;
+  isLoading: boolean;
+  error: string | null;
 
   setCurrentPath: (path: string | null) => void;
-  setFiles: (files: GitFileNode[]) => void;
-  setCurrentBranch: (branch: string) => void;
-  setBranches: (branches: string[]) => void;
-  setCommitMessage: (msg: string) => void;
-  setLoading: (loading: boolean) => void;
-  setError: (error: string | null) => void;
-  setSelectedCommit: (commit: GitCommit | null) => void;
-  setSelectedCommitFiles: (files: GitFileNode[]) => void;
+  setSummary: (s: string) => void;
+  setDescription: (d: string) => void;
+  setIsAmend: (v: boolean) => void;
   setActiveTab: (tab: "changes" | "history") => void;
-
+  setSelectedCommit: (c: GitCommit | null) => void;
+  toggleFile: (path: string) => void;
+  toggleAllFiles: () => void;
+  dismissPostCommit: () => void;
   reset: () => void;
+
   fetchStatus: () => Promise<void>;
   fetchLog: (limit?: number) => Promise<void>;
   fetchBranches: () => Promise<void>;
-  switchBranch: (branch: string) => Promise<void>;
-  stageFile: (path: string) => Promise<void>;
-  unstageFile: (path: string) => Promise<void>;
-  stageAll: () => Promise<void>;
-  unstageAll: () => Promise<void>;
-  discardFile: (path: string) => Promise<void>;
-  commit: () => Promise<boolean>;
-  getDiff: (filePath: string) => Promise<GitDiff | null>;
-  getCommitFiles: (commitHash: string) => Promise<CommitFileInfo[]>;
-  getCommitDiff: (commitHash: string, filePath: string) => Promise<GitDiff | null>;
   fetchRemotes: () => Promise<void>;
+  fetchBranchStatus: () => Promise<void>;
+  fetchStashes: () => Promise<void>;
+  fetchConflicts: () => Promise<void>;
+
+  commitSelected: () => Promise<boolean>;
+  amendCommit: () => Promise<boolean>;
+  undoLastCommit: () => Promise<boolean>;
+  smartSwitchBranch: (branch: string) => Promise<boolean>;
+  createBranch: (branch: string, from?: string) => Promise<boolean>;
+  deleteBranch: (branch: string) => Promise<boolean>;
   gitFetch: () => Promise<boolean>;
   gitPull: () => Promise<boolean>;
   gitPush: () => Promise<boolean>;
-  fetchStashes: () => Promise<void>;
   stash: (message?: string) => Promise<boolean>;
   stashPop: (index?: number) => Promise<boolean>;
   stashDrop: (index?: number) => Promise<boolean>;
-  fetchConflicts: () => Promise<void>;
+  discardFile: (path: string) => Promise<void>;
   resolveConflict: (filePath: string, content: string) => Promise<boolean>;
-  createBranch: (branch: string, from?: string) => Promise<boolean>;
-  deleteBranch: (branch: string) => Promise<boolean>;
+  getDiff: (filePath: string) => Promise<GitDiff | null>;
+  getCommitFiles: (commitHash: string) => Promise<CommitFileInfo[]>;
+  getCommitDiff: (commitHash: string, filePath: string) => Promise<GitDiff | null>;
   addPatch: (filePath: string, patch: string) => Promise<boolean>;
+
+  applyStatusUpdate: (files: GitFileStatus[]) => void;
+  applyBranchStatus: (bs: BranchStatusInfo) => void;
 }
 
 const mapStatus = (status: string): GitFileNode["status"] => {
@@ -95,93 +107,127 @@ const mapStatus = (status: string): GitFileNode["status"] => {
   }
 };
 
-const fileStatusToNodes = (files: GitFileStatus[]): { staged: GitFileNode[]; unstaged: GitFileNode[] } => {
-  const staged: GitFileNode[] = [];
-  const unstaged: GitFileNode[] = [];
-
-  files.forEach((f) => {
-    const name = f.path.split("/").pop() || f.path;
-    const node: GitFileNode = {
-      id: `git-${f.path}-${f.staged ? "staged" : "unstaged"}`,
-      name,
-      status: mapStatus(f.status),
-      path: f.path,
-      staged: f.staged,
-    };
-    if (f.staged) {
-      staged.push(node);
-    } else {
-      unstaged.push(node);
+const statusFilesToNodes = (files: GitFileStatus[]): GitFileNode[] => {
+  const map = new Map<string, GitFileNode>();
+  for (const f of files) {
+    if (!map.has(f.path)) {
+      map.set(f.path, {
+        path: f.path,
+        name: f.path.split("/").pop() || f.path,
+        status: mapStatus(f.status),
+      });
     }
-  });
-
-  return { staged, unstaged };
+  }
+  return Array.from(map.values()).sort((a, b) => a.path.localeCompare(b.path));
 };
 
 export const useGitStore = create<GitState>((set, get) => ({
   currentPath: null,
-  files: [],
-  stagedFiles: [],
-  unstagedFiles: [],
+  allFiles: [],
+  checkedFiles: new Set<string>(),
+  summary: "",
+  description: "",
+  isAmend: false,
   currentBranch: "main",
   branches: [],
+  remoteBranches: [],
+  aheadCount: 0,
+  behindCount: 0,
+  upstreamBranch: null,
+  hasRemote: false,
   commits: [],
   selectedCommit: null,
   selectedCommitFiles: [],
-  commitMessage: "",
-  isLoading: false,
-  error: null,
   activeTab: "changes",
-  remotes: [],
-  hasRemote: false,
   stashes: [],
   conflicts: [],
+  lastCommitHash: null,
+  showPostCommit: false,
+  isLoading: false,
+  error: null,
 
   setCurrentPath: (path) => set({ currentPath: path }),
-  setFiles: (files) => set({ files }),
-  setCurrentBranch: (branch) => set({ currentBranch: branch }),
-  setBranches: (branches) => set({ branches }),
-  setCommitMessage: (msg) => set({ commitMessage: msg }),
-  setLoading: (loading) => set({ isLoading: loading }),
-  setError: (error) => set({ error }),
-  setSelectedCommit: (commit) => set({ selectedCommit: commit }),
-  setSelectedCommitFiles: (files) => set({ selectedCommitFiles: files }),
+  setSummary: (s) => set({ summary: s }),
+  setDescription: (d) => set({ description: d }),
+  setIsAmend: (v) => set({ isAmend: v }),
   setActiveTab: (tab) => set({ activeTab: tab }),
+  setSelectedCommit: (c) => set({ selectedCommit: c }),
+  dismissPostCommit: () => set({ showPostCommit: false }),
+
+  toggleFile: (path) => {
+    const { checkedFiles } = get();
+    const next = new Set(checkedFiles);
+    if (next.has(path)) {
+      next.delete(path);
+    } else {
+      next.add(path);
+    }
+    set({ checkedFiles: next });
+  },
+
+  toggleAllFiles: () => {
+    const { allFiles, checkedFiles } = get();
+    const allChecked = allFiles.length > 0 && allFiles.every((f) => checkedFiles.has(f.path));
+    if (allChecked) {
+      set({ checkedFiles: new Set() });
+    } else {
+      set({ checkedFiles: new Set(allFiles.map((f) => f.path)) });
+    }
+  },
 
   reset: () =>
     set({
-      files: [],
-      stagedFiles: [],
-      unstagedFiles: [],
+      allFiles: [],
+      checkedFiles: new Set(),
+      summary: "",
+      description: "",
+      isAmend: false,
       commits: [],
       selectedCommit: null,
       selectedCommitFiles: [],
-      commitMessage: "",
       isLoading: false,
       error: null,
-      remotes: [],
+      aheadCount: 0,
+      behindCount: 0,
+      upstreamBranch: null,
       hasRemote: false,
       stashes: [],
-  conflicts: [],
+      conflicts: [],
+      lastCommitHash: null,
+      showPostCommit: false,
     }),
+
+  applyStatusUpdate: (files) => {
+    const nodes = statusFilesToNodes(files);
+    const { checkedFiles: oldChecked } = get();
+    const newChecked = new Set<string>();
+    for (const n of nodes) {
+      if (oldChecked.size === 0 || oldChecked.has(n.path)) {
+        newChecked.add(n.path);
+      }
+    }
+    set({ allFiles: nodes, checkedFiles: newChecked });
+  },
+
+  applyBranchStatus: (bs) => {
+    set({
+      currentBranch: bs.branch || get().currentBranch,
+      upstreamBranch: bs.upstream || null,
+      aheadCount: bs.ahead || 0,
+      behindCount: bs.behind || 0,
+    });
+  },
 
   fetchStatus: async () => {
     const { currentPath } = get();
     if (!currentPath) return;
-
     set({ isLoading: true, error: null });
     try {
       const res = await gitApi.status(currentPath);
-      const { staged, unstaged } = fileStatusToNodes(res.files);
-      set({
-        stagedFiles: staged,
-        unstagedFiles: unstaged,
-        files: [...staged, ...unstaged],
-      });
+      const nodes = statusFilesToNodes(res.files);
+      set({ allFiles: nodes, checkedFiles: new Set(nodes.map((n) => n.path)) });
     } catch (err) {
-      set({
-        error: err instanceof Error ? err.message : "Failed to fetch status",
-      });
+      set({ error: err instanceof Error ? err.message : "Failed to fetch status" });
     } finally {
       set({ isLoading: false });
     }
@@ -190,141 +236,89 @@ export const useGitStore = create<GitState>((set, get) => ({
   fetchLog: async (limit = 50) => {
     const { currentPath } = get();
     if (!currentPath) return;
-
-    set({ isLoading: true, error: null });
     try {
       const res = await gitApi.log(currentPath, limit);
       set({ commits: res.commits });
     } catch (err) {
-      set({
-        error: err instanceof Error ? err.message : "Failed to fetch log",
-      });
-    } finally {
-      set({ isLoading: false });
+      set({ error: err instanceof Error ? err.message : "Failed to fetch log" });
     }
   },
 
   fetchBranches: async () => {
     const { currentPath } = get();
     if (!currentPath) return;
-
     try {
       const res = await gitApi.branches(currentPath);
       set({
         branches: res.branches.map((b) => b.name),
+        remoteBranches: res.remoteBranches ?? [],
         currentBranch: res.currentBranch,
       });
     } catch (err) {
-      set({
-        error: err instanceof Error ? err.message : "Failed to fetch branches",
-      });
+      set({ error: err instanceof Error ? err.message : "Failed to fetch branches" });
     }
   },
 
-  switchBranch: async (branch: string) => {
-    const { currentPath, fetchStatus, fetchBranches } = get();
+  fetchRemotes: async () => {
+    const { currentPath } = get();
     if (!currentPath) return;
+    try {
+      const res = await gitApi.remotes(currentPath);
+      set({ hasRemote: res.remotes.length > 0 });
+    } catch {
+      set({ hasRemote: false });
+    }
+  },
 
+  fetchBranchStatus: async () => {
+    const { currentPath } = get();
+    if (!currentPath) return;
+    try {
+      const bs = await gitApi.branchStatus(currentPath);
+      get().applyBranchStatus(bs);
+    } catch {}
+  },
+
+  fetchStashes: async () => {
+    const { currentPath } = get();
+    if (!currentPath) return;
+    try {
+      const res = await gitApi.stashList(currentPath);
+      set({ stashes: res.stashes ?? [] });
+    } catch {
+      set({ stashes: [] });
+    }
+  },
+
+  fetchConflicts: async () => {
+    const { currentPath } = get();
+    if (!currentPath) return;
+    try {
+      const res = await gitApi.conflicts(currentPath);
+      set({ conflicts: res.conflicts ?? [] });
+    } catch {
+      set({ conflicts: [] });
+    }
+  },
+
+  commitSelected: async () => {
+    const { currentPath, checkedFiles, summary, description } = get();
+    if (!currentPath || !summary.trim() || checkedFiles.size === 0) return false;
     set({ isLoading: true, error: null });
     try {
-      await gitApi.switchBranch(currentPath, branch);
-      await fetchBranches();
-      await fetchStatus();
-    } catch (err) {
+      const res = await gitApi.commitSelected(currentPath, Array.from(checkedFiles), summary, description);
+      const nodes = statusFilesToNodes(res.status.files);
       set({
-        error: err instanceof Error ? err.message : "Failed to switch branch",
+        allFiles: nodes,
+        checkedFiles: new Set(nodes.map((n) => n.path)),
+        commits: res.commits,
+        summary: "",
+        description: "",
+        isAmend: false,
+        lastCommitHash: res.hash,
+        showPostCommit: true,
       });
-    } finally {
-      set({ isLoading: false });
-    }
-  },
-
-  stageFile: async (path: string) => {
-    const { currentPath, fetchStatus } = get();
-    if (!currentPath) return;
-
-    try {
-      await gitApi.add(currentPath, [path]);
-      await fetchStatus();
-    } catch (err) {
-      set({
-        error: err instanceof Error ? err.message : "Failed to stage file",
-      });
-    }
-  },
-
-  unstageFile: async (path: string) => {
-    const { currentPath, fetchStatus } = get();
-    if (!currentPath) return;
-
-    try {
-      await gitApi.reset(currentPath, [path]);
-      await fetchStatus();
-    } catch (err) {
-      set({
-        error: err instanceof Error ? err.message : "Failed to unstage file",
-      });
-    }
-  },
-
-  stageAll: async () => {
-    const { currentPath, unstagedFiles, fetchStatus } = get();
-    if (!currentPath || unstagedFiles.length === 0) return;
-
-    try {
-      await gitApi.add(
-        currentPath,
-        unstagedFiles.map((f) => f.path)
-      );
-      await fetchStatus();
-    } catch (err) {
-      set({
-        error: err instanceof Error ? err.message : "Failed to stage all files",
-      });
-    }
-  },
-
-  unstageAll: async () => {
-    const { currentPath, stagedFiles, fetchStatus } = get();
-    if (!currentPath || stagedFiles.length === 0) return;
-
-    try {
-      await gitApi.reset(
-        currentPath,
-        stagedFiles.map((f) => f.path)
-      );
-      await fetchStatus();
-    } catch (err) {
-      set({
-        error: err instanceof Error ? err.message : "Failed to unstage all files",
-      });
-    }
-  },
-
-  discardFile: async (path: string) => {
-    const { currentPath, fetchStatus } = get();
-    if (!currentPath) return;
-
-    try {
-      await gitApi.checkout(currentPath, [path]);
-      await fetchStatus();
-    } catch (err) {
-      set({
-        error: err instanceof Error ? err.message : "Failed to discard changes",
-      });
-    }
-  },
-
-  commit: async () => {
-    const { currentPath, commitMessage, fetchStatus, fetchLog } = get();
-    if (!currentPath || !commitMessage.trim()) return false;
-
-    set({ isLoading: true, error: null });
-    try {
-      await gitApi.commit(currentPath, commitMessage);
-      set({ commitMessage: "" });
-      await fetchStatus();
-      await fetchLog();
+      if (res.branchStatus) get().applyBranchStatus(res.branchStatus);
       return true;
     } catch (err) {
       set({ error: err instanceof Error ? err.message : "Failed to commit" });
@@ -334,65 +328,118 @@ export const useGitStore = create<GitState>((set, get) => ({
     }
   },
 
-  getDiff: async (filePath: string) => {
-    const { currentPath } = get();
-    if (!currentPath) return null;
-
+  amendCommit: async () => {
+    const { currentPath, checkedFiles, summary, description } = get();
+    if (!currentPath || !summary.trim() || checkedFiles.size === 0) return false;
+    set({ isLoading: true, error: null });
     try {
-      return await gitApi.diff(currentPath, filePath);
-    } catch (err) {
-      set({ error: err instanceof Error ? err.message : "Failed to get diff" });
-      return null;
-    }
-  },
-
-  getCommitFiles: async (commitHash: string) => {
-    const { currentPath } = get();
-    if (!currentPath) return [];
-
-    try {
-      const res = await gitApi.commitFiles(currentPath, commitHash);
-      return res.files;
-    } catch (err) {
-      set({ error: err instanceof Error ? err.message : "Failed to get commit files" });
-      return [];
-    }
-  },
-
-  getCommitDiff: async (commitHash: string, filePath: string) => {
-    const { currentPath } = get();
-    if (!currentPath) return null;
-
-    try {
-      return await gitApi.commitDiff(currentPath, commitHash, filePath);
-    } catch (err) {
-      set({ error: err instanceof Error ? err.message : "Failed to get commit diff" });
-      return null;
-    }
-  },
-
-  fetchRemotes: async () => {
-    const { currentPath } = get();
-    if (!currentPath) return;
-
-    try {
-      const res = await gitApi.remotes(currentPath);
+      const res = await gitApi.amend(currentPath, Array.from(checkedFiles), summary, description);
+      const nodes = statusFilesToNodes(res.status.files);
       set({
-        remotes: res.remotes,
-        hasRemote: res.remotes.length > 0,
+        allFiles: nodes,
+        checkedFiles: new Set(nodes.map((n) => n.path)),
+        commits: res.commits,
+        summary: "",
+        description: "",
+        isAmend: false,
+        showPostCommit: false,
       });
+      if (res.branchStatus) get().applyBranchStatus(res.branchStatus);
+      return true;
     } catch (err) {
-      set({ remotes: [], hasRemote: false });
+      set({ error: err instanceof Error ? err.message : "Failed to amend" });
+      return false;
+    } finally {
+      set({ isLoading: false });
+    }
+  },
+
+  undoLastCommit: async () => {
+    const { currentPath } = get();
+    if (!currentPath) return false;
+    set({ isLoading: true, error: null });
+    try {
+      const res = await gitApi.undo(currentPath);
+      const nodes = statusFilesToNodes(res.status.files);
+      set({
+        allFiles: nodes,
+        checkedFiles: new Set(nodes.map((n) => n.path)),
+        commits: res.commits,
+        showPostCommit: false,
+        lastCommitHash: null,
+      });
+      return true;
+    } catch (err) {
+      set({ error: err instanceof Error ? err.message : "Failed to undo" });
+      return false;
+    } finally {
+      set({ isLoading: false });
+    }
+  },
+
+  smartSwitchBranch: async (branch) => {
+    const { currentPath, fetchBranches, fetchStashes } = get();
+    if (!currentPath) return false;
+    set({ isLoading: true, error: null });
+    try {
+      const res = await gitApi.smartSwitchBranch(currentPath, branch);
+      const nodes = statusFilesToNodes(res.status.files);
+      set({
+        allFiles: nodes,
+        checkedFiles: new Set(nodes.map((n) => n.path)),
+        currentBranch: res.branch,
+      });
+      if (res.branchStatus) get().applyBranchStatus(res.branchStatus);
+      await fetchBranches();
+      await fetchStashes();
+      return true;
+    } catch (err) {
+      set({ error: err instanceof Error ? err.message : "Failed to switch branch" });
+      return false;
+    } finally {
+      set({ isLoading: false });
+    }
+  },
+
+  createBranch: async (branch, from) => {
+    const { currentPath, fetchBranches } = get();
+    if (!currentPath) return false;
+    set({ isLoading: true, error: null });
+    try {
+      await gitApi.createBranch(currentPath, branch, from);
+      await fetchBranches();
+      return true;
+    } catch (err) {
+      set({ error: err instanceof Error ? err.message : "Failed to create branch" });
+      return false;
+    } finally {
+      set({ isLoading: false });
+    }
+  },
+
+  deleteBranch: async (branch) => {
+    const { currentPath, fetchBranches } = get();
+    if (!currentPath) return false;
+    set({ isLoading: true, error: null });
+    try {
+      await gitApi.deleteBranch(currentPath, branch);
+      await fetchBranches();
+      return true;
+    } catch (err) {
+      set({ error: err instanceof Error ? err.message : "Failed to delete branch" });
+      return false;
+    } finally {
+      set({ isLoading: false });
     }
   },
 
   gitFetch: async () => {
     const { currentPath } = get();
     if (!currentPath) return false;
-
     set({ isLoading: true, error: null });
     try {
-      await gitApi.fetch(currentPath);
+      const res = await gitApi.fetch(currentPath);
+      if (res.branchStatus) get().applyBranchStatus(res.branchStatus);
       return true;
     } catch (err) {
       set({ error: err instanceof Error ? err.message : "Failed to fetch" });
@@ -403,14 +450,22 @@ export const useGitStore = create<GitState>((set, get) => ({
   },
 
   gitPull: async () => {
-    const { currentPath, fetchStatus, fetchLog } = get();
+    const { currentPath } = get();
     if (!currentPath) return false;
-
     set({ isLoading: true, error: null });
     try {
-      await gitApi.pull(currentPath);
-      await fetchStatus();
-      await fetchLog();
+      const res = await gitApi.pull(currentPath);
+      const nodes = statusFilesToNodes(res.status.files);
+      set({
+        allFiles: nodes,
+        checkedFiles: new Set(nodes.map((n) => n.path)),
+        commits: res.commits,
+        conflicts: res.conflicts ?? [],
+      });
+      if (res.branchStatus) get().applyBranchStatus(res.branchStatus);
+      if (res.conflicts && res.conflicts.length > 0) {
+        set({ activeTab: "changes" });
+      }
       return true;
     } catch (err) {
       set({ error: err instanceof Error ? err.message : "Failed to pull" });
@@ -423,10 +478,10 @@ export const useGitStore = create<GitState>((set, get) => ({
   gitPush: async () => {
     const { currentPath } = get();
     if (!currentPath) return false;
-
     set({ isLoading: true, error: null });
     try {
-      await gitApi.push(currentPath);
+      const res = await gitApi.push(currentPath);
+      if (res.branchStatus) get().applyBranchStatus(res.branchStatus);
       return true;
     } catch (err) {
       set({ error: err instanceof Error ? err.message : "Failed to push" });
@@ -436,26 +491,16 @@ export const useGitStore = create<GitState>((set, get) => ({
     }
   },
 
-  fetchStashes: async () => {
-    const { currentPath } = get();
-    if (!currentPath) return;
-
-    try {
-      const res = await gitApi.stashList(currentPath);
-      set({ stashes: res.stashes ?? [] });
-    } catch (err) {
-      set({ stashes: [] });
-    }
-  },
-
-  stash: async (message?: string) => {
-    const { currentPath, fetchStatus, fetchStashes } = get();
+  stash: async (message) => {
+    const { currentPath, fetchStashes } = get();
     if (!currentPath) return false;
-
     set({ isLoading: true, error: null });
     try {
-      await gitApi.stash(currentPath, message);
-      await fetchStatus();
+      const res = await gitApi.stash(currentPath, message);
+      if (res.status) {
+        const nodes = statusFilesToNodes(res.status.files);
+        set({ allFiles: nodes, checkedFiles: new Set(nodes.map((n) => n.path)) });
+      }
       await fetchStashes();
       return true;
     } catch (err) {
@@ -467,13 +512,15 @@ export const useGitStore = create<GitState>((set, get) => ({
   },
 
   stashPop: async (index = 0) => {
-    const { currentPath, fetchStatus, fetchStashes } = get();
+    const { currentPath, fetchStashes } = get();
     if (!currentPath) return false;
-
     set({ isLoading: true, error: null });
     try {
-      await gitApi.stashPop(currentPath, index);
-      await fetchStatus();
+      const res = await gitApi.stashPop(currentPath, index);
+      if (res.status) {
+        const nodes = statusFilesToNodes(res.status.files);
+        set({ allFiles: nodes, checkedFiles: new Set(nodes.map((n) => n.path)) });
+      }
       await fetchStashes();
       return true;
     } catch (err) {
@@ -487,7 +534,6 @@ export const useGitStore = create<GitState>((set, get) => ({
   stashDrop: async (index = 0) => {
     const { currentPath, fetchStashes } = get();
     if (!currentPath) return false;
-
     set({ isLoading: true, error: null });
     try {
       await gitApi.stashDrop(currentPath, index);
@@ -501,22 +547,20 @@ export const useGitStore = create<GitState>((set, get) => ({
     }
   },
 
-  fetchConflicts: async () => {
-    const { currentPath } = get();
+  discardFile: async (path) => {
+    const { currentPath, fetchStatus } = get();
     if (!currentPath) return;
-
     try {
-      const res = await gitApi.conflicts(currentPath);
-      set({ conflicts: res.conflicts ?? [] });
+      await gitApi.checkout(currentPath, [path]);
+      await fetchStatus();
     } catch (err) {
-      set({ conflicts: [] });
+      set({ error: err instanceof Error ? err.message : "Failed to discard changes" });
     }
   },
 
-  resolveConflict: async (filePath: string, content: string) => {
+  resolveConflict: async (filePath, content) => {
     const { currentPath, fetchStatus, fetchConflicts } = get();
     if (!currentPath) return false;
-
     set({ isLoading: true, error: null });
     try {
       await gitApi.resolveConflict(currentPath, filePath, content);
@@ -531,44 +575,44 @@ export const useGitStore = create<GitState>((set, get) => ({
     }
   },
 
-  createBranch: async (branch: string, from?: string) => {
-    const { currentPath, fetchBranches } = get();
-    if (!currentPath) return false;
-
-    set({ isLoading: true, error: null });
+  getDiff: async (filePath) => {
+    const { currentPath } = get();
+    if (!currentPath) return null;
     try {
-      await gitApi.createBranch(currentPath, branch, from);
-      await fetchBranches();
-      return true;
+      return await gitApi.diff(currentPath, filePath);
     } catch (err) {
-      set({ error: err instanceof Error ? err.message : "Failed to create branch" });
-      return false;
-    } finally {
-      set({ isLoading: false });
+      set({ error: err instanceof Error ? err.message : "Failed to get diff" });
+      return null;
     }
   },
 
-  deleteBranch: async (branch: string) => {
-    const { currentPath, fetchBranches } = get();
-    if (!currentPath) return false;
-
-    set({ isLoading: true, error: null });
+  getCommitFiles: async (commitHash) => {
+    const { currentPath } = get();
+    if (!currentPath) return [];
     try {
-      await gitApi.deleteBranch(currentPath, branch);
-      await fetchBranches();
-      return true;
+      const res = await gitApi.commitFiles(currentPath, commitHash);
+      set({ selectedCommitFiles: res.files });
+      return res.files;
     } catch (err) {
-      set({ error: err instanceof Error ? err.message : "Failed to delete branch" });
-      return false;
-    } finally {
-      set({ isLoading: false });
+      set({ error: err instanceof Error ? err.message : "Failed to get commit files" });
+      return [];
     }
   },
 
-  addPatch: async (filePath: string, patch: string) => {
+  getCommitDiff: async (commitHash, filePath) => {
+    const { currentPath } = get();
+    if (!currentPath) return null;
+    try {
+      return await gitApi.commitDiff(currentPath, commitHash, filePath);
+    } catch (err) {
+      set({ error: err instanceof Error ? err.message : "Failed to get commit diff" });
+      return null;
+    }
+  },
+
+  addPatch: async (filePath, patch) => {
     const { currentPath, fetchStatus } = get();
     if (!currentPath) return false;
-
     set({ isLoading: true, error: null });
     try {
       await gitApi.addPatch(currentPath, filePath, patch);

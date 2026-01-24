@@ -46,6 +46,54 @@ export interface StashEntry {
   message: string;
 }
 
+export interface BranchStatusInfo {
+  branch: string;
+  upstream: string;
+  ahead: number;
+  behind: number;
+}
+
+export interface BranchInfo {
+  name: string;
+  isCurrent: boolean;
+}
+
+export interface StatusPayload {
+  files: GitFileStatus[];
+}
+
+export interface CommitSelectedResponse {
+  ok: boolean;
+  hash: string;
+  status: StatusPayload;
+  commits: GitCommit[];
+  branchStatus: BranchStatusInfo;
+}
+
+export interface PullResponse {
+  ok: boolean;
+  status: StatusPayload;
+  commits: GitCommit[];
+  conflicts: string[];
+  branchStatus: BranchStatusInfo;
+}
+
+export interface SmartSwitchResponse {
+  ok: boolean;
+  branch: string;
+  stashed: boolean;
+  stashConflict: boolean;
+  status: StatusPayload;
+  branchStatus: BranchStatusInfo;
+}
+
+export type GitWSEventType = "file_changed" | "remote_updated" | "push_progress" | "pull_progress" | "operation_done";
+
+export interface GitWSEvent {
+  type: GitWSEventType;
+  data: Record<string, unknown>;
+}
+
 export const gitApi = {
   init: (path: string) =>
     request<{ ok: boolean }>("/git/init", {
@@ -96,7 +144,7 @@ export const gitApi = {
     }),
 
   checkout: (path: string, files: string[]) =>
-    request<{ ok: boolean }>("/git/checkout", {
+    request<{ ok: boolean; status: StatusPayload }>("/git/checkout", {
       method: "POST",
       body: JSON.stringify({ path, files }),
     }),
@@ -107,23 +155,48 @@ export const gitApi = {
       body: JSON.stringify({ path, message, author, email }),
     }),
 
+  commitSelected: (path: string, files: string[], summary: string, description?: string) =>
+    request<CommitSelectedResponse>("/git/commit-selected", {
+      method: "POST",
+      body: JSON.stringify({ path, files, summary, description }),
+    }),
+
+  amend: (path: string, files: string[], summary: string, description?: string) =>
+    request<CommitSelectedResponse>("/git/amend", {
+      method: "POST",
+      body: JSON.stringify({ path, files, summary, description }),
+    }),
+
   undo: (path: string) =>
-    request<{ ok: boolean }>("/git/undo", {
+    request<{ ok: boolean; status: StatusPayload; commits: GitCommit[] }>("/git/undo", {
       method: "POST",
       body: JSON.stringify({ path }),
     }),
 
   branches: (path: string) =>
     request<{
-      branches: Array<{ name: string; isCurrent: boolean }>;
+      branches: BranchInfo[];
+      remoteBranches: string[];
       currentBranch: string;
     }>("/git/branches", {
       method: "POST",
       body: JSON.stringify({ path }),
     }),
 
+  branchStatus: (path: string) =>
+    request<BranchStatusInfo>("/git/branch-status", {
+      method: "POST",
+      body: JSON.stringify({ path }),
+    }),
+
   switchBranch: (path: string, branch: string) =>
     request<{ ok: boolean; branch: string }>("/git/switch-branch", {
+      method: "POST",
+      body: JSON.stringify({ path, branch }),
+    }),
+
+  smartSwitchBranch: (path: string, branch: string) =>
+    request<SmartSwitchResponse>("/git/smart-switch-branch", {
       method: "POST",
       body: JSON.stringify({ path, branch }),
     }),
@@ -147,25 +220,25 @@ export const gitApi = {
     }),
 
   fetch: (path: string, remote = "origin") =>
-    request<{ ok: boolean }>("/git/fetch", {
+    request<{ ok: boolean; branchStatus: BranchStatusInfo }>("/git/fetch", {
       method: "POST",
       body: JSON.stringify({ path, remote }),
     }),
 
   pull: (path: string, remote = "origin", branch?: string) =>
-    request<{ ok: boolean }>("/git/pull", {
+    request<PullResponse>("/git/pull", {
       method: "POST",
       body: JSON.stringify({ path, remote, branch }),
     }),
 
   push: (path: string, remote = "origin") =>
-    request<{ ok: boolean }>("/git/push", {
+    request<{ ok: boolean; branchStatus: BranchStatusInfo }>("/git/push", {
       method: "POST",
       body: JSON.stringify({ path, remote }),
     }),
 
   stash: (path: string, message?: string) =>
-    request<{ ok: boolean; message: string }>("/git/stash", {
+    request<{ ok: boolean; message: string; status: StatusPayload }>("/git/stash", {
       method: "POST",
       body: JSON.stringify({ path, message }),
     }),
@@ -177,7 +250,7 @@ export const gitApi = {
     }),
 
   stashPop: (path: string, index = 0) =>
-    request<{ ok: boolean }>("/git/stash-pop", {
+    request<{ ok: boolean; status: StatusPayload }>("/git/stash-pop", {
       method: "POST",
       body: JSON.stringify({ path, index }),
     }),
@@ -217,4 +290,38 @@ export const gitApi = {
       method: "POST",
       body: JSON.stringify({ path, filePath, patch }),
     }),
+
+  connectWs: (path: string, onEvent: (event: GitWSEvent) => void): (() => void) => {
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    const host = window.location.host;
+    const url = `${protocol}//${host}${API_BASE}/git/ws?path=${encodeURIComponent(path)}`;
+    let ws: WebSocket | null = null;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let closed = false;
+
+    const connect = () => {
+      if (closed) return;
+      ws = new WebSocket(url);
+      ws.onmessage = (e) => {
+        try {
+          const event = JSON.parse(e.data) as GitWSEvent;
+          onEvent(event);
+        } catch {}
+      };
+      ws.onclose = () => {
+        if (!closed) {
+          reconnectTimer = setTimeout(connect, 3000);
+        }
+      };
+      ws.onerror = () => ws?.close();
+    };
+
+    connect();
+
+    return () => {
+      closed = true;
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      ws?.close();
+    };
+  },
 };
