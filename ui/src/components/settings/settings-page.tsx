@@ -1,4 +1,4 @@
-import { AlignLeft, Eye, EyeOff, Grid, GitBranch, List, Mail, Settings, User, WrapText, X, Clock } from "lucide-react";
+import { AlignLeft, Eye, EyeOff, Grid, List, Mail, Settings, User, WrapText, X, Clock } from "lucide-react";
 import React, { useEffect, useState } from "react";
 import { type Locale, useTranslation } from "@/lib/i18n";
 import { getSettingsByCategory, SETTING_CATEGORIES, type SettingSchema, useSettingsStore } from "@/lib/settings";
@@ -150,9 +150,7 @@ const SettingsPage: React.FC = () => {
       leftButtons: [{ icon: <Settings size={18} />, active: true }],
       centerContent: (
         <div className="flex items-center gap-2 overflow-x-auto no-scrollbar touch-pan-x h-full">
-          {SETTING_CATEGORIES.map((cat) => {
-            const catIcon = cat.key === "git" ? <GitBranch size={12} /> : null;
-            return (
+          {SETTING_CATEGORIES.map((cat) => (
               <div
                 key={cat.key}
                 onClick={() => setActiveTab(cat.key)}
@@ -162,11 +160,9 @@ const SettingsPage: React.FC = () => {
                     : "bg-transparent border-transparent text-ide-mute hover:bg-ide-panel hover:text-ide-text"
                 }`}
               >
-                {catIcon}
                 <span className="font-medium">{t(cat.labelKey)}</span>
               </div>
-            );
-          })}
+          ))}
         </div>
       ),
       rightButtons: [
