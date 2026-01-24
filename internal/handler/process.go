@@ -20,6 +20,7 @@ func NewProcessHandler() *ProcessHandler {
 
 func (h *ProcessHandler) Register(r *gin.RouterGroup) {
 	r.GET("/system/stats", h.SystemStats)
+	r.GET("/system/combined", h.Combined)
 	g := r.Group("/process")
 	g.GET("", h.List)
 	g.GET("/:pid", h.Detail)
@@ -28,6 +29,18 @@ func (h *ProcessHandler) Register(r *gin.RouterGroup) {
 
 func (h *ProcessHandler) SystemStats(c *gin.Context) {
 	stats, err := h.service.GetSystemStats()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, stats)
+}
+
+func (h *ProcessHandler) Combined(c *gin.Context) {
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "100"))
+	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
+
+	stats, err := h.service.GetCombinedStats(limit, offset)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

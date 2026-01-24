@@ -16,6 +16,7 @@ export interface CPUStats {
   usagePercent: number;
   cores: number;
   modelName: string;
+  perCoreUsage?: number[];
 }
 
 export interface MemoryStats {
@@ -56,10 +57,19 @@ export interface ProcessInfo {
   numThreads: number;
 }
 
+export interface CombinedStats {
+  system: SystemStats;
+  processes: ProcessInfo[];
+  total: number;
+}
+
 export const processApi = {
   systemStats: () => request<SystemStats>("/system/stats"),
 
   list: () => request<{ processes: ProcessInfo[] }>("/process"),
+
+  combined: (limit = 100, offset = 0) =>
+    request<CombinedStats>(`/system/combined?limit=${limit}&offset=${offset}`),
 
   detail: (pid: number) => request<ProcessInfo>(`/process/${pid}`),
 

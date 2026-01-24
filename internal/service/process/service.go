@@ -4,7 +4,9 @@ import (
 	"os"
 	"runtime"
 	"sort"
+	"sync"
 	"syscall"
+	"time"
 
 	"github.com/shirou/gopsutil/v4/cpu"
 	"github.com/shirou/gopsutil/v4/host"
@@ -14,9 +16,10 @@ import (
 )
 
 type CPUStats struct {
-	UsagePercent float64 `json:"usagePercent"`
-	Cores        int     `json:"cores"`
-	ModelName    string  `json:"modelName"`
+	UsagePercent  float64   `json:"usagePercent"`
+	Cores         int       `json:"cores"`
+	ModelName     string    `json:"modelName"`
+	PerCoreUsage  []float64 `json:"perCoreUsage,omitempty"`
 }
 
 type MemoryStats struct {
@@ -57,10 +60,29 @@ type ProcessInfo struct {
 	NumThreads int32   `json:"numThreads"`
 }
 
-type Service struct{}
+type CombinedStats struct {
+	System    *SystemStats  `json:"system"`
+	Processes []ProcessInfo `json:"processes"`
+	Total     int           `json:"total"`
+}
+
+type processCache struct {
+	mu        sync.RWMutex
+	data      []ProcessInfo
+	timestamp time.Time
+	ttl       time.Duration
+}
+
+type Service struct {
+	cache *processCache
+}
 
 func New() *Service {
-	return &Service{}
+	return &Service{
+		cache: &processCache{
+			ttl: 500 * time.Millisecond,
+		},
+	}
 }
 
 func (s *Service) GetSystemStats() (*SystemStats, error) {
@@ -68,6 +90,8 @@ func (s *Service) GetSystemStats() (*SystemStats, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	perCorePercent, _ := cpu.Percent(0, true)
 
 	cpuInfo, _ := cpu.Info()
 	modelName := ""
@@ -104,6 +128,7 @@ func (s *Service) GetSystemStats() (*SystemStats, error) {
 			UsagePercent: cpuUsage,
 			Cores:        runtime.NumCPU(),
 			ModelName:    modelName,
+			PerCoreUsage: perCorePercent,
 		},
 		Memory: MemoryStats{
 			Total:       memInfo.Total,
@@ -124,64 +149,171 @@ func (s *Service) GetSystemStats() (*SystemStats, error) {
 	}, nil
 }
 
-func (s *Service) GetProcessList() ([]ProcessInfo, error) {
+func (s *Service) getProcessInfo(p *process.Process) ProcessInfo {
+	info := ProcessInfo{PID: p.Pid}
+
+	if name, err := p.Name(); err == nil {
+		info.Name = name
+	}
+
+	if username, err := p.Username(); err == nil {
+		info.Username = username
+	}
+
+	if cpuPercent, err := p.CPUPercent(); err == nil {
+		info.CPUPercent = cpuPercent
+	}
+
+	if memPercent, err := p.MemoryPercent(); err == nil {
+		info.MemPercent = memPercent
+	}
+
+	if memInfo, err := p.MemoryInfo(); err == nil && memInfo != nil {
+		info.MemRSS = memInfo.RSS
+	}
+
+	if status, err := p.Status(); err == nil && len(status) > 0 {
+		info.Status = status[0]
+	}
+
+	if createTime, err := p.CreateTime(); err == nil {
+		info.CreateTime = createTime
+	}
+
+	if cmdline, err := p.Cmdline(); err == nil {
+		info.Cmdline = cmdline
+	}
+
+	if ppid, err := p.Ppid(); err == nil {
+		info.PPID = ppid
+	}
+
+	if numThreads, err := p.NumThreads(); err == nil {
+		info.NumThreads = numThreads
+	}
+
+	return info
+}
+
+func (s *Service) fetchProcessListParallel() ([]ProcessInfo, error) {
 	processes, err := process.Processes()
 	if err != nil {
 		return nil, err
 	}
 
-	result := make([]ProcessInfo, 0, len(processes))
-	for _, p := range processes {
-		info := ProcessInfo{PID: p.Pid}
+	result := make([]ProcessInfo, len(processes))
+	var wg sync.WaitGroup
 
-		if name, err := p.Name(); err == nil {
-			info.Name = name
-		}
-
-		if username, err := p.Username(); err == nil {
-			info.Username = username
-		}
-
-		if cpuPercent, err := p.CPUPercent(); err == nil {
-			info.CPUPercent = cpuPercent
-		}
-
-		if memPercent, err := p.MemoryPercent(); err == nil {
-			info.MemPercent = memPercent
-		}
-
-		if memInfo, err := p.MemoryInfo(); err == nil && memInfo != nil {
-			info.MemRSS = memInfo.RSS
-		}
-
-		if status, err := p.Status(); err == nil && len(status) > 0 {
-			info.Status = status[0]
-		}
-
-		if createTime, err := p.CreateTime(); err == nil {
-			info.CreateTime = createTime
-		}
-
-		if cmdline, err := p.Cmdline(); err == nil {
-			info.Cmdline = cmdline
-		}
-
-		if ppid, err := p.Ppid(); err == nil {
-			info.PPID = ppid
-		}
-
-		if numThreads, err := p.NumThreads(); err == nil {
-			info.NumThreads = numThreads
-		}
-
-		result = append(result, info)
+	workerCount := runtime.NumCPU() * 2
+	if workerCount > 32 {
+		workerCount = 32
 	}
 
-	sort.Slice(result, func(i, j int) bool {
-		return result[i].CPUPercent > result[j].CPUPercent
+	jobs := make(chan int, len(processes))
+	for i := range processes {
+		jobs <- i
+	}
+	close(jobs)
+
+	wg.Add(workerCount)
+	for w := 0; w < workerCount; w++ {
+		go func() {
+			defer wg.Done()
+			for i := range jobs {
+				result[i] = s.getProcessInfo(processes[i])
+			}
+		}()
+	}
+
+	wg.Wait()
+
+	filtered := make([]ProcessInfo, 0, len(result))
+	for _, info := range result {
+		if info.PID > 0 {
+			filtered = append(filtered, info)
+		}
+	}
+
+	sort.Slice(filtered, func(i, j int) bool {
+		return filtered[i].CPUPercent > filtered[j].CPUPercent
 	})
 
+	return filtered, nil
+}
+
+func (s *Service) GetProcessList() ([]ProcessInfo, error) {
+	s.cache.mu.RLock()
+	if time.Since(s.cache.timestamp) < s.cache.ttl && s.cache.data != nil {
+		data := s.cache.data
+		s.cache.mu.RUnlock()
+		return data, nil
+	}
+	s.cache.mu.RUnlock()
+
+	s.cache.mu.Lock()
+	defer s.cache.mu.Unlock()
+
+	if time.Since(s.cache.timestamp) < s.cache.ttl && s.cache.data != nil {
+		return s.cache.data, nil
+	}
+
+	result, err := s.fetchProcessListParallel()
+	if err != nil {
+		return nil, err
+	}
+
+	s.cache.data = result
+	s.cache.timestamp = time.Now()
+
 	return result, nil
+}
+
+func (s *Service) GetCombinedStats(limit, offset int) (*CombinedStats, error) {
+	var wg sync.WaitGroup
+	var systemStats *SystemStats
+	var processes []ProcessInfo
+	var sysErr, procErr error
+
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		systemStats, sysErr = s.GetSystemStats()
+	}()
+	go func() {
+		defer wg.Done()
+		processes, procErr = s.GetProcessList()
+	}()
+	wg.Wait()
+
+	if sysErr != nil {
+		return nil, sysErr
+	}
+	if procErr != nil {
+		return nil, procErr
+	}
+
+	total := len(processes)
+	if limit <= 0 {
+		limit = 100
+	}
+	if offset < 0 {
+		offset = 0
+	}
+	if offset >= total {
+		processes = []ProcessInfo{}
+	} else {
+		end := offset + limit
+		if end > total {
+			end = total
+		}
+		processes = processes[offset:end]
+	}
+
+	return &CombinedStats{
+		System:    systemStats,
+		Processes: processes,
+		Total:     total,
+	}, nil
 }
 
 func (s *Service) GetProcessDetail(pid int32) (*ProcessInfo, error) {
