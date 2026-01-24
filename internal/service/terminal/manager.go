@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"os"
 	"sync"
 	"sync/atomic"
@@ -86,6 +87,13 @@ func (m *Manager) Create(opts CreateOptions) (*TerminalInfo, error) {
 		rows = 24
 	}
 
+	name := opts.Name
+	if name == "" {
+		var count int64
+		m.db.Model(&model.TerminalSession{}).Count(&count)
+		name = fmt.Sprintf("Terminal %d", count+1)
+	}
+
 	pty, err := newLocalCommand(m.shell, nil, cwd, cols, rows)
 	if err != nil {
 		return nil, err
@@ -95,7 +103,7 @@ func (m *Manager) Create(opts CreateOptions) (*TerminalInfo, error) {
 	session := &model.TerminalSession{
 		ID:        uuid.New().String(),
 		UserID:    opts.UserID,
-		Name:      opts.Name,
+		Name:      name,
 		Shell:     m.shell,
 		Cwd:       cwd,
 		Cols:      cols,
@@ -263,6 +271,7 @@ func (m *Manager) monitorPTY(at *activeTerminal, pty *localCommand) {
 
 	m.db.Model(&model.TerminalSession{}).Where("id = ?", at.ID).Updates(map[string]any{
 		"status":     model.StatusExited,
+		"exit_code":  pty.ExitCode(),
 		"updated_at": time.Now().Unix(),
 	})
 

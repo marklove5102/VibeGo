@@ -80,7 +80,8 @@ func (h *SessionHandler) List(c *gin.Context) {
 }
 
 type CreateSessionRequest struct {
-	Name string `json:"name"`
+	Name   string `json:"name"`
+	UserID string `json:"user_id"`
 }
 
 func (h *SessionHandler) Create(c *gin.Context) {
@@ -93,13 +94,16 @@ func (h *SessionHandler) Create(c *gin.Context) {
 	}
 
 	now := time.Now().Unix()
+	expiredAt := now + 7*24*60*60
 	session := model.UserSession{
-		ID:        uuid.New().String(),
-		UserID:    "",
-		Name:      name,
-		State:     "{}",
-		CreatedAt: now,
-		UpdatedAt: now,
+		ID:           uuid.New().String(),
+		UserID:       req.UserID,
+		Name:         name,
+		State:        "{}",
+		LastActiveAt: now,
+		ExpiredAt:    expiredAt,
+		CreatedAt:    now,
+		UpdatedAt:    now,
 	}
 
 	if err := h.db.Create(&session).Error; err != nil {
@@ -117,6 +121,16 @@ func (h *SessionHandler) Get(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "session not found"})
 		return
 	}
+
+	now := time.Now().Unix()
+	if session.ExpiredAt > 0 && now > session.ExpiredAt {
+		c.JSON(http.StatusGone, gin.H{"error": "session expired"})
+		return
+	}
+
+	h.db.Model(&session).Update("last_active_at", now)
+	session.LastActiveAt = now
+
 	c.JSON(http.StatusOK, session)
 }
 
@@ -139,8 +153,10 @@ func (h *SessionHandler) Update(c *gin.Context) {
 		return
 	}
 
+	now := time.Now().Unix()
 	updates := map[string]any{
-		"updated_at": time.Now().Unix(),
+		"updated_at":     now,
+		"last_active_at": now,
 	}
 	if req.Name != nil {
 		updates["name"] = *req.Name

@@ -19,6 +19,7 @@ type localCommand struct {
 	ptyClosed    chan struct{}
 	closeTimeout time.Duration
 	mu           sync.Mutex
+	exitCode     int
 }
 
 func newLocalCommand(shell string, args []string, cwd string, cols, rows int, opts ...localCommandOption) (*localCommand, error) {
@@ -59,7 +60,15 @@ func newLocalCommand(shell string, args []string, cwd string, cols, rows int, op
 			lcmd.session.Close()
 			close(lcmd.ptyClosed)
 		}()
-		lcmd.session.Wait()
+		err := lcmd.session.Wait()
+		if err != nil {
+			if exitErr, ok := err.(*os.PathError); ok {
+				_ = exitErr
+				lcmd.exitCode = 1
+			} else {
+				lcmd.exitCode = 1
+			}
+		}
 	}()
 
 	return lcmd, nil
@@ -102,4 +111,8 @@ func (lc *localCommand) Close() error {
 	case <-time.After(lc.closeTimeout):
 		return nil
 	}
+}
+
+func (lc *localCommand) ExitCode() int {
+	return lc.exitCode
 }

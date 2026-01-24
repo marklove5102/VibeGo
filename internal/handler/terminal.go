@@ -84,10 +84,11 @@ func (h *TerminalHandler) List(c *gin.Context) {
 }
 
 type NewTerminalRequest struct {
-	Name string `json:"name"`
-	Cwd  string `json:"cwd"`
-	Cols int    `json:"cols"`
-	Rows int    `json:"rows"`
+	Name   string `json:"name"`
+	Cwd    string `json:"cwd"`
+	Cols   int    `json:"cols"`
+	Rows   int    `json:"rows"`
+	UserID string `json:"user_id"`
 }
 
 // New godoc
@@ -104,10 +105,11 @@ func (h *TerminalHandler) New(c *gin.Context) {
 	c.ShouldBindJSON(&req)
 
 	info, err := h.manager.Create(terminal.CreateOptions{
-		Name: req.Name,
-		Cwd:  req.Cwd,
-		Cols: req.Cols,
-		Rows: req.Rows,
+		Name:   req.Name,
+		Cwd:    req.Cwd,
+		Cols:   req.Cols,
+		Rows:   req.Rows,
+		UserID: req.UserID,
 	})
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})

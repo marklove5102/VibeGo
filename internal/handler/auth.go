@@ -59,6 +59,13 @@ func (h *AuthHandler) Login(c *gin.Context) {
 
 	if h.token == "" {
 		user := h.getOrCreateAnonymousUser()
+		if user == nil {
+			c.JSON(http.StatusForbidden, LoginResponse{
+				OK:    false,
+				Error: "account disabled",
+			})
+			return
+		}
 		session := h.createSession(user.ID, req.Username)
 		c.JSON(http.StatusOK, LoginResponse{
 			OK:        true,
@@ -79,6 +86,13 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	}
 
 	user := h.getOrCreateUser(expectedUsername, h.token)
+	if user == nil {
+		c.JSON(http.StatusForbidden, LoginResponse{
+			OK:    false,
+			Error: "account disabled",
+		})
+		return
+	}
 	session := h.createSession(user.ID, req.Username)
 	c.JSON(http.StatusOK, LoginResponse{
 		OK:        true,
@@ -105,6 +119,10 @@ type StatusResponse struct {
 func (h *AuthHandler) Status(c *gin.Context) {
 	if h.token == "" {
 		user := h.getOrCreateAnonymousUser()
+		if user == nil {
+			c.JSON(http.StatusForbidden, gin.H{"error": "account disabled"})
+			return
+		}
 		c.JSON(http.StatusOK, StatusResponse{
 			NeedLogin: false,
 			Username:  user.Username,
@@ -132,7 +150,10 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 
 func (h *AuthHandler) getOrCreateAnonymousUser() *model.User {
 	var user model.User
-	if err := h.db.First(&user, "username = ?", "anonymous").Error; err == nil {
+	if err := h.db.First(&user, "username = ? AND deleted_at IS NULL", "anonymous").Error; err == nil {
+		if user.Status != "active" {
+			return nil
+		}
 		return &user
 	}
 
@@ -140,6 +161,7 @@ func (h *AuthHandler) getOrCreateAnonymousUser() *model.User {
 	user = model.User{
 		ID:          uuid.New().String(),
 		Username:    "anonymous",
+		Status:      "active",
 		CreatedAt:   now,
 		LastLoginAt: now,
 	}
@@ -151,7 +173,10 @@ func (h *AuthHandler) getOrCreateUser(username, token string) *model.User {
 	var user model.User
 	tokenHash := hashToken(token)
 
-	if err := h.db.First(&user, "username = ?", username).Error; err == nil {
+	if err := h.db.First(&user, "username = ? AND deleted_at IS NULL", username).Error; err == nil {
+		if user.Status != "active" {
+			return nil
+		}
 		h.db.Model(&user).Updates(map[string]any{
 			"token_hash":    tokenHash,
 			"last_login_at": time.Now().Unix(),
@@ -164,6 +189,7 @@ func (h *AuthHandler) getOrCreateUser(username, token string) *model.User {
 		ID:          uuid.New().String(),
 		Username:    username,
 		TokenHash:   tokenHash,
+		Status:      "active",
 		CreatedAt:   now,
 		LastLoginAt: now,
 	}
@@ -173,17 +199,20 @@ func (h *AuthHandler) getOrCreateUser(username, token string) *model.User {
 
 func (h *AuthHandler) createSession(userID, sessionName string) *model.UserSession {
 	now := time.Now().Unix()
+	expiredAt := now + 7*24*60*60
 	name := sessionName
 	if name == "" {
 		name = "Default Session"
 	}
 	session := model.UserSession{
-		ID:        uuid.New().String(),
-		UserID:    userID,
-		Name:      name,
-		State:     "{}",
-		CreatedAt: now,
-		UpdatedAt: now,
+		ID:           uuid.New().String(),
+		UserID:       userID,
+		Name:         name,
+		State:        "{}",
+		LastActiveAt: now,
+		ExpiredAt:    expiredAt,
+		CreatedAt:    now,
+		UpdatedAt:    now,
 	}
 	h.db.Create(&session)
 	return &session
