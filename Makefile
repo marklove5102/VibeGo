@@ -12,7 +12,7 @@ format:
 	gofmt -w .
 
 dev-server:
-	go run main.go --log-level debug
+	air
 
 dev-ui:
 	cd ui && pnpm run dev --host
