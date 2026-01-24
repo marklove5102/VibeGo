@@ -92,6 +92,7 @@
     "clearAllConfirm": "确定要关闭所有终端会话吗？",
     "connectionClosed": "连接已关闭",
     "connectionError": "连接错误",
+    "processExited": "进程已退出",
     "manageHistory": "管理终端历史",
     "historyTitle": "终端历史",
     "noHistory": "无历史记录",

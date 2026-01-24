@@ -4,6 +4,7 @@ const (
 	MsgTypeCmd       = "cmd"
 	MsgTypeResize    = "resize"
 	MsgTypeHeartbeat = "heartbeat"
+	MsgTypePtyExited = "pty_exited"
 )
 
 type WSMessage struct {

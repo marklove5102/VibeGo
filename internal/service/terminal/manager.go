@@ -269,6 +269,14 @@ func (m *Manager) monitorPTY(at *activeTerminal, pty *localCommand) {
 		"updated_at": time.Now().Unix(),
 	})
 
+	exitMsg := WSMessage{Type: MsgTypePtyExited}
+	msgData, _ := json.Marshal(exitMsg)
+	at.WebTTYs.Range(func(key, value any) bool {
+		instance := value.(*webTTYInstance)
+		instance.Master.Write(msgData)
+		return true
+	})
+
 	at.historyMu.Lock()
 	m.flushHistoryToDB(at)
 	at.historyMu.Unlock()

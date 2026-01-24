@@ -92,6 +92,7 @@
     "clearAllConfirm": "Are you sure you want to close all terminal sessions?",
     "connectionClosed": "Connection closed",
     "connectionError": "Connection error",
+    "processExited": "Process exited",
     "manageHistory": "Manage Terminal History",
     "historyTitle": "Terminal History",
     "noHistory": "No history",

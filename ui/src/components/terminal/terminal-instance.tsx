@@ -161,6 +161,12 @@ const TerminalInstance: React.FC<TerminalInstanceProps> = ({ terminalId, isActiv
             } catch (e) {
               console.warn("Failed to decode base64:", e);
             }
+          } else if (msg.type === "pty_exited") {
+            terminal.write(`\r\n[${tRef.current("terminal.processExited")}]\r\n`);
+            terminal.options.cursorBlink = false;
+            terminal.options.disableStdin = true;
+            isExitedRef.current = true;
+            onExitedRef.current?.();
           }
         } catch (e) {
           console.warn("Failed to parse WebSocket message:", e);
