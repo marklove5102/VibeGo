@@ -52,7 +52,7 @@ func TestGitStatus(t *testing.T) {
 	defer os.RemoveAll(repoDir)
 	os.WriteFile(filepath.Join(repoDir, "test.txt"), []byte("hello world"), 0644)
 
-	h := NewGitHandler()
+	h := NewGitHandler(nil)
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
 	h.Register(r.Group("/"))
@@ -75,7 +75,7 @@ func TestGitLog(t *testing.T) {
 	repoDir := setupGitRepo(t)
 	defer os.RemoveAll(repoDir)
 
-	h := NewGitHandler()
+	h := NewGitHandler(nil)
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
 	h.Register(r.Group("/"))
@@ -95,7 +95,7 @@ func TestGitInit(t *testing.T) {
 	defer os.RemoveAll(tmpDir)
 	repoPath := filepath.Join(tmpDir, "new-repo")
 
-	h := NewGitHandler()
+	h := NewGitHandler(nil)
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
 	h.Register(r.Group("/"))
@@ -117,7 +117,7 @@ func TestGitClone(t *testing.T) {
 	defer os.RemoveAll(tmpDir)
 	destPath := filepath.Join(tmpDir, "cloned-repo")
 
-	h := NewGitHandler()
+	h := NewGitHandler(nil)
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
 	h.Register(r.Group("/"))
@@ -137,7 +137,7 @@ func TestGitDiff(t *testing.T) {
 	defer os.RemoveAll(repoDir)
 	os.WriteFile(filepath.Join(repoDir, "test.txt"), []byte("modified"), 0644)
 
-	h := NewGitHandler()
+	h := NewGitHandler(nil)
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
 	h.Register(r.Group("/"))
@@ -157,7 +157,7 @@ func TestGitAdd(t *testing.T) {
 	defer os.RemoveAll(repoDir)
 	os.WriteFile(filepath.Join(repoDir, "newfile.txt"), []byte("new"), 0644)
 
-	h := NewGitHandler()
+	h := NewGitHandler(nil)
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
 	h.Register(r.Group("/"))
@@ -176,7 +176,7 @@ func TestGitReset(t *testing.T) {
 	repoDir := setupGitRepo(t)
 	defer os.RemoveAll(repoDir)
 
-	h := NewGitHandler()
+	h := NewGitHandler(nil)
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
 	h.Register(r.Group("/"))
@@ -199,7 +199,7 @@ func TestGitCommit(t *testing.T) {
 	wt, _ := wGit.Worktree()
 	wt.Add("newfile.txt")
 
-	h := NewGitHandler()
+	h := NewGitHandler(nil)
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
 	h.Register(r.Group("/"))
@@ -225,7 +225,7 @@ func TestGitUndoCommit(t *testing.T) {
 		Author: &object.Signature{Name: "Me", Email: "me@me.com", When: time.Now()},
 	})
 
-	h := NewGitHandler()
+	h := NewGitHandler(nil)
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
 	h.Register(r.Group("/"))

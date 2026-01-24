@@ -17,12 +17,36 @@ import (
 	"github.com/go-git/go-git/v6/plumbing"
 	"github.com/go-git/go-git/v6/plumbing/object"
 	"github.com/go-git/go-git/v6/utils/merkletrie"
+	"github.com/xxnuo/vibego/internal/service/settings"
+	"gorm.io/gorm"
 )
 
-type GitHandler struct{}
+type GitHandler struct {
+	settings *settings.Store
+}
 
-func NewGitHandler() *GitHandler {
-	return &GitHandler{}
+func NewGitHandler(db *gorm.DB) *GitHandler {
+	h := &GitHandler{}
+	if db != nil {
+		h.settings = settings.New(db)
+	}
+	return h
+}
+
+func (h *GitHandler) getGitAuthor() (string, string) {
+	author := ""
+	email := ""
+	if h.settings != nil {
+		author, _ = h.settings.Get("gitUserName")
+		email, _ = h.settings.Get("gitUserEmail")
+	}
+	if author == "" {
+		author = "VibeGo User"
+	}
+	if email == "" {
+		email = "user@vibego.local"
+	}
+	return author, email
 }
 
 func (h *GitHandler) Register(r *gin.RouterGroup) {
@@ -499,23 +523,18 @@ func (h *GitHandler) Reset(c *gin.Context) {
 		return
 	}
 
-	if len(req.Files) == 0 {
-		head, err := repo.Head()
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot reset without HEAD"})
-			return
-		}
-		if err := w.Reset(&git.ResetOptions{Commit: head.Hash(), Mode: git.MixedReset}); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
-		}
-	} else {
-		for _, file := range req.Files {
-			if _, err := w.Remove(file); err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to unstage " + file + ": " + err.Error()})
-				return
-			}
-		}
+	head, err := repo.Head()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot reset without HEAD"})
+		return
+	}
+	resetOpts := &git.ResetOptions{Commit: head.Hash(), Mode: git.MixedReset}
+	if len(req.Files) > 0 {
+		resetOpts.Files = req.Files
+	}
+	if err := w.Reset(resetOpts); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{"ok": true})
@@ -636,13 +655,12 @@ func (h *GitHandler) Commit(c *gin.Context) {
 		return
 	}
 
-	author := req.Author
-	if author == "" {
-		author = "VibeGo User"
+	author, email := h.getGitAuthor()
+	if req.Author != "" {
+		author = req.Author
 	}
-	email := req.Email
-	if email == "" {
-		email = "user@vibego.local"
+	if req.Email != "" {
+		email = req.Email
 	}
 
 	hash, err := w.Commit(req.Message, &git.CommitOptions{
@@ -772,13 +790,12 @@ func (h *GitHandler) CommitSelected(c *gin.Context) {
 		message += "\n\n" + req.Description
 	}
 
-	author := req.Author
-	if author == "" {
-		author = "VibeGo User"
+	author, email := h.getGitAuthor()
+	if req.Author != "" {
+		author = req.Author
 	}
-	email := req.Email
-	if email == "" {
-		email = "user@vibego.local"
+	if req.Email != "" {
+		email = req.Email
 	}
 
 	hash, err := w.Commit(message, &git.CommitOptions{
@@ -837,20 +854,24 @@ func (h *GitHandler) Amend(c *gin.Context) {
 		message += "\n\n" + req.Description
 	}
 
-	repoRoot, err := h.getRepoRoot(req.Path)
+	author, email := h.getGitAuthor()
+	if req.Author != "" {
+		author = req.Author
+	}
+	if req.Email != "" {
+		email = req.Email
+	}
+
+	_, err = w.Commit(message, &git.CommitOptions{
+		Amend:  true,
+		Author: &object.Signature{Name: author, Email: email, When: time.Now()},
+	})
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	cmd := exec.Command("git", "commit", "--amend", "-m", message)
-	cmd.Dir = repoRoot
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": string(output)})
-		return
-	}
-
+	repoRoot, _ := h.getRepoRoot(req.Path)
 	repo, _ = h.openRepo(req.Path)
 	files := collectFileStatus(repo)
 	commits := collectCommitLog(repo, 20)
