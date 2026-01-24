@@ -1,5 +1,5 @@
 import { ArrowLeft, CheckSquare, RefreshCw, Square, Terminal, Trash2, X } from "lucide-react";
-import React, { useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -11,6 +11,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import type { TerminalInfo } from "@/api/terminal";
+import { usePageTopBar } from "@/hooks/use-page-top-bar";
 import { useTerminalDeleteBatch, useTerminalList } from "@/hooks/use-terminal";
 import { useTranslation } from "@/lib/i18n";
 import { useAppStore } from "@/stores";
@@ -34,39 +35,41 @@ const TerminalHistoryPage: React.FC<TerminalHistoryPageProps> = ({ onBack }) => 
   const terminals = data?.terminals || [];
   const closedTerminals = terminals.filter((t) => t.status === "closed");
 
-  const toggleSelect = (id: string) => {
-    const newSet = new Set(selectedIds);
-    if (newSet.has(id)) {
-      newSet.delete(id);
-    } else {
-      newSet.add(id);
-    }
-    setSelectedIds(newSet);
-  };
+  const toggleSelect = useCallback((id: string) => {
+    setSelectedIds((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(id)) {
+        newSet.delete(id);
+      } else {
+        newSet.add(id);
+      }
+      return newSet;
+    });
+  }, []);
 
-  const selectAll = () => {
+  const selectAll = useCallback(() => {
     setSelectedIds(new Set(closedTerminals.map((t) => t.id)));
-  };
+  }, [closedTerminals]);
 
-  const clearSelection = () => {
+  const clearSelection = useCallback(() => {
     setSelectedIds(new Set());
-  };
+  }, []);
 
-  const handleItemClick = (terminal: TerminalInfo) => {
+  const handleItemClick = useCallback((terminal: TerminalInfo) => {
     if (selectionMode) {
       toggleSelect(terminal.id);
     } else {
       setViewingTerminal(terminal);
     }
-  };
+  }, [selectionMode, toggleSelect]);
 
-  const handleDeleteSelected = () => {
+  const handleDeleteSelected = useCallback(() => {
     if (selectedIds.size > 0) {
       setShowDeleteConfirm(true);
     }
-  };
+  }, [selectedIds.size]);
 
-  const confirmDelete = () => {
+  const confirmDelete = useCallback(() => {
     deleteBatchMutation.mutate(Array.from(selectedIds), {
       onSuccess: () => {
         setSelectedIds(new Set());
@@ -75,31 +78,120 @@ const TerminalHistoryPage: React.FC<TerminalHistoryPageProps> = ({ onBack }) => 
         refetch();
       },
     });
-  };
+  }, [deleteBatchMutation, selectedIds, refetch]);
 
   const formatDate = (timestamp: number) => {
     return new Date(timestamp * 1000).toLocaleString();
   };
 
-  const exitSelectionMode = () => {
+  const exitSelectionMode = useCallback(() => {
     setSelectionMode(false);
     setSelectedIds(new Set());
-  };
+  }, []);
+
+  const handleRefresh = useCallback(() => {
+    refetch();
+  }, [refetch]);
+
+  const viewingTopBarConfig = useMemo(() => {
+    if (!viewingTerminal) return null;
+    return {
+      show: true,
+      leftButtons: [
+        {
+          icon: <ArrowLeft size={18} />,
+          onClick: () => setViewingTerminal(null),
+        },
+      ],
+      centerContent: (
+        <div className="flex items-center gap-2 h-full">
+          <Terminal size={14} className="text-ide-mute" />
+          <span className="font-medium text-ide-text truncate text-sm">{viewingTerminal.name}</span>
+          <span className="text-xs text-ide-mute">({t("terminal.readOnly")})</span>
+        </div>
+      ),
+      rightButtons: [],
+    };
+  }, [viewingTerminal, t]);
+
+  const listTopBarConfig = useMemo(() => {
+    if (viewingTerminal) return null;
+
+    if (selectionMode) {
+      return {
+        show: true,
+        leftButtons: [
+          {
+            icon: <X size={18} />,
+            onClick: exitSelectionMode,
+          },
+          {
+            icon: <CheckSquare size={18} />,
+            onClick: selectAll,
+          },
+          {
+            icon: <Square size={18} />,
+            onClick: clearSelection,
+          },
+        ],
+        centerContent: (
+          <div className="flex items-center h-full">
+            <span className="text-sm text-ide-mute">{selectedIds.size} {t("terminal.selected")}</span>
+          </div>
+        ),
+        rightButtons: selectedIds.size > 0 ? [
+          {
+            icon: <Trash2 size={18} className="text-red-500" />,
+            onClick: handleDeleteSelected,
+          },
+        ] : [],
+      };
+    }
+
+    return {
+      show: true,
+      leftButtons: [
+        {
+          icon: <ArrowLeft size={18} />,
+          onClick: onBack,
+        },
+      ],
+      centerContent: (
+        <div className="flex items-center h-full">
+          <span className="font-medium text-ide-text text-sm">{t("terminal.historyTitle")}</span>
+        </div>
+      ),
+      rightButtons: [
+        ...(closedTerminals.length > 0 ? [{
+          icon: <CheckSquare size={18} />,
+          onClick: () => setSelectionMode(true),
+        }] : []),
+        {
+          icon: <RefreshCw size={18} />,
+          onClick: handleRefresh,
+        },
+      ],
+    };
+  }, [
+    viewingTerminal,
+    selectionMode,
+    selectedIds.size,
+    closedTerminals.length,
+    t,
+    onBack,
+    exitSelectionMode,
+    selectAll,
+    clearSelection,
+    handleDeleteSelected,
+    handleRefresh,
+  ]);
+
+  const topBarConfig = viewingTerminal ? viewingTopBarConfig : listTopBarConfig;
+  usePageTopBar(topBarConfig, [topBarConfig]);
 
   if (viewingTerminal) {
     return (
       <div className="flex flex-col h-full bg-ide-bg">
-        <div className="h-12 bg-ide-bg border-b border-ide-border flex items-center px-3 gap-2 shrink-0">
-          <button
-            onClick={() => setViewingTerminal(null)}
-            className="p-2 rounded-md text-ide-mute hover:bg-ide-bg hover:text-ide-text"
-          >
-            <ArrowLeft size={18} />
-          </button>
-          <Terminal size={18} className="text-ide-mute" />
-          <span className="font-medium text-ide-text flex-1 truncate">{viewingTerminal.name}</span>
-          <span className="text-xs text-ide-mute">{t("terminal.readOnly")}</span>
-        </div>
         <div className="flex-1 relative overflow-hidden">
           <TerminalInstance
             terminalId={viewingTerminal.id}
@@ -113,63 +205,6 @@ const TerminalHistoryPage: React.FC<TerminalHistoryPageProps> = ({ onBack }) => 
 
   return (
     <div className="flex flex-col h-full bg-ide-panel">
-      <div className="h-12 bg-ide-bg border-b border-ide-border flex items-center px-3 gap-2 shrink-0">
-        <button
-          onClick={onBack}
-          className="p-2 rounded-md text-ide-mute hover:bg-ide-bg hover:text-ide-text"
-        >
-          <ArrowLeft size={18} />
-        </button>
-        <span className="font-medium text-ide-text flex-1">{t("terminal.historyTitle")}</span>
-        {!selectionMode && closedTerminals.length > 0 && (
-          <button
-            onClick={() => setSelectionMode(true)}
-            className="p-2 rounded-md text-ide-mute hover:bg-ide-bg hover:text-ide-text"
-          >
-            <CheckSquare size={18} />
-          </button>
-        )}
-        <button
-          onClick={() => refetch()}
-          className="p-2 rounded-md text-ide-mute hover:bg-ide-bg hover:text-ide-text"
-        >
-          <RefreshCw size={18} />
-        </button>
-      </div>
-
-      {selectionMode && (
-        <div className="flex items-center gap-1 h-10 px-3 bg-ide-bg border-b border-ide-border">
-          <button
-            onClick={exitSelectionMode}
-            className="p-2 rounded-md text-ide-accent hover:bg-ide-bg"
-          >
-            <X size={18} />
-          </button>
-          <span className="text-xs text-ide-mute px-2">{selectedIds.size} {t("terminal.selected")}</span>
-          <button
-            onClick={selectAll}
-            className="p-2 rounded-md text-ide-mute hover:bg-ide-bg hover:text-ide-text"
-          >
-            <CheckSquare size={18} />
-          </button>
-          <button
-            onClick={clearSelection}
-            className="p-2 rounded-md text-ide-mute hover:bg-ide-bg hover:text-ide-text"
-          >
-            <Square size={18} />
-          </button>
-          <div className="flex-1" />
-          {selectedIds.size > 0 && (
-            <button
-              onClick={handleDeleteSelected}
-              className="p-2 rounded-md text-red-500 hover:bg-red-500/10"
-            >
-              <Trash2 size={18} />
-            </button>
-          )}
-        </div>
-      )}
-
       <div className="flex-1 overflow-auto p-3">
         {isLoading ? (
           <div className="flex items-center justify-center py-10 text-ide-mute">
