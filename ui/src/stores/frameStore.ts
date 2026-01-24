@@ -328,9 +328,7 @@ export const useFrameStore = create<FrameState>((set, get) => ({
 
   setActivePage: (groupId, pageId) =>
     set((s) => ({
-      groups: s.groups.map((g) =>
-        g.type === "group" && g.id === groupId ? { ...g, activePageId: pageId } : g
-      ),
+      groups: s.groups.map((g) => (g.type === "group" && g.id === groupId ? { ...g, activePageId: pageId } : g)),
     })),
 
   getCurrentPage: () => {
@@ -369,12 +367,7 @@ export const useFrameStore = create<FrameState>((set, get) => ({
       groups: s.groups.map((g) => {
         if (g.type !== "group" || g.id !== groupId) return g;
         const pages = g.pages.filter((p) => p.id !== pageId);
-        const activePageId =
-          g.activePageId === pageId
-            ? pages.length > 0
-              ? pages[0].id
-              : null
-            : g.activePageId;
+        const activePageId = g.activePageId === pageId ? (pages.length > 0 ? pages[0].id : null) : g.activePageId;
         return { ...g, pages, activePageId };
       }),
     })),

@@ -312,7 +312,14 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
             pages: [
               { id: `${groupId}-files`, type: "files", label: "Files", path: folderPath, tabs: [], activeTabId: null },
               { id: `${groupId}-git`, type: "git", label: "Git", path: folderPath, tabs: [], activeTabId: null },
-              { id: `${groupId}-terminal`, type: "terminal", label: "Terminal", path: folderPath, tabs: [], activeTabId: null },
+              {
+                id: `${groupId}-terminal`,
+                type: "terminal",
+                label: "Terminal",
+                path: folderPath,
+                tabs: [],
+                activeTabId: null,
+              },
             ],
             activePageId: `${groupId}-files`,
           },

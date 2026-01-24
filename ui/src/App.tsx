@@ -231,9 +231,7 @@ const App: React.FC = () => {
     const plugin = pluginRegistry.get(group.pluginId);
     if (!plugin) {
       return (
-        <div className="h-full flex items-center justify-center text-ide-mute">
-          Plugin not found: {group.pluginId}
-        </div>
+        <div className="h-full flex items-center justify-center text-ide-mute">Plugin not found: {group.pluginId}</div>
       );
     }
     const PluginView = plugin.view;
