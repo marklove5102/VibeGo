@@ -10,6 +10,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { useTranslation } from "@/lib/i18n";
+import { useAppStore } from "@/stores";
 import type { TerminalSession } from "@/stores/terminalStore";
 
 interface TerminalListManagerProps {
@@ -33,6 +35,8 @@ const TerminalListManager: React.FC<TerminalListManagerProps> = ({
   onBack,
   embedded = false,
 }) => {
+  const locale = useAppStore((s) => s.locale);
+  const t = useTranslation(locale);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [deleteId, setDeleteId] = useState<string | null>(null);
@@ -89,14 +93,14 @@ const TerminalListManager: React.FC<TerminalListManagerProps> = ({
           >
             <ArrowLeft size={18} />
           </button>
-          <span className="font-medium text-ide-text flex-1">Terminals</span>
+          <span className="font-medium text-ide-text flex-1">{t("terminal.title")}</span>
           {terminals.length > 0 && (
             <button
               onClick={handleClearAllClick}
               className="text-xs text-ide-mute hover:text-red-500 flex items-center gap-1 transition-colors"
             >
               <Trash2 size={12} />
-              <span>Clear All</span>
+              <span>{t("terminal.clearAll")}</span>
             </button>
           )}
         </div>
@@ -124,8 +128,8 @@ const TerminalListManager: React.FC<TerminalListManagerProps> = ({
         {terminals.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-10 text-ide-mute">
             <Terminal size={40} className="mb-4 opacity-50" />
-            <p className="text-sm">No terminals</p>
-            <p className="mt-2 text-xs">Create a new terminal to get started</p>
+            <p className="text-sm">{t("terminal.noTerminals")}</p>
+            <p className="mt-2 text-xs">{t("terminal.createToStart")}</p>
           </div>
         ) : (
           <div className="space-y-1">
@@ -187,7 +191,7 @@ const TerminalListManager: React.FC<TerminalListManagerProps> = ({
                         </span>
                         {isCurrent && (
                           <span className="text-[10px] bg-ide-accent text-ide-bg px-1.5 py-0.5 rounded font-bold">
-                            Active
+                            {t("terminal.active")}
                           </span>
                         )}
                       </div>
@@ -220,15 +224,13 @@ const TerminalListManager: React.FC<TerminalListManagerProps> = ({
       <AlertDialog open={!!deleteId} onOpenChange={(open) => !open && setDeleteId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete Terminal</AlertDialogTitle>
-            <AlertDialogDescription>
-              Are you sure you want to delete this terminal session? This action cannot be undone.
-            </AlertDialogDescription>
+            <AlertDialogTitle>{t("terminal.deleteTitle")}</AlertDialogTitle>
+            <AlertDialogDescription>{t("terminal.deleteConfirm")}</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
             <AlertDialogAction onClick={handleConfirmDelete} className="bg-red-500 hover:bg-red-600">
-              Delete
+              {t("common.delete")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -237,13 +239,13 @@ const TerminalListManager: React.FC<TerminalListManagerProps> = ({
       <AlertDialog open={showClearConfirm} onOpenChange={setShowClearConfirm}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Clear All Terminals</AlertDialogTitle>
-            <AlertDialogDescription>Are you sure you want to close all terminal sessions?</AlertDialogDescription>
+            <AlertDialogTitle>{t("terminal.clearAllTitle")}</AlertDialogTitle>
+            <AlertDialogDescription>{t("terminal.clearAllConfirm")}</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
             <AlertDialogAction onClick={handleConfirmClear} className="bg-red-500 hover:bg-red-600">
-              Clear All
+              {t("terminal.clearAll")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

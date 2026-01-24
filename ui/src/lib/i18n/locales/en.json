@@ -69,7 +69,18 @@
     "refresh": "Refresh"
   },
   "terminal": {
-    "noActiveSession": "No terminal session active"
+    "noActiveSession": "No terminal session active",
+    "title": "Terminals",
+    "clearAll": "Clear All",
+    "noTerminals": "No terminals",
+    "createToStart": "Create a new terminal to get started",
+    "active": "Active",
+    "deleteTitle": "Delete Terminal",
+    "deleteConfirm": "Are you sure you want to delete this terminal session? This action cannot be undone.",
+    "clearAllTitle": "Clear All Terminals",
+    "clearAllConfirm": "Are you sure you want to close all terminal sessions?",
+    "connectionClosed": "Connection closed",
+    "connectionError": "Connection error"
   },
   "fileTree": {
     "projectRoot": "Project Root"

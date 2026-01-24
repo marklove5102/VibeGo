@@ -4,6 +4,7 @@ import { type ITheme, Terminal } from "@xterm/xterm";
 import React, { useCallback, useEffect, useRef } from "react";
 import "@xterm/xterm/css/xterm.css";
 import { terminalApi } from "@/api/terminal";
+import { useTranslation } from "@/lib/i18n";
 import { type Theme, useAppStore } from "@/stores";
 
 interface TerminalInstanceProps {
@@ -97,6 +98,8 @@ const TerminalInstance: React.FC<TerminalInstanceProps> = ({ terminalId, isActiv
   const initializedRef = useRef(false);
 
   const theme = useAppStore((s) => s.theme);
+  const locale = useAppStore((s) => s.locale);
+  const t = useTranslation(locale);
 
   const connectWebSocket = useCallback(
     (terminal: Terminal) => {
@@ -142,14 +145,14 @@ const TerminalInstance: React.FC<TerminalInstanceProps> = ({ terminalId, isActiv
       };
 
       ws.onclose = () => {
-        terminal.write("\r\n[Connection closed]\r\n");
+        terminal.write(`\r\n[${t("terminal.connectionClosed")}]\r\n`);
       };
 
       ws.onerror = () => {
-        terminal.write("\r\n[Connection error]\r\n");
+        terminal.write(`\r\n[${t("terminal.connectionError")}]\r\n`);
       };
     },
-    [terminalId]
+    [terminalId, t]
   );
 
   useEffect(() => {
