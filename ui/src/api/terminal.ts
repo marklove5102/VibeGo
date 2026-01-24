@@ -30,12 +30,7 @@ export interface TerminalInfo {
 export const terminalApi = {
   list: () => request<{ terminals: TerminalInfo[] }>("/terminal"),
 
-  create: (opts?: {
-    name?: string;
-    cwd?: string;
-    cols?: number;
-    rows?: number;
-  }) =>
+  create: (opts?: { name?: string; cwd?: string; cols?: number; rows?: number }) =>
     request<{ ok: boolean; id: string; name: string }>("/terminal", {
       method: "POST",
       body: JSON.stringify(opts || {}),

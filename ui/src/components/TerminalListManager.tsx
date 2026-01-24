@@ -1,6 +1,5 @@
+import { ArrowLeft, Check, Edit2, Terminal, Trash2, X } from "lucide-react";
 import React, { useState } from "react";
-import { Terminal, Trash2, Check, X, Edit2, ArrowLeft } from "lucide-react";
-import type { TerminalSession } from "@/stores/terminalStore";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -11,6 +10,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import type { TerminalSession } from "@/stores/terminalStore";
 
 interface TerminalListManagerProps {
   terminals: TerminalSession[];
@@ -75,9 +75,7 @@ const TerminalListManager: React.FC<TerminalListManagerProps> = ({
   };
 
   return (
-    <div
-      className={`flex flex-col h-full bg-ide-panel ${embedded ? "border-t border-ide-border" : ""}`}
-    >
+    <div className={`flex flex-col h-full bg-ide-panel ${embedded ? "border-t border-ide-border" : ""}`}>
       {/* 
         If NOT embedded, show header. 
         If embedded, we rely on TopBar or generic container for header/controls.
@@ -147,25 +145,15 @@ const TerminalListManager: React.FC<TerminalListManagerProps> = ({
                 >
                   <div
                     className={`p-1.5 rounded-lg flex-shrink-0 ${
-                      isCurrent
-                        ? "bg-ide-accent/20"
-                        : "bg-ide-bg group-hover:bg-ide-panel"
+                      isCurrent ? "bg-ide-accent/20" : "bg-ide-bg group-hover:bg-ide-panel"
                     }`}
                   >
-                    <Terminal
-                      size={18}
-                      className={
-                        isCurrent ? "text-ide-accent" : "text-ide-mute"
-                      }
-                    />
+                    <Terminal size={18} className={isCurrent ? "text-ide-accent" : "text-ide-mute"} />
                   </div>
 
                   <div className="flex-1 min-w-0">
                     {isEditing ? (
-                      <div
-                        className="flex items-center gap-1"
-                        onClick={(e) => e.stopPropagation()}
-                      >
+                      <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
                         <input
                           type="text"
                           value={editName}
@@ -193,9 +181,7 @@ const TerminalListManager: React.FC<TerminalListManagerProps> = ({
                     ) : (
                       <div className="flex items-center gap-2">
                         <span
-                          className={`font-medium truncate text-sm ${
-                            isCurrent ? "text-ide-accent" : "text-ide-text"
-                          }`}
+                          className={`font-medium truncate text-sm ${isCurrent ? "text-ide-accent" : "text-ide-text"}`}
                         >
                           {terminal.name}
                         </span>
@@ -231,24 +217,17 @@ const TerminalListManager: React.FC<TerminalListManagerProps> = ({
         )}
       </div>
 
-      <AlertDialog
-        open={!!deleteId}
-        onOpenChange={(open) => !open && setDeleteId(null)}
-      >
+      <AlertDialog open={!!deleteId} onOpenChange={(open) => !open && setDeleteId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Terminal</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete this terminal session? This action
-              cannot be undone.
+              Are you sure you want to delete this terminal session? This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleConfirmDelete}
-              className="bg-red-500 hover:bg-red-600"
-            >
+            <AlertDialogAction onClick={handleConfirmDelete} className="bg-red-500 hover:bg-red-600">
               Delete
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -259,16 +238,11 @@ const TerminalListManager: React.FC<TerminalListManagerProps> = ({
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Clear All Terminals</AlertDialogTitle>
-            <AlertDialogDescription>
-              Are you sure you want to close all terminal sessions?
-            </AlertDialogDescription>
+            <AlertDialogDescription>Are you sure you want to close all terminal sessions?</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleConfirmClear}
-              className="bg-red-500 hover:bg-red-600"
-            >
+            <AlertDialogAction onClick={handleConfirmClear} className="bg-red-500 hover:bg-red-600">
               Clear All
             </AlertDialogAction>
           </AlertDialogFooter>

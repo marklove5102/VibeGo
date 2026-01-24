@@ -75,15 +75,10 @@ export const fileApi = {
       body: JSON.stringify(opts),
     }),
 
-  list: (path = ".") =>
-    request<{ path: string; files: FileInfo[] }>(
-      `/file/list?path=${encodeURIComponent(path)}`,
-    ),
+  list: (path = ".") => request<{ path: string; files: FileInfo[] }>(`/file/list?path=${encodeURIComponent(path)}`),
 
   read: (path: string) =>
-    request<{ path: string; content: string; size: number }>(
-      `/file/read?path=${encodeURIComponent(path)}`,
-    ),
+    request<{ path: string; content: string; size: number }>(`/file/read?path=${encodeURIComponent(path)}`),
 
   write: (path: string, content: string) =>
     request<{ ok: boolean; path: string }>("/file/write", {
@@ -91,12 +86,7 @@ export const fileApi = {
       body: JSON.stringify({ path, content }),
     }),
 
-  create: (opts: {
-    path: string;
-    content?: string;
-    isDir?: boolean;
-    mode?: number;
-  }) =>
+  create: (opts: { path: string; content?: string; isDir?: boolean; mode?: number }) =>
     request<{ ok: boolean; path: string }>("/file/new", {
       method: "POST",
       body: JSON.stringify(opts),
@@ -120,12 +110,7 @@ export const fileApi = {
       body: JSON.stringify({ oldName, newName }),
     }),
 
-  move: (opts: {
-    type: "move" | "copy";
-    oldPaths: string[];
-    newPath: string;
-    cover?: boolean;
-  }) =>
+  move: (opts: { type: "move" | "copy"; oldPaths: string[]; newPath: string; cover?: boolean }) =>
     request<{ ok: boolean }>("/file/move", {
       method: "POST",
       body: JSON.stringify(opts),
@@ -143,8 +128,7 @@ export const fileApi = {
       body: JSON.stringify({ path }),
     }),
 
-  info: (path: string) =>
-    request<FileInfo>(`/file/info?path=${encodeURIComponent(path)}`),
+  info: (path: string) => request<FileInfo>(`/file/info?path=${encodeURIComponent(path)}`),
 
   content: (path: string) =>
     request<FileInfo>("/file/content", {
@@ -160,11 +144,10 @@ export const fileApi = {
 
   grep: (pattern: string, path = ".", limit = 100) =>
     request<{ matches: GrepMatch[] }>(
-      `/file/grep?pattern=${encodeURIComponent(pattern)}&path=${encodeURIComponent(path)}&limit=${limit}`,
+      `/file/grep?pattern=${encodeURIComponent(pattern)}&path=${encodeURIComponent(path)}&limit=${limit}`
     ),
 
-  abs: (path: string) =>
-    request<{ path: string }>(`/file/abs?path=${encodeURIComponent(path)}`),
+  abs: (path: string) => request<{ path: string }>(`/file/abs?path=${encodeURIComponent(path)}`),
 
   size: (path: string) =>
     request<{ path: string; size: number }>("/file/size", {
@@ -178,12 +161,7 @@ export const fileApi = {
       body: JSON.stringify({ path }),
     }),
 
-  compress: (
-    files: string[],
-    dst: string,
-    type: "zip" | "tar.gz",
-    name: string,
-  ) =>
+  compress: (files: string[], dst: string, type: "zip" | "tar.gz", name: string) =>
     request<{ ok: boolean; path: string }>("/file/compress", {
       method: "POST",
       body: JSON.stringify({ files, dst, type, name }),
@@ -195,6 +173,5 @@ export const fileApi = {
       body: JSON.stringify({ path, dst, type }),
     }),
 
-  downloadUrl: (path: string) =>
-    `${API_BASE}/file/download?path=${encodeURIComponent(path)}`,
+  downloadUrl: (path: string) => `${API_BASE}/file/download?path=${encodeURIComponent(path)}`,
 };

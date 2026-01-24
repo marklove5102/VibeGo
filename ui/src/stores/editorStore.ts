@@ -22,12 +22,7 @@ interface EditorState {
   setFileContent: (fileId: string, content: string) => void;
   getFileContent: (fileId: string) => string | undefined;
   markTabDirty: (id: string, dirty: boolean) => void;
-  openFileTab: (
-    fileId: string,
-    title: string,
-    type?: "code" | "diff",
-    data?: EditorTab["data"],
-  ) => void;
+  openFileTab: (fileId: string, title: string, type?: "code" | "diff", data?: EditorTab["data"]) => void;
   closeTab: (id: string) => void;
 }
 
@@ -46,12 +41,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   removeTab: (id) =>
     set((s) => {
       const tabs = s.tabs.filter((t) => t.id !== id);
-      const activeTabId =
-        s.activeTabId === id
-          ? tabs.length > 0
-            ? tabs[tabs.length - 1].id
-            : null
-          : s.activeTabId;
+      const activeTabId = s.activeTabId === id ? (tabs.length > 0 ? tabs[tabs.length - 1].id : null) : s.activeTabId;
       return { tabs, activeTabId };
     }),
   setActiveTabId: (id) => set({ activeTabId: id }),

@@ -17,9 +17,7 @@ const MarkdownPreview: React.FC = () => {
         ) : (
           <div className="h-full overflow-auto p-4">
             <article className="prose prose-invert prose-sm max-w-none">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                {content}
-              </ReactMarkdown>
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
             </article>
           </div>
         )}

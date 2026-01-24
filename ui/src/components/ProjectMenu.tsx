@@ -1,26 +1,26 @@
-import React from "react";
 import {
-  Settings,
-  Home,
-  X,
-  Sun,
-  Moon,
-  Monitor,
-  Terminal,
-  Globe,
-  XCircle,
   FilePlus,
-  Save,
-  Undo2,
+  Globe,
+  Home,
+  Monitor,
+  Moon,
   Redo2,
-  Search,
   Replace,
+  Save,
+  Search,
+  Settings,
+  Sun,
+  Terminal,
+  Undo2,
+  X,
+  XCircle,
 } from "lucide-react";
-import { useTranslation, type Locale } from "@/lib/i18n";
-import { useSettingsStore, getSettingSchema } from "@/lib/settings";
+import React from "react";
+import { fileApi } from "@/api/file";
+import { type Locale, useTranslation } from "@/lib/i18n";
+import { getSettingSchema, useSettingsStore } from "@/lib/settings";
 import { useFrameStore, usePreviewStore } from "@/stores";
 import { useSessionStore } from "@/stores/sessionStore";
-import { fileApi } from "@/api/file";
 
 interface ProjectMenuProps {
   isOpen: boolean;
@@ -46,16 +46,8 @@ const ProjectMenu: React.FC<ProjectMenuProps> = ({
   const localeSchema = getSettingSchema("locale");
   const themeValue = settings.theme || themeSchema?.defaultValue || "light";
   const localeValue = settings.locale || localeSchema?.defaultValue || "zh";
-  const themeOrder = themeSchema?.options?.map((opt) => opt.value) || [
-    "light",
-    "dark",
-    "hacker",
-    "terminal",
-  ];
-  const localeOrder = localeSchema?.options?.map((opt) => opt.value) || [
-    "zh",
-    "en",
-  ];
+  const themeOrder = themeSchema?.options?.map((opt) => opt.value) || ["light", "dark", "hacker", "terminal"];
+  const localeOrder = localeSchema?.options?.map((opt) => opt.value) || ["zh", "en"];
   const activeGroup = useFrameStore((s) => s.getActiveGroup());
   const groups = useFrameStore((s) => s.groups);
   const pageMenuItems = useFrameStore((s) => s.pageMenuItems);
@@ -87,15 +79,13 @@ const ProjectMenu: React.FC<ProjectMenuProps> = ({
 
   const handleThemeToggle = () => {
     const currentIndex = themeOrder.indexOf(themeValue);
-    const nextValue =
-      themeOrder[(currentIndex + 1) % themeOrder.length] || themeOrder[0];
+    const nextValue = themeOrder[(currentIndex + 1) % themeOrder.length] || themeOrder[0];
     setSetting("theme", nextValue);
   };
 
   const handleLocaleToggle = () => {
     const currentIndex = localeOrder.indexOf(localeValue);
-    const nextValue =
-      localeOrder[(currentIndex + 1) % localeOrder.length] || localeOrder[0];
+    const nextValue = localeOrder[(currentIndex + 1) % localeOrder.length] || localeOrder[0];
     setSetting("locale", nextValue);
   };
 
@@ -124,9 +114,7 @@ const ProjectMenu: React.FC<ProjectMenuProps> = ({
       usePreviewStore.getState().setOriginalContent(content);
       usePreviewStore.getState().setIsDirty(false);
     } catch (e) {
-      usePreviewStore
-        .getState()
-        .setError(e instanceof Error ? e.message : "Failed to save");
+      usePreviewStore.getState().setError(e instanceof Error ? e.message : "Failed to save");
     }
     onClose();
   };
@@ -138,9 +126,7 @@ const ProjectMenu: React.FC<ProjectMenuProps> = ({
       try {
         await fileApi.write(newPath, content);
       } catch (e) {
-        usePreviewStore
-          .getState()
-          .setError(e instanceof Error ? e.message : "Failed to save");
+        usePreviewStore.getState().setError(e instanceof Error ? e.message : "Failed to save");
       }
     }
     onClose();
@@ -163,13 +149,9 @@ const ProjectMenu: React.FC<ProjectMenuProps> = ({
       <Terminal size={18} />
     );
 
-  const themeLabel =
-    themeSchema?.options?.find((opt) => opt.value === themeValue)?.label ||
-    themeValue;
+  const themeLabel = themeSchema?.options?.find((opt) => opt.value === themeValue)?.label || themeValue;
 
-  const localeLabel =
-    localeSchema?.options?.find((opt) => opt.value === localeValue)?.label ||
-    localeValue;
+  const localeLabel = localeSchema?.options?.find((opt) => opt.value === localeValue)?.label || localeValue;
 
   const builtInItems: Array<{
     id: string;
@@ -229,11 +211,7 @@ const ProjectMenu: React.FC<ProjectMenuProps> = ({
       label: t("common.closeFolder"),
       onClick: handleCloseFolder,
     });
-  } else if (
-    activeGroup &&
-    activeGroup.type !== "home" &&
-    activeGroup.type !== "settings"
-  ) {
+  } else if (activeGroup && activeGroup.type !== "home" && activeGroup.type !== "settings") {
     contextItems.push({
       id: "close-page",
       icon: <XCircle size={20} />,
@@ -314,24 +292,19 @@ const ProjectMenu: React.FC<ProjectMenuProps> = ({
         icon: <Replace size={20} />,
         label: t("common.replace"),
         onClick: () => triggerEditorAction("replace"),
-      },
+      }
     );
   }
 
   const sections = [
     { id: "builtIn", title: t("menu.builtIn"), items: builtInItems },
-    ...(editorItems.length > 0
-      ? [{ id: "editor", title: t("menu.editor"), items: editorItems }]
-      : []),
+    ...(editorItems.length > 0 ? [{ id: "editor", title: t("menu.editor"), items: editorItems }] : []),
     { id: "context", title: t("menu.context"), items: contextItems },
   ].filter((section) => section.items.length > 0);
 
   return (
     <>
-      <div
-        className="fixed inset-0 bg-black/50 z-40 backdrop-blur-sm transition-opacity"
-        onClick={onClose}
-      />
+      <div className="fixed inset-0 bg-black/50 z-40 backdrop-blur-sm transition-opacity" onClick={onClose} />
 
       <div className="fixed bottom-0 left-0 right-0 sm:bottom-16 sm:left-4 sm:right-4 bg-ide-panel border-t sm:border border-ide-border sm:rounded-2xl shadow-2xl z-50 p-5 font-mono transform transition-transform duration-300">
         <div className="flex justify-between items-center mb-6 pb-2 border-b border-ide-border">
@@ -341,10 +314,7 @@ const ProjectMenu: React.FC<ProjectMenuProps> = ({
             </span>
             VibeGo
           </h3>
-          <button
-            onClick={onClose}
-            className="p-2 rounded-full hover:bg-ide-bg text-ide-text transition-colors"
-          >
+          <button onClick={onClose} className="p-2 rounded-full hover:bg-ide-bg text-ide-text transition-colors">
             <X size={20} />
           </button>
         </div>
@@ -352,15 +322,9 @@ const ProjectMenu: React.FC<ProjectMenuProps> = ({
         {sections.map((section, index) => (
           <div
             key={section.id}
-            className={
-              index === sections.length - 1
-                ? "mb-6"
-                : "mb-4 pb-4 border-b border-ide-border"
-            }
+            className={index === sections.length - 1 ? "mb-6" : "mb-4 pb-4 border-b border-ide-border"}
           >
-            <div className="text-[10px] text-ide-mute uppercase font-bold mb-3">
-              {section.title}
-            </div>
+            <div className="text-[10px] text-ide-mute uppercase font-bold mb-3">{section.title}</div>
             <div className="grid grid-cols-4 gap-1">
               {section.items.map((item) => (
                 <MenuItem
@@ -406,9 +370,7 @@ const MenuItem: React.FC<{
       )}
     </div>
     <div className="flex flex-col items-center gap-0.5">
-      <span className="text-[13px] font-bold uppercase tracking-wide">
-        {label}
-      </span>
+      <span className="text-[13px] font-bold uppercase tracking-wide">{label}</span>
       {title && <span className="text-[11px] text-ide-mute">{title}</span>}
     </div>
   </button>

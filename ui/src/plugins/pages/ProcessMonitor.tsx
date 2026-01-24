@@ -1,7 +1,7 @@
-import React, { useEffect } from "react";
 import { Activity, RefreshCw, Square } from "lucide-react";
+import React, { useEffect } from "react";
 import { useFrameStore } from "@/stores/frameStore";
-import { registerPlugin, type PluginViewProps } from "../registry";
+import { type PluginViewProps, registerPlugin } from "../registry";
 
 const ProcessMonitorView: React.FC<PluginViewProps> = ({ isActive }) => {
   const setPageMenuItems = useFrameStore((s) => s.setPageMenuItems);
@@ -34,13 +34,8 @@ const ProcessMonitorView: React.FC<PluginViewProps> = ({ isActive }) => {
       <div className="flex-1 flex items-center justify-center">
         <div className="text-center text-ide-mute">
           <Activity size={48} className="mx-auto mb-4 opacity-50" />
-          <h2 className="text-lg font-medium text-ide-text mb-2">
-            Process Monitor
-          </h2>
-          <p className="text-sm">
-            This plugin demonstrates how to create a custom page with its own
-            menu items.
-          </p>
+          <h2 className="text-lg font-medium text-ide-text mb-2">Process Monitor</h2>
+          <p className="text-sm">This plugin demonstrates how to create a custom page with its own menu items.</p>
           <p className="text-xs mt-4">
             In a real implementation, this would display a terminal running{" "}
             <code className="bg-ide-panel px-1 rounded">top</code> or{" "}

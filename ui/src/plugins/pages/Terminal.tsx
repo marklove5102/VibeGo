@@ -1,7 +1,7 @@
-import React from "react";
 import { Terminal } from "lucide-react";
-import { registerPlugin, type PluginViewProps } from "../registry";
+import React from "react";
 import TerminalPage from "@/components/TerminalPage";
+import { type PluginViewProps, registerPlugin } from "../registry";
 
 const TerminalPluginView: React.FC<PluginViewProps> = ({ context }) => {
   const groupId = context?.groupId || "default";

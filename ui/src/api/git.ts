@@ -99,7 +99,10 @@ export const gitApi = {
     }),
 
   branches: (path: string) =>
-    request<{ branches: Array<{ name: string; isCurrent: boolean }>; currentBranch: string }>("/git/branches", {
+    request<{
+      branches: Array<{ name: string; isCurrent: boolean }>;
+      currentBranch: string;
+    }>("/git/branches", {
       method: "POST",
       body: JSON.stringify({ path }),
     }),

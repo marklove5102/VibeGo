@@ -1,25 +1,14 @@
+import { Check, ChevronRight, Clock, Edit2, Layers, Trash2, X } from "lucide-react";
 import React from "react";
-import {
-  Clock,
-  Trash2,
-  ChevronRight,
-  Check,
-  X,
-  Edit2,
-  Layers,
-} from "lucide-react";
+import { type Locale, useTranslation } from "@/lib/i18n";
 import { useSessionStore } from "@/stores/sessionStore";
-import { useTranslation, type Locale } from "@/lib/i18n";
 
 interface RecentSessionListProps {
   onSwitchSession: (sessionId: string) => void;
   locale: Locale;
 }
 
-const RecentSessionList: React.FC<RecentSessionListProps> = ({
-  onSwitchSession,
-  locale,
-}) => {
+const RecentSessionList: React.FC<RecentSessionListProps> = ({ onSwitchSession, locale }) => {
   const t = useTranslation(locale);
   const sessions = useSessionStore((s) => s.sessions);
   const currentSessionId = useSessionStore((s) => s.currentSessionId);
@@ -40,12 +29,7 @@ const RecentSessionList: React.FC<RecentSessionListProps> = ({
   const handleDelete = async (e: React.MouseEvent, sessionId: string) => {
     e.stopPropagation();
     const session = sessions.find((s) => s.id === sessionId);
-    if (
-      !confirm(
-        t("session.deleteConfirm").replace("{name}", session?.name || ""),
-      )
-    )
-      return;
+    if (!confirm(t("session.deleteConfirm").replace("{name}", session?.name || ""))) return;
     await deleteSession(sessionId);
   };
 
@@ -68,10 +52,7 @@ const RecentSessionList: React.FC<RecentSessionListProps> = ({
     onSwitchSession(sessionId);
   };
 
-  const startEditing = (
-    e: React.MouseEvent,
-    session: { id: string; name: string },
-  ) => {
+  const startEditing = (e: React.MouseEvent, session: { id: string; name: string }) => {
     e.stopPropagation();
     setEditingId(session.id);
     setEditName(session.name);
@@ -96,11 +77,7 @@ const RecentSessionList: React.FC<RecentSessionListProps> = ({
   };
 
   if (loading && sessions.length === 0) {
-    return (
-      <div className="flex items-center justify-center py-8 text-ide-mute text-sm">
-        {t("common.loading")}
-      </div>
-    );
+    return <div className="flex items-center justify-center py-8 text-ide-mute text-sm">{t("common.loading")}</div>;
   }
 
   return (
@@ -146,22 +123,13 @@ const RecentSessionList: React.FC<RecentSessionListProps> = ({
                 <div
                   className={`p-1.5 sm:p-2 rounded-lg flex-shrink-0 ${isCurrent ? "bg-ide-accent/20" : "bg-ide-bg group-hover:bg-ide-panel"}`}
                 >
-                  <Layers
-                    size={18}
-                    className={`sm:hidden ${isCurrent ? "text-ide-accent" : "text-ide-mute"}`}
-                  />
-                  <Layers
-                    size={20}
-                    className={`hidden sm:block ${isCurrent ? "text-ide-accent" : "text-ide-mute"}`}
-                  />
+                  <Layers size={18} className={`sm:hidden ${isCurrent ? "text-ide-accent" : "text-ide-mute"}`} />
+                  <Layers size={20} className={`hidden sm:block ${isCurrent ? "text-ide-accent" : "text-ide-mute"}`} />
                 </div>
 
                 <div className="flex-1 min-w-0">
                   {isEditing ? (
-                    <div
-                      className="flex items-center gap-1"
-                      onClick={(e) => e.stopPropagation()}
-                    >
+                    <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
                       <input
                         type="text"
                         value={editName}

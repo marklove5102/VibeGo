@@ -1,10 +1,10 @@
-import React, { useEffect, useRef, useCallback } from "react";
-import { Terminal, type ITheme } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
+import { type ITheme, Terminal } from "@xterm/xterm";
+import React, { useCallback, useEffect, useRef } from "react";
 import "@xterm/xterm/css/xterm.css";
 import { terminalApi } from "@/api/terminal";
-import { useAppStore, type Theme } from "@/stores";
+import { type Theme, useAppStore } from "@/stores";
 
 interface TerminalInstanceProps {
   terminalId: string;
@@ -89,10 +89,7 @@ const getXtermTheme = (appTheme: Theme): ITheme => {
   };
 };
 
-const TerminalInstance: React.FC<TerminalInstanceProps> = ({
-  terminalId,
-  isActive,
-}) => {
+const TerminalInstance: React.FC<TerminalInstanceProps> = ({ terminalId, isActive }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
@@ -152,7 +149,7 @@ const TerminalInstance: React.FC<TerminalInstanceProps> = ({
         terminal.write("\r\n[Connection error]\r\n");
       };
     },
-    [terminalId],
+    [terminalId]
   );
 
   useEffect(() => {
@@ -219,10 +216,7 @@ const TerminalInstance: React.FC<TerminalInstanceProps> = ({
         terminalRef.current?.focus();
 
         // Sync size to backend
-        if (
-          wsRef.current?.readyState === WebSocket.OPEN &&
-          terminalRef.current
-        ) {
+        if (wsRef.current?.readyState === WebSocket.OPEN && terminalRef.current) {
           const { cols, rows } = terminalRef.current;
           wsRef.current.send(JSON.stringify({ type: "resize", cols, rows }));
         }
@@ -237,10 +231,7 @@ const TerminalInstance: React.FC<TerminalInstanceProps> = ({
     const observer = new ResizeObserver(() => {
       if (isActive && fitAddonRef.current) {
         fitAddonRef.current.fit();
-        if (
-          wsRef.current?.readyState === WebSocket.OPEN &&
-          terminalRef.current
-        ) {
+        if (wsRef.current?.readyState === WebSocket.OPEN && terminalRef.current) {
           const { cols, rows } = terminalRef.current;
           wsRef.current.send(JSON.stringify({ type: "resize", cols, rows }));
         }

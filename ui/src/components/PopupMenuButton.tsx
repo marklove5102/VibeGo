@@ -1,5 +1,5 @@
-import React, { useState, useRef, useEffect } from "react";
 import { X } from "lucide-react";
+import React, { useEffect, useRef, useState } from "react";
 
 export interface PopupMenuItem {
   id: string;
@@ -36,10 +36,7 @@ const PopupMenuButton: React.FC<PopupMenuButtonProps> = ({
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
-      if (
-        containerRef.current &&
-        !containerRef.current.contains(e.target as Node)
-      ) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
         setIsOpen(false);
       }
     };
@@ -54,14 +51,8 @@ const PopupMenuButton: React.FC<PopupMenuButtonProps> = ({
     setIsOpen(false);
   };
 
-  const positionClasses =
-    position === "top" ? "bottom-full mb-2" : "top-full mt-2";
-  const alignClasses =
-    align === "left"
-      ? "left-0"
-      : align === "right"
-        ? "right-0"
-        : "left-1/2 -translate-x-1/2";
+  const positionClasses = position === "top" ? "bottom-full mb-2" : "top-full mt-2";
+  const alignClasses = align === "left" ? "left-0" : align === "right" ? "right-0" : "left-1/2 -translate-x-1/2";
 
   return (
     <div ref={containerRef} className={`relative ${className}`}>
@@ -69,22 +60,14 @@ const PopupMenuButton: React.FC<PopupMenuButtonProps> = ({
 
       {isOpen && (
         <>
-          <div
-            className="fixed inset-0 z-40"
-            onClick={() => setIsOpen(false)}
-          />
+          <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)} />
           <div
             className={`absolute ${positionClasses} ${alignClasses} z-50 bg-ide-panel border border-ide-border rounded-lg shadow-lg overflow-hidden min-w-[200px]`}
           >
             {title && (
               <div className="flex items-center justify-between px-3 py-2 border-b border-ide-border">
-                <span className="text-xs font-bold text-ide-mute uppercase">
-                  {title}
-                </span>
-                <button
-                  onClick={() => setIsOpen(false)}
-                  className="text-ide-mute hover:text-ide-text"
-                >
+                <span className="text-xs font-bold text-ide-mute uppercase">{title}</span>
+                <button onClick={() => setIsOpen(false)} className="text-ide-mute hover:text-ide-text">
                   <X size={14} />
                 </button>
               </div>
@@ -92,14 +75,10 @@ const PopupMenuButton: React.FC<PopupMenuButtonProps> = ({
             <div className="py-1">
               {sections.map((section, sectionIndex) => (
                 <React.Fragment key={sectionIndex}>
-                  {sectionIndex > 0 && (
-                    <div className="h-px bg-ide-border my-1" />
-                  )}
+                  {sectionIndex > 0 && <div className="h-px bg-ide-border my-1" />}
                   {section.title && (
                     <div className="px-3 py-1">
-                      <span className="text-[10px] font-bold text-ide-mute uppercase">
-                        {section.title}
-                      </span>
+                      <span className="text-[10px] font-bold text-ide-mute uppercase">{section.title}</span>
                     </div>
                   )}
                   {section.items.map((item) => (
@@ -110,9 +89,7 @@ const PopupMenuButton: React.FC<PopupMenuButtonProps> = ({
                         item.variant === "destructive" ? "text-red-500" : ""
                       }`}
                     >
-                      {item.icon && (
-                        <span className="text-ide-accent">{item.icon}</span>
-                      )}
+                      {item.icon && <span className="text-ide-accent">{item.icon}</span>}
                       <span className="text-sm">{item.label}</span>
                     </button>
                   ))}

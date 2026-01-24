@@ -206,11 +206,7 @@ export const useFileManagerStore = create<FileManagerState>((set, get) => ({
     const { files, showHidden, searchQuery } = get();
     return files.filter((f) => {
       if (!showHidden && f.isHidden) return false;
-      if (
-        searchQuery &&
-        !f.name.toLowerCase().includes(searchQuery.toLowerCase())
-      )
-        return false;
+      if (searchQuery && !f.name.toLowerCase().includes(searchQuery.toLowerCase())) return false;
       return true;
     });
   },

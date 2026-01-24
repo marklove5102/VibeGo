@@ -1,22 +1,16 @@
+import { AlertCircle, Code, Download, FileQuestion, Loader2 } from "lucide-react";
 import React, { useEffect, useState } from "react";
-import { usePreviewStore, getPreviewType } from "@/stores/previewStore";
-import type { FileItem } from "@/stores/fileManagerStore";
 import { fileApi } from "@/api/file";
-import {
-  Loader2,
-  AlertCircle,
-  FileQuestion,
-  Code,
-  Download,
-} from "lucide-react";
 import { useTranslation } from "@/lib/i18n";
 import { useAppStore } from "@/stores";
-import { isFileTooLarge, formatFileSize } from "./utils";
+import type { FileItem } from "@/stores/fileManagerStore";
+import { getPreviewType, usePreviewStore } from "@/stores/previewStore";
 import CodePreview from "./CodePreview";
 import ImagePreview from "./ImagePreview";
-import MediaPreview from "./MediaPreview";
 import MarkdownPreview from "./MarkdownPreview";
+import MediaPreview from "./MediaPreview";
 import PDFPreview from "./PDFPreview";
+import { formatFileSize, isFileTooLarge } from "./utils";
 
 interface FilePreviewProps {
   file: FileItem | null;
@@ -26,17 +20,8 @@ const FilePreview: React.FC<FilePreviewProps> = ({ file }) => {
   const locale = useAppStore((s) => s.locale);
   const t = useTranslation(locale);
   const [openAsCode, setOpenAsCode] = useState(false);
-  const {
-    loading,
-    error,
-    setFile,
-    setContent,
-    setOriginalContent,
-    setLoading,
-    setError,
-    setEditMode,
-    reset,
-  } = usePreviewStore();
+  const { loading, error, setFile, setContent, setOriginalContent, setLoading, setError, setEditMode, reset } =
+    usePreviewStore();
 
   useEffect(() => {
     if (!file) {
@@ -170,11 +155,7 @@ const FilePreview: React.FC<FilePreviewProps> = ({ file }) => {
     }
   };
 
-  return (
-    <div className="h-full flex flex-col overflow-hidden">
-      {renderContent()}
-    </div>
-  );
+  return <div className="h-full flex flex-col overflow-hidden">{renderContent()}</div>;
 };
 
 export default FilePreview;

@@ -5,24 +5,7 @@ interface MobileToolbarProps {
 }
 
 const MobileToolbar: React.FC<MobileToolbarProps> = ({ onInsert }) => {
-  const chars = [
-    "{",
-    "}",
-    "(",
-    ")",
-    "[",
-    "]",
-    "<",
-    ">",
-    "=",
-    "=>",
-    ";",
-    '"',
-    "'",
-    "`",
-    "$",
-    "!",
-  ];
+  const chars = ["{", "}", "(", ")", "[", "]", "<", ">", "=", "=>", ";", '"', "'", "`", "$", "!"];
 
   return (
     <div className="h-10 bg-black border-t border-ide-accent flex items-center overflow-x-auto no-scrollbar px-1 gap-1 z-10">

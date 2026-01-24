@@ -11,33 +11,21 @@ interface BackendFile {
   mod_time?: number;
 }
 
-const IGNORED_FILES = new Set([
-  ".DS_Store",
-  ".git",
-  "__MACOSX",
-  "node_modules",
-  "dist",
-  ".idea",
-  ".vscode",
-]);
+const IGNORED_FILES = new Set([".DS_Store", ".git", "__MACOSX", "node_modules", "dist", ".idea", ".vscode"]);
 
 const isIgnored = (name: string) => {
   return IGNORED_FILES.has(name) || name.startsWith("._");
 };
 
 export const getFileTree = async (path: string = "."): Promise<FileNode[]> => {
-  const res = await fetch(
-    `${API_BASE}/file/tree?path=${encodeURIComponent(path)}`,
-  );
+  const res = await fetch(`${API_BASE}/file/tree?path=${encodeURIComponent(path)}`);
   if (!res.ok) throw new Error("Failed to fetch file tree");
   const root: BackendFile = await res.json();
 
   const transform = (node: BackendFile): FileNode | null => {
     if (isIgnored(node.name)) return null;
 
-    const children = node.children
-      ? node.children.map(transform).filter((n): n is FileNode => n !== null)
-      : undefined;
+    const children = node.children ? node.children.map(transform).filter((n): n is FileNode => n !== null) : undefined;
 
     return {
       id: node.path,
@@ -49,9 +37,7 @@ export const getFileTree = async (path: string = "."): Promise<FileNode[]> => {
   };
 
   if (path === "." && root.children) {
-    return root.children
-      .map(transform)
-      .filter((n): n is FileNode => n !== null);
+    return root.children.map(transform).filter((n): n is FileNode => n !== null);
   }
 
   const transformedRoot = transform(root);
@@ -59,18 +45,13 @@ export const getFileTree = async (path: string = "."): Promise<FileNode[]> => {
 };
 
 export const readFile = async (path: string): Promise<string> => {
-  const res = await fetch(
-    `${API_BASE}/file/read?path=${encodeURIComponent(path)}`,
-  );
+  const res = await fetch(`${API_BASE}/file/read?path=${encodeURIComponent(path)}`);
   if (!res.ok) throw new Error("Failed to read file");
   const data = await res.json();
   return data.content || "";
 };
 
-export const writeFile = async (
-  path: string,
-  content: string,
-): Promise<void> => {
+export const writeFile = async (path: string, content: string): Promise<void> => {
   const res = await fetch(`${API_BASE}/file/write`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -87,9 +68,7 @@ interface GitStatusResponse {
   }[];
 }
 
-export const getGitStatus = async (
-  repoPath: string,
-): Promise<GitFileNode[]> => {
+export const getGitStatus = async (repoPath: string): Promise<GitFileNode[]> => {
   const res = await fetch(`${API_BASE}/git/status`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -110,10 +89,7 @@ export const getGitStatus = async (
     }));
 };
 
-export const getGitDiff = async (
-  repoPath: string,
-  filePath: string,
-): Promise<{ old: string; new: string }> => {
+export const getGitDiff = async (repoPath: string, filePath: string): Promise<{ old: string; new: string }> => {
   const res = await fetch(`${API_BASE}/git/diff`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -123,10 +99,7 @@ export const getGitDiff = async (
   return await res.json();
 };
 
-export const stageFile = async (
-  repoPath: string,
-  files: string[],
-): Promise<void> => {
+export const stageFile = async (repoPath: string, files: string[]): Promise<void> => {
   await fetch(`${API_BASE}/git/add`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -142,10 +115,7 @@ export const unstageFile = async (repoPath: string): Promise<void> => {
   });
 };
 
-export const commitChanges = async (
-  repoPath: string,
-  message: string,
-): Promise<void> => {
+export const commitChanges = async (repoPath: string, message: string): Promise<void> => {
   await fetch(`${API_BASE}/git/commit`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

@@ -1,8 +1,8 @@
 import { create } from "zustand";
-import { sessionApi, type SessionInfo } from "../api/session";
-import { useFrameStore, type FolderGroup, type PluginGroup } from "./frameStore";
+import { type SessionInfo, sessionApi } from "../api/session";
 import { useFileManagerStore } from "./fileManagerStore";
-import { useTerminalStore, type TerminalSession } from "./terminalStore";
+import { type FolderGroup, type PluginGroup, useFrameStore } from "./frameStore";
+import { type TerminalSession, useTerminalStore } from "./terminalStore";
 
 const CURRENT_SESSION_KEY = "current_session_id";
 
@@ -47,7 +47,6 @@ interface SessionStoreState {
   initAutoSave: () => void;
 }
 
-
 function getStoredSessionId(): string | null {
   return localStorage.getItem(CURRENT_SESSION_KEY);
 }
@@ -63,12 +62,8 @@ function setStoredSessionId(id: string | null): void {
 function buildSessionState(): SessionState {
   const frameState = useFrameStore.getState();
   const terminalState = useTerminalStore.getState();
-  const folderGroups = frameState.groups.filter(
-    (g): g is FolderGroup => g.type === "folder"
-  );
-  const pluginGroups = frameState.groups.filter(
-    (g): g is PluginGroup => g.type === "plugin"
-  );
+  const folderGroups = frameState.groups.filter((g): g is FolderGroup => g.type === "folder");
+  const pluginGroups = frameState.groups.filter((g): g is PluginGroup => g.type === "plugin");
   const settingsGroup = frameState.groups.find((g) => g.type === "settings");
 
   return {
@@ -206,16 +201,18 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
       const groupId = frameStore.addFolderGroup(folderPath, folderName);
 
       const state: SessionState = {
-        openFolders: [{
-          id: groupId,
-          path: folderPath,
-          name: folderName,
-          views: {
-            files: { tabs: [], activeTabId: null },
-            git: { tabs: [], activeTabId: null },
-            terminal: { tabs: [], activeTabId: null },
+        openFolders: [
+          {
+            id: groupId,
+            path: folderPath,
+            name: folderName,
+            views: {
+              files: { tabs: [], activeTabId: null },
+              git: { tabs: [], activeTabId: null },
+              terminal: { tabs: [], activeTabId: null },
+            },
           },
-        }],
+        ],
         openPlugins: [],
         terminalsByGroup: {},
         activeTerminalByGroup: {},

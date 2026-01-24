@@ -15,10 +15,7 @@ async function request<T>(endpoint: string, options?: RequestInit): Promise<T> {
 export const settingsApi = {
   list: () => request<Record<string, string>>("/settings/list"),
 
-  get: (key: string) =>
-    request<{ key: string; value: string }>(
-      `/settings/get?key=${encodeURIComponent(key)}`,
-    ),
+  get: (key: string) => request<{ key: string; value: string }>(`/settings/get?key=${encodeURIComponent(key)}`),
 
   set: (key: string, value: string) =>
     request<{ ok: boolean }>("/settings/set", {

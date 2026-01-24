@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { settingsApi } from "@/api/settings";
+import type { Locale, Theme } from "@/stores/appStore";
 import { getDefaultSettings, SETTINGS_SCHEMA } from "./schema";
-import type { Theme, Locale } from "@/stores/appStore";
 
 interface SettingsState {
   settings: Record<string, string>;

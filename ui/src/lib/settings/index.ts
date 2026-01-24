@@ -1,11 +1,11 @@
-export { useSettingsStore } from "./store";
 export {
-  SETTINGS_SCHEMA,
-  SETTING_CATEGORIES,
-  getSettingsByCategory,
-  getSettingSchema,
   getDefaultSettings,
-  type SettingSchema,
+  getSettingSchema,
+  getSettingsByCategory,
+  SETTING_CATEGORIES,
+  SETTINGS_SCHEMA,
   type SettingOption,
+  type SettingSchema,
   type SettingType,
 } from "./schema";
+export { useSettingsStore } from "./store";

@@ -1,13 +1,7 @@
-import React, { useState, useRef, useCallback } from "react";
-import type { FileItem } from "@/stores/fileManagerStore";
-import {
-  ZoomIn,
-  ZoomOut,
-  RotateCcw,
-  ExternalLink,
-  Download,
-} from "lucide-react";
+import { Download, ExternalLink, RotateCcw, ZoomIn, ZoomOut } from "lucide-react";
+import React, { useCallback, useRef, useState } from "react";
 import { fileApi } from "@/api/file";
+import type { FileItem } from "@/stores/fileManagerStore";
 import { usePreviewStore } from "@/stores/previewStore";
 
 const ImagePreviewContent: React.FC<{ file: FileItem }> = ({ file }) => {
@@ -78,9 +72,7 @@ const ImagePreviewContent: React.FC<{ file: FileItem }> = ({ file }) => {
         >
           <ZoomOut size={18} />
         </button>
-        <span className="text-xs text-ide-mute min-w-[50px] text-center">
-          {Math.round(scale * 100)}%
-        </span>
+        <span className="text-xs text-ide-mute min-w-[50px] text-center">{Math.round(scale * 100)}%</span>
         <button
           onClick={handleZoomIn}
           className="p-1.5 rounded hover:bg-ide-bg text-ide-mute hover:text-ide-text"

@@ -1,32 +1,14 @@
-import React, { useRef, useEffect, useState } from "react";
-import {
-  ChevronRight,
-  Home,
-  ChevronLeft,
-  ChevronRight as Forward,
-  ChevronUp,
-  Check,
-  X,
-} from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, ChevronUp, ChevronRight as Forward, Home, X } from "lucide-react";
+import React, { useEffect, useRef, useState } from "react";
 import { useFileManagerStore } from "@/stores/fileManagerStore";
 
 interface FileManagerBreadcrumbProps {
   className?: string;
 }
 
-const FileManagerBreadcrumb: React.FC<FileManagerBreadcrumbProps> = ({
-  className = "",
-}) => {
-  const {
-    currentPath,
-    rootPath,
-    historyIndex,
-    pathHistory,
-    goToPath,
-    goBack,
-    goForward,
-    goParent,
-  } = useFileManagerStore();
+const FileManagerBreadcrumb: React.FC<FileManagerBreadcrumbProps> = ({ className = "" }) => {
+  const { currentPath, rootPath, historyIndex, pathHistory, goToPath, goBack, goForward, goParent } =
+    useFileManagerStore();
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -34,8 +16,7 @@ const FileManagerBreadcrumb: React.FC<FileManagerBreadcrumbProps> = ({
   const [editValue, setEditValue] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const pathParts =
-    currentPath === "/" ? [] : currentPath.split("/").filter(Boolean);
+  const pathParts = currentPath === "/" ? [] : currentPath.split("/").filter(Boolean);
   const displayParts = pathParts;
 
   const canGoBack = historyIndex > 0;
@@ -98,16 +79,12 @@ const FileManagerBreadcrumb: React.FC<FileManagerBreadcrumbProps> = ({
   };
 
   return (
-    <div
-      className={`flex items-center gap-1 h-10 px-2 bg-ide-panel border-b border-ide-border ${className}`}
-    >
+    <div className={`flex items-center gap-1 h-10 px-2 bg-ide-panel border-b border-ide-border ${className}`}>
       <button
         onClick={goBack}
         disabled={!canGoBack}
         className={`p-1.5 rounded-md transition-colors ${
-          canGoBack
-            ? "text-ide-text hover:bg-ide-bg active:bg-ide-accent/20"
-            : "text-ide-mute/50 cursor-not-allowed"
+          canGoBack ? "text-ide-text hover:bg-ide-bg active:bg-ide-accent/20" : "text-ide-mute/50 cursor-not-allowed"
         }`}
       >
         <ChevronLeft size={18} />
@@ -116,9 +93,7 @@ const FileManagerBreadcrumb: React.FC<FileManagerBreadcrumbProps> = ({
         onClick={goParent}
         disabled={!canGoUp}
         className={`p-1.5 rounded-md transition-colors ${
-          canGoUp
-            ? "text-ide-text hover:bg-ide-bg active:bg-ide-accent/20"
-            : "text-ide-mute/50 cursor-not-allowed"
+          canGoUp ? "text-ide-text hover:bg-ide-bg active:bg-ide-accent/20" : "text-ide-mute/50 cursor-not-allowed"
         }`}
       >
         <ChevronUp size={18} />
@@ -127,9 +102,7 @@ const FileManagerBreadcrumb: React.FC<FileManagerBreadcrumbProps> = ({
         onClick={goForward}
         disabled={!canGoForward}
         className={`p-1.5 rounded-md transition-colors ${
-          canGoForward
-            ? "text-ide-text hover:bg-ide-bg active:bg-ide-accent/20"
-            : "text-ide-mute/50 cursor-not-allowed"
+          canGoForward ? "text-ide-text hover:bg-ide-bg active:bg-ide-accent/20" : "text-ide-mute/50 cursor-not-allowed"
         }`}
       >
         <Forward size={18} />

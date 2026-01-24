@@ -45,15 +45,15 @@ export const useTerminalStore = create<TerminalState>((set, get) => ({
         activeIdByGroup: isRestoring
           ? s.activeIdByGroup
           : {
-            ...s.activeIdByGroup,
-            [groupId]: terminal.id,
-          },
+              ...s.activeIdByGroup,
+              [groupId]: terminal.id,
+            },
         listManagerOpenByGroup: isRestoring
           ? s.listManagerOpenByGroup
           : {
-            ...s.listManagerOpenByGroup,
-            [groupId]: false,
-          },
+              ...s.listManagerOpenByGroup,
+              [groupId]: false,
+            },
       };
     }),
 
@@ -116,9 +116,7 @@ export const useTerminalStore = create<TerminalState>((set, get) => ({
     set((s) => ({
       terminalsByGroup: {
         ...s.terminalsByGroup,
-        [groupId]: (s.terminalsByGroup[groupId] || []).map((t) =>
-          t.id === id ? { ...t, ...updates } : t,
-        ),
+        [groupId]: (s.terminalsByGroup[groupId] || []).map((t) => (t.id === id ? { ...t, ...updates } : t)),
       },
     })),
 
@@ -126,9 +124,7 @@ export const useTerminalStore = create<TerminalState>((set, get) => ({
     set((s) => ({
       terminalsByGroup: {
         ...s.terminalsByGroup,
-        [groupId]: (s.terminalsByGroup[groupId] || []).map((t) =>
-          t.id === id ? { ...t, name } : t,
-        ),
+        [groupId]: (s.terminalsByGroup[groupId] || []).map((t) => (t.id === id ? { ...t, name } : t)),
       },
     })),
 
@@ -136,9 +132,7 @@ export const useTerminalStore = create<TerminalState>((set, get) => ({
     set((s) => ({
       terminalsByGroup: {
         ...s.terminalsByGroup,
-        [groupId]: (s.terminalsByGroup[groupId] || []).map((t) =>
-          t.id === id ? { ...t, pinned: true } : t,
-        ),
+        [groupId]: (s.terminalsByGroup[groupId] || []).map((t) => (t.id === id ? { ...t, pinned: true } : t)),
       },
     })),
 

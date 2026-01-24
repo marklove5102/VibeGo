@@ -1,20 +1,20 @@
-import React, { useState } from "react";
 import {
-  Search,
-  X,
+  ArrowUpDown,
+  CheckSquare,
   Eye,
   EyeOff,
-  RefreshCw,
-  FolderPlus,
-  Trash2,
-  CheckSquare,
-  Square,
-  ArrowUpDown,
-  LayoutList,
-  LayoutGrid,
   FilePlus,
+  FolderPlus,
+  LayoutGrid,
+  LayoutList,
+  RefreshCw,
+  Search,
+  Square,
+  Trash2,
+  X,
 } from "lucide-react";
-import { useFileManagerStore, type SortField } from "@/stores/fileManagerStore";
+import React, { useState } from "react";
+import { type SortField, useFileManagerStore } from "@/stores/fileManagerStore";
 
 interface FileManagerToolbarProps {
   onRefresh: () => void;
@@ -61,19 +61,11 @@ const FileManagerToolbar: React.FC<FileManagerToolbarProps> = ({
       <div className="flex items-center gap-1 h-10 px-2">
         {selectionMode ? (
           <>
-            <button
-              onClick={toggleSelectionMode}
-              className="p-2 rounded-md text-ide-accent hover:bg-ide-bg"
-            >
+            <button onClick={toggleSelectionMode} className="p-2 rounded-md text-ide-accent hover:bg-ide-bg">
               <X size={18} />
             </button>
-            <span className="text-xs text-ide-mute px-2">
-              {selectedFiles.size} selected
-            </span>
-            <button
-              onClick={selectAll}
-              className="p-2 rounded-md text-ide-mute hover:bg-ide-bg hover:text-ide-text"
-            >
+            <span className="text-xs text-ide-mute px-2">{selectedFiles.size} selected</span>
+            <button onClick={selectAll} className="p-2 rounded-md text-ide-mute hover:bg-ide-bg hover:text-ide-text">
               <CheckSquare size={18} />
             </button>
             <button
@@ -84,10 +76,7 @@ const FileManagerToolbar: React.FC<FileManagerToolbarProps> = ({
             </button>
             <div className="flex-1" />
             {selectedFiles.size > 0 && (
-              <button
-                onClick={onDeleteSelected}
-                className="p-2 rounded-md text-red-500 hover:bg-red-500/10"
-              >
+              <button onClick={onDeleteSelected} className="p-2 rounded-md text-red-500 hover:bg-red-500/10">
                 <Trash2 size={18} />
               </button>
             )}
@@ -138,10 +127,7 @@ const FileManagerToolbar: React.FC<FileManagerToolbarProps> = ({
                   </button>
                   {showSortMenu && (
                     <>
-                      <div
-                        className="fixed inset-0 z-10"
-                        onClick={() => setShowSortMenu(false)}
-                      />
+                      <div className="fixed inset-0 z-10" onClick={() => setShowSortMenu(false)} />
                       <div className="absolute right-0 top-full mt-1 bg-ide-panel border border-ide-border rounded-md shadow-lg z-20 min-w-[120px]">
                         {sortOptions.map((opt) => (
                           <button
@@ -151,9 +137,7 @@ const FileManagerToolbar: React.FC<FileManagerToolbarProps> = ({
                               setShowSortMenu(false);
                             }}
                             className={`w-full px-3 py-2 text-left text-xs hover:bg-ide-bg ${
-                              sortField === opt.field
-                                ? "text-ide-accent"
-                                : "text-ide-text"
+                              sortField === opt.field ? "text-ide-accent" : "text-ide-text"
                             }`}
                           >
                             {opt.label}
@@ -165,24 +149,16 @@ const FileManagerToolbar: React.FC<FileManagerToolbarProps> = ({
                 </div>
 
                 <button
-                  onClick={() =>
-                    setViewMode(viewMode === "list" ? "grid" : "list")
-                  }
+                  onClick={() => setViewMode(viewMode === "list" ? "grid" : "list")}
                   className="p-2 rounded-md text-ide-mute hover:bg-ide-bg hover:text-ide-text"
                 >
-                  {viewMode === "list" ? (
-                    <LayoutGrid size={18} />
-                  ) : (
-                    <LayoutList size={18} />
-                  )}
+                  {viewMode === "list" ? <LayoutGrid size={18} /> : <LayoutList size={18} />}
                 </button>
 
                 <button
                   onClick={toggleShowHidden}
                   className={`p-2 rounded-md hover:bg-ide-bg ${
-                    showHidden
-                      ? "text-ide-accent"
-                      : "text-ide-mute hover:text-ide-text"
+                    showHidden ? "text-ide-accent" : "text-ide-mute hover:text-ide-text"
                   }`}
                 >
                   {showHidden ? <Eye size={18} /> : <EyeOff size={18} />}

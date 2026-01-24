@@ -1,21 +1,7 @@
+import { AlignLeft, Eye, EyeOff, Grid, List, Settings, WrapText, X } from "lucide-react";
 import React, { useEffect } from "react";
-import {
-  Settings,
-  Eye,
-  EyeOff,
-  List,
-  Grid,
-  AlignLeft,
-  WrapText,
-  X,
-} from "lucide-react";
-import {
-  useSettingsStore,
-  SETTING_CATEGORIES,
-  getSettingsByCategory,
-  type SettingSchema,
-} from "@/lib/settings";
-import { useTranslation, type Locale } from "@/lib/i18n";
+import { type Locale, useTranslation } from "@/lib/i18n";
+import { getSettingsByCategory, SETTING_CATEGORIES, type SettingSchema, useSettingsStore } from "@/lib/settings";
 import { useFrameStore } from "@/stores/frameStore";
 
 const SettingItem: React.FC<{
@@ -31,11 +17,7 @@ const SettingItem: React.FC<{
       case "defaultViewMode":
         return value === "list" ? <List size={18} /> : <Grid size={18} />;
       case "editorWordWrap":
-        return value === "true" ? (
-          <WrapText size={18} />
-        ) : (
-          <AlignLeft size={18} />
-        );
+        return value === "true" ? <WrapText size={18} /> : <AlignLeft size={18} />;
       default:
         return <Settings size={18} />;
     }
@@ -47,21 +29,13 @@ const SettingItem: React.FC<{
         <div className="flex items-center gap-3">
           <div className="text-ide-mute">{getIcon()}</div>
           <div>
-            <div className="text-sm font-medium text-ide-text">
-              {t(schema.labelKey)}
-            </div>
-            {schema.descriptionKey && (
-              <div className="text-xs text-ide-mute">
-                {t(schema.descriptionKey)}
-              </div>
-            )}
+            <div className="text-sm font-medium text-ide-text">{t(schema.labelKey)}</div>
+            {schema.descriptionKey && <div className="text-xs text-ide-mute">{t(schema.descriptionKey)}</div>}
           </div>
         </div>
         <button
           onClick={() => onChange(value === "true" ? "false" : "true")}
-          className={`w-12 h-6 rounded-full transition-colors ${
-            value === "true" ? "bg-ide-accent" : "bg-ide-border"
-          }`}
+          className={`w-12 h-6 rounded-full transition-colors ${value === "true" ? "bg-ide-accent" : "bg-ide-border"}`}
         >
           <div
             className={`w-5 h-5 rounded-full bg-white shadow transition-transform ${
@@ -79,14 +53,8 @@ const SettingItem: React.FC<{
         <div className="flex items-center gap-3 mb-3">
           <div className="text-ide-mute">{getIcon()}</div>
           <div>
-            <div className="text-sm font-medium text-ide-text">
-              {t(schema.labelKey)}
-            </div>
-            {schema.descriptionKey && (
-              <div className="text-xs text-ide-mute">
-                {t(schema.descriptionKey)}
-              </div>
-            )}
+            <div className="text-sm font-medium text-ide-text">{t(schema.labelKey)}</div>
+            {schema.descriptionKey && <div className="text-xs text-ide-mute">{t(schema.descriptionKey)}</div>}
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -114,14 +82,8 @@ const SettingItem: React.FC<{
         <div className="flex items-center gap-3">
           <div className="text-ide-mute">{getIcon()}</div>
           <div>
-            <div className="text-sm font-medium text-ide-text">
-              {t(schema.labelKey)}
-            </div>
-            {schema.descriptionKey && (
-              <div className="text-xs text-ide-mute">
-                {t(schema.descriptionKey)}
-              </div>
-            )}
+            <div className="text-sm font-medium text-ide-text">{t(schema.labelKey)}</div>
+            {schema.descriptionKey && <div className="text-xs text-ide-mute">{t(schema.descriptionKey)}</div>}
           </div>
         </div>
         <input
@@ -178,16 +140,12 @@ const SettingsPage: React.FC = () => {
     <div className="h-full overflow-y-auto bg-ide-bg">
       <div className="max-w-2xl mx-auto p-4">
         {SETTING_CATEGORIES.map((category) => {
-          const categorySettings = getSettingsByCategory(category.key).filter(
-            (schema) => !hiddenKeys.has(schema.key),
-          );
+          const categorySettings = getSettingsByCategory(category.key).filter((schema) => !hiddenKeys.has(schema.key));
           if (categorySettings.length === 0) return null;
 
           return (
             <div key={category.key} className="mb-6">
-              <h2 className="text-xs font-bold text-ide-mute uppercase tracking-wider mb-3">
-                {t(category.labelKey)}
-              </h2>
+              <h2 className="text-xs font-bold text-ide-mute uppercase tracking-wider mb-3">{t(category.labelKey)}</h2>
               <div className="space-y-2">
                 {categorySettings.map((schema) => (
                   <SettingItem

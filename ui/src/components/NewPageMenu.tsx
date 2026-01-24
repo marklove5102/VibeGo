@@ -1,6 +1,6 @@
-import React from "react";
 import { FolderOpen, X } from "lucide-react";
-import { useTranslation, type Locale } from "@/lib/i18n";
+import React from "react";
+import { type Locale, useTranslation } from "@/lib/i18n";
 import { pluginRegistry } from "@/plugins/registry";
 
 interface NewPageMenuProps {
@@ -11,13 +11,7 @@ interface NewPageMenuProps {
   onNewPlugin: (pluginId: string) => void;
 }
 
-const NewPageMenu: React.FC<NewPageMenuProps> = ({
-  isOpen,
-  onClose,
-  locale,
-  onOpenDirectory,
-  onNewPlugin,
-}) => {
+const NewPageMenu: React.FC<NewPageMenuProps> = ({ isOpen, onClose, locale, onOpenDirectory, onNewPlugin }) => {
   const t = useTranslation(locale);
   const plugins = pluginRegistry.getAll();
 
@@ -36,13 +30,8 @@ const NewPageMenu: React.FC<NewPageMenuProps> = ({
       <div className="fixed inset-0 bg-black/50 z-40" onClick={onClose} />
       <div className="fixed bottom-0 left-0 right-0 z-50 bg-ide-panel border-t border-ide-border rounded-t-2xl shadow-lg animate-in slide-in-from-bottom duration-200">
         <div className="flex items-center justify-between px-4 py-3 border-b border-ide-border">
-          <span className="text-sm font-bold text-ide-text">
-            {t("common.newPage")}
-          </span>
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-md text-ide-mute hover:text-ide-text hover:bg-ide-bg"
-          >
+          <span className="text-sm font-bold text-ide-text">{t("common.newPage")}</span>
+          <button onClick={onClose} className="p-1.5 rounded-md text-ide-mute hover:text-ide-text hover:bg-ide-bg">
             <X size={18} />
           </button>
         </div>
@@ -58,18 +47,14 @@ const NewPageMenu: React.FC<NewPageMenuProps> = ({
               <FolderOpen size={20} className="text-ide-accent" />
             </div>
             <div className="text-left">
-              <div className="text-sm font-medium text-ide-text">
-                {t("common.openFolder")}
-              </div>
+              <div className="text-sm font-medium text-ide-text">{t("common.openFolder")}</div>
             </div>
           </button>
           {plugins.length > 0 && (
             <>
               <div className="h-px bg-ide-border my-2" />
               <div className="px-4 py-2">
-                <span className="text-xs font-bold text-ide-mute uppercase">
-                  {t("newPage.plugins")}
-                </span>
+                <span className="text-xs font-bold text-ide-mute uppercase">{t("newPage.plugins")}</span>
               </div>
               {plugins.map((plugin) => {
                 const IconComponent = plugin.icon;
@@ -86,9 +71,7 @@ const NewPageMenu: React.FC<NewPageMenuProps> = ({
                       <IconComponent size={20} className="text-ide-accent" />
                     </div>
                     <div className="text-left">
-                      <div className="text-sm font-medium text-ide-text">
-                        {getPluginName(plugin)}
-                      </div>
+                      <div className="text-sm font-medium text-ide-text">{getPluginName(plugin)}</div>
                     </div>
                   </button>
                 );

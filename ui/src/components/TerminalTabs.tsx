@@ -1,5 +1,5 @@
-import React, { useRef, useCallback } from "react";
 import { X } from "lucide-react";
+import React, { useCallback, useRef } from "react";
 import type { TerminalSession } from "@/stores/terminalStore";
 
 interface TerminalTabsProps {
@@ -9,12 +9,7 @@ interface TerminalTabsProps {
   onTabClose: (id: string) => void;
 }
 
-const TerminalTabs: React.FC<TerminalTabsProps> = ({
-  terminals,
-  activeTerminalId,
-  onTabClick,
-  onTabClose,
-}) => {
+const TerminalTabs: React.FC<TerminalTabsProps> = ({ terminals, activeTerminalId, onTabClick, onTabClose }) => {
   const tabsRef = useRef<Map<string, HTMLDivElement>>(new Map());
 
   const handleCloseTab = useCallback(
@@ -22,7 +17,7 @@ const TerminalTabs: React.FC<TerminalTabsProps> = ({
       e.stopPropagation();
       onTabClose(id);
     },
-    [onTabClose],
+    [onTabClose]
   );
 
   return (
@@ -41,11 +36,7 @@ const TerminalTabs: React.FC<TerminalTabsProps> = ({
               : "bg-transparent border-transparent text-ide-mute hover:bg-ide-panel hover:text-ide-text"
           }`}
         >
-          <span
-            className={`max-w-[120px] truncate font-medium ${
-              !terminal.pinned ? "italic" : ""
-            }`}
-          >
+          <span className={`max-w-[120px] truncate font-medium ${!terminal.pinned ? "italic" : ""}`}>
             {terminal.name}
           </span>
           <button

@@ -1,17 +1,17 @@
-import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
-  X,
+  ArrowUp,
+  Check,
+  ChevronLeft,
+  ChevronRight,
   Folder,
   FolderOpen,
-  ChevronRight,
-  Home,
-  ArrowUp,
-  ChevronLeft,
   ChevronRight as Forward,
-  Check,
+  Home,
+  X,
 } from "lucide-react";
-import { fileApi, type FileInfo } from "@/api/file";
-import { useTranslation, type Locale } from "@/lib/i18n";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import { type FileInfo, fileApi } from "@/api/file";
+import { type Locale, useTranslation } from "@/lib/i18n";
 
 interface DirectoryPickerProps {
   isOpen: boolean;
@@ -21,13 +21,7 @@ interface DirectoryPickerProps {
   locale: Locale;
 }
 
-const DirectoryPicker: React.FC<DirectoryPickerProps> = ({
-  isOpen,
-  onClose,
-  onSelect,
-  initialPath = ".",
-  locale,
-}) => {
+const DirectoryPicker: React.FC<DirectoryPickerProps> = ({ isOpen, onClose, onSelect, initialPath = ".", locale }) => {
   const t = useTranslation(locale);
   const [currentPath, setCurrentPath] = useState(initialPath);
   const [directories, setDirectories] = useState<FileInfo[]>([]);
@@ -44,34 +38,31 @@ const DirectoryPicker: React.FC<DirectoryPickerProps> = ({
     historyIndexRef.current = historyIndex;
   }, [historyIndex]);
 
-  const loadDirectories = useCallback(
-    async (path: string, addToHistory = true) => {
-      setLoading(true);
-      setError(null);
-      try {
-        const res = await fileApi.list(path);
-        const dirs = res.files.filter((f) => f.isDir);
-        dirs.sort((a, b) => a.name.localeCompare(b.name));
-        setDirectories(dirs);
-        setCurrentPath(res.path);
-        setInputPath(res.path);
-        if (addToHistory) {
-          setPathHistory((prev) => {
-            const newHistory = prev.slice(0, historyIndexRef.current + 1);
-            newHistory.push(res.path);
-            return newHistory;
-          });
-          setHistoryIndex((prev) => prev + 1);
-        }
-      } catch (e) {
-        setError((e as Error).message);
-        setDirectories([]);
-      } finally {
-        setLoading(false);
+  const loadDirectories = useCallback(async (path: string, addToHistory = true) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fileApi.list(path);
+      const dirs = res.files.filter((f) => f.isDir);
+      dirs.sort((a, b) => a.name.localeCompare(b.name));
+      setDirectories(dirs);
+      setCurrentPath(res.path);
+      setInputPath(res.path);
+      if (addToHistory) {
+        setPathHistory((prev) => {
+          const newHistory = prev.slice(0, historyIndexRef.current + 1);
+          newHistory.push(res.path);
+          return newHistory;
+        });
+        setHistoryIndex((prev) => prev + 1);
       }
-    },
-    [],
-  );
+    } catch (e) {
+      setError((e as Error).message);
+      setDirectories([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     if (isOpen) {
@@ -129,8 +120,7 @@ const DirectoryPicker: React.FC<DirectoryPickerProps> = ({
     onClose();
   };
 
-  const pathParts =
-    currentPath === "/" ? [] : currentPath.split("/").filter(Boolean);
+  const pathParts = currentPath === "/" ? [] : currentPath.split("/").filter(Boolean);
   const canGoBack = historyIndex > 0;
   const canGoForward = historyIndex < pathHistory.length - 1;
   const canGoUp = currentPath !== "/";
@@ -139,19 +129,11 @@ const DirectoryPicker: React.FC<DirectoryPickerProps> = ({
 
   return (
     <>
-      <div
-        className="fixed inset-0 bg-black/50 z-40 backdrop-blur-sm"
-        onClick={onClose}
-      />
+      <div className="fixed inset-0 bg-black/50 z-40 backdrop-blur-sm" onClick={onClose} />
       <div className="fixed inset-0 sm:inset-4 sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 sm:w-[500px] sm:max-h-[80vh] sm:h-auto bg-ide-panel sm:border border-ide-border sm:rounded-xl shadow-2xl z-50 flex flex-col overflow-hidden">
         <div className="flex items-center justify-between p-3 sm:p-4 border-b border-ide-border">
-          <h3 className="font-bold text-ide-text text-sm sm:text-base">
-            {t("directoryPicker.title")}
-          </h3>
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-lg hover:bg-ide-bg text-ide-mute hover:text-ide-text"
-          >
+          <h3 className="font-bold text-ide-text text-sm sm:text-base">{t("directoryPicker.title")}</h3>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-ide-bg text-ide-mute hover:text-ide-text">
             <X size={20} />
           </button>
         </div>
@@ -161,9 +143,7 @@ const DirectoryPicker: React.FC<DirectoryPickerProps> = ({
             onClick={handleBack}
             disabled={!canGoBack}
             className={`p-1.5 rounded-md transition-colors ${
-              canGoBack
-                ? "text-ide-text hover:bg-ide-bg"
-                : "text-ide-mute/50 cursor-not-allowed"
+              canGoBack ? "text-ide-text hover:bg-ide-bg" : "text-ide-mute/50 cursor-not-allowed"
             }`}
           >
             <ChevronLeft size={18} />
@@ -172,9 +152,7 @@ const DirectoryPicker: React.FC<DirectoryPickerProps> = ({
             onClick={handleParent}
             disabled={!canGoUp}
             className={`p-1.5 rounded-md transition-colors ${
-              canGoUp
-                ? "text-ide-text hover:bg-ide-bg"
-                : "text-ide-mute/50 cursor-not-allowed"
+              canGoUp ? "text-ide-text hover:bg-ide-bg" : "text-ide-mute/50 cursor-not-allowed"
             }`}
           >
             <ArrowUp size={18} />
@@ -183,9 +161,7 @@ const DirectoryPicker: React.FC<DirectoryPickerProps> = ({
             onClick={handleForward}
             disabled={!canGoForward}
             className={`p-1.5 rounded-md transition-colors ${
-              canGoForward
-                ? "text-ide-text hover:bg-ide-bg"
-                : "text-ide-mute/50 cursor-not-allowed"
+              canGoForward ? "text-ide-text hover:bg-ide-bg" : "text-ide-mute/50 cursor-not-allowed"
             }`}
           >
             <Forward size={18} />
@@ -201,10 +177,7 @@ const DirectoryPicker: React.FC<DirectoryPickerProps> = ({
           </button>
 
           {isEditing ? (
-            <form
-              onSubmit={handleInputSubmit}
-              className="flex-1 flex items-center gap-1"
-            >
+            <form onSubmit={handleInputSubmit} className="flex-1 flex items-center gap-1">
               <input
                 type="text"
                 value={inputPath}
@@ -213,10 +186,7 @@ const DirectoryPicker: React.FC<DirectoryPickerProps> = ({
                 className="flex-1 px-2 py-1 bg-ide-bg border border-ide-accent rounded text-xs text-ide-text outline-none"
                 placeholder={t("directoryPicker.enterPath")}
               />
-              <button
-                type="submit"
-                className="p-1.5 rounded-md text-green-500 hover:bg-ide-bg transition-colors"
-              >
+              <button type="submit" className="p-1.5 rounded-md text-green-500 hover:bg-ide-bg transition-colors">
                 <Check size={18} />
               </button>
               <button
@@ -241,16 +211,11 @@ const DirectoryPicker: React.FC<DirectoryPickerProps> = ({
               ) : (
                 pathParts.map((part, index) => (
                   <React.Fragment key={index}>
-                    <ChevronRight
-                      size={14}
-                      className="shrink-0 text-ide-mute/50"
-                    />
+                    <ChevronRight size={14} className="shrink-0 text-ide-mute/50" />
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        handleNavigate(
-                          "/" + pathParts.slice(0, index + 1).join("/"),
-                        );
+                        handleNavigate("/" + pathParts.slice(0, index + 1).join("/"));
                       }}
                       className={`shrink-0 px-2 py-1 rounded-md text-xs font-medium transition-colors truncate max-w-[100px] ${
                         index === pathParts.length - 1
@@ -269,13 +234,9 @@ const DirectoryPicker: React.FC<DirectoryPickerProps> = ({
 
         <div className="flex-1 overflow-y-auto p-2 min-h-0">
           {loading ? (
-            <div className="flex items-center justify-center py-8 text-ide-mute">
-              {t("common.loading")}
-            </div>
+            <div className="flex items-center justify-center py-8 text-ide-mute">{t("common.loading")}</div>
           ) : error ? (
-            <div className="flex items-center justify-center py-8 text-red-500 text-sm">
-              {error}
-            </div>
+            <div className="flex items-center justify-center py-8 text-red-500 text-sm">{error}</div>
           ) : directories.length === 0 ? (
             <div className="flex items-center justify-center py-8 text-ide-mute text-sm">
               {t("directoryPicker.noSubdirectories")}
@@ -289,13 +250,8 @@ const DirectoryPicker: React.FC<DirectoryPickerProps> = ({
                   className="w-full flex items-center gap-2 p-2 sm:p-3 rounded-lg hover:bg-ide-bg text-left group"
                 >
                   <Folder size={18} className="text-ide-accent flex-shrink-0" />
-                  <span className="text-ide-text truncate flex-1 text-sm">
-                    {dir.name}
-                  </span>
-                  <ChevronRight
-                    size={18}
-                    className="text-ide-mute opacity-0 group-hover:opacity-100"
-                  />
+                  <span className="text-ide-text truncate flex-1 text-sm">{dir.name}</span>
+                  <ChevronRight size={18} className="text-ide-mute opacity-0 group-hover:opacity-100" />
                 </button>
               ))}
             </div>
@@ -305,9 +261,7 @@ const DirectoryPicker: React.FC<DirectoryPickerProps> = ({
         <div className="p-3 sm:p-4 border-t border-ide-border">
           <div className="flex items-center gap-2 mb-3 p-2 bg-ide-bg rounded-lg">
             <FolderOpen size={18} className="text-ide-accent flex-shrink-0" />
-            <span className="text-xs sm:text-sm text-ide-text truncate">
-              {currentPath}
-            </span>
+            <span className="text-xs sm:text-sm text-ide-text truncate">{currentPath}</span>
           </div>
           <div className="flex gap-2">
             <button

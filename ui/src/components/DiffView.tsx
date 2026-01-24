@@ -29,10 +29,8 @@ const DiffView: React.FC<DiffViewProps> = ({ original, modified }) => {
             <div className="w-8 text-right pr-2 select-none border-r border-ide-border/50 text-xs leading-6">
               {i + 1}
             </div>
-            <div className="pl-2 text-ide-text font-mono text-sm leading-6 whitespace-pre">
-              {mod || ""}
-            </div>
-          </div>,
+            <div className="pl-2 text-ide-text font-mono text-sm leading-6 whitespace-pre">{mod || ""}</div>
+          </div>
         );
       } else {
         // Changed (Visualize as Delete then Add for simplicity)
@@ -42,10 +40,8 @@ const DiffView: React.FC<DiffViewProps> = ({ original, modified }) => {
               <div className="w-8 text-right pr-2 select-none border-r border-ide-border/50 text-xs leading-6 text-ide-diff-del">
                 -
               </div>
-              <div className="pl-2 text-ide-text font-mono text-sm leading-6 whitespace-pre opacity-70">
-                {org}
-              </div>
-            </div>,
+              <div className="pl-2 text-ide-text font-mono text-sm leading-6 whitespace-pre opacity-70">{org}</div>
+            </div>
           );
         }
         if (mod !== undefined) {
@@ -54,10 +50,8 @@ const DiffView: React.FC<DiffViewProps> = ({ original, modified }) => {
               <div className="w-8 text-right pr-2 select-none border-r border-ide-border/50 text-xs leading-6 text-ide-diff-add">
                 +
               </div>
-              <div className="pl-2 text-ide-text font-mono text-sm leading-6 whitespace-pre">
-                {mod}
-              </div>
-            </div>,
+              <div className="pl-2 text-ide-text font-mono text-sm leading-6 whitespace-pre">{mod}</div>
+            </div>
           );
         }
       }

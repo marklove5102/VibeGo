@@ -1,5 +1,5 @@
-import { create } from "zustand";
 import type { ReactNode } from "react";
+import { create } from "zustand";
 
 export type GroupType = "home" | "folder" | "terminal" | "plugin" | "settings";
 
@@ -43,7 +43,11 @@ export interface BottomBarConfig {
   show?: boolean;
 }
 
-export type { PageFrameConfig, PageMenuConfig, PluginContext } from "@/plugins/registry";
+export type {
+  PageFrameConfig,
+  PageMenuConfig,
+  PluginContext,
+} from "@/plugins/registry";
 
 export interface TabItem {
   id: string;
@@ -98,12 +102,7 @@ export interface HomeGroup {
   name: string;
 }
 
-export type PageGroup =
-  | HomeGroup
-  | FolderGroup
-  | TerminalGroup
-  | PluginGroup
-  | SettingsGroup;
+export type PageGroup = HomeGroup | FolderGroup | TerminalGroup | PluginGroup | SettingsGroup;
 
 interface FrameState {
   groups: PageGroup[];
@@ -131,11 +130,7 @@ interface FrameState {
 
   addTab: (groupId: string, tab: TabItem, view?: ViewType) => void;
   removeTab: (groupId: string, tabId: string, view?: ViewType) => void;
-  setActiveTab: (
-    groupId: string,
-    tabId: string | null,
-    view?: ViewType,
-  ) => void;
+  setActiveTab: (groupId: string, tabId: string | null, view?: ViewType) => void;
 
   getCurrentTabs: () => TabItem[];
   getCurrentActiveTabId: () => string | null;
@@ -147,10 +142,7 @@ interface FrameState {
   openPreviewTab: (tab: TabItem) => void;
 }
 
-const createDefaultFolder = (
-  path: string,
-  name?: string,
-): FolderGroup => ({
+const createDefaultFolder = (path: string, name?: string): FolderGroup => ({
   type: "folder",
   id: `folder-${Date.now()}`,
   name: name || path.split("/").pop() || "Folder",
@@ -203,10 +195,7 @@ const getGroupTabs = (group: PageGroup, view?: ViewType): TabItem[] => {
   return group.tabs;
 };
 
-const getGroupActiveTabId = (
-  group: PageGroup,
-  view?: ViewType,
-): string | null => {
+const getGroupActiveTabId = (group: PageGroup, view?: ViewType): string | null => {
   if (group.type === "folder") {
     const v = view || group.activeView;
     return group.views[v].activeTabId;
@@ -309,11 +298,7 @@ export const useFrameStore = create<FrameState>((set, get) => ({
 
   setFolderView: (groupId, view) =>
     set((s) => ({
-      groups: s.groups.map((g) =>
-        g.type === "folder" && g.id === groupId
-          ? { ...g, activeView: view }
-          : g,
-      ),
+      groups: s.groups.map((g) => (g.type === "folder" && g.id === groupId ? { ...g, activeView: view } : g)),
     })),
 
   getCurrentView: () => {
@@ -447,9 +432,7 @@ export const useFrameStore = create<FrameState>((set, get) => ({
               ...g.views,
               [v]: {
                 ...viewData,
-                tabs: viewData.tabs.map((t) =>
-                  t.id === tabId ? { ...t, pinned: true } : t,
-                ),
+                tabs: viewData.tabs.map((t) => (t.id === tabId ? { ...t, pinned: true } : t)),
               },
             },
           };
@@ -457,9 +440,7 @@ export const useFrameStore = create<FrameState>((set, get) => ({
         if (g.type === "settings" || g.type === "home") return g;
         return {
           ...g,
-          tabs: g.tabs.map((t: TabItem) =>
-            t.id === tabId ? { ...t, pinned: true } : t,
-          ),
+          tabs: g.tabs.map((t: TabItem) => (t.id === tabId ? { ...t, pinned: true } : t)),
         };
       }),
     })),
@@ -485,9 +466,7 @@ export const useFrameStore = create<FrameState>((set, get) => ({
           const previewTabIndex = viewData.tabs.findIndex((t) => !t.pinned);
           let newTabs: TabItem[];
           if (previewTabIndex !== -1) {
-            newTabs = viewData.tabs.map((t, i) =>
-              i === previewTabIndex ? { ...tab, pinned: false } : t,
-            );
+            newTabs = viewData.tabs.map((t, i) => (i === previewTabIndex ? { ...tab, pinned: false } : t));
           } else {
             newTabs = [{ ...tab, pinned: false }, ...viewData.tabs];
           }
@@ -506,9 +485,7 @@ export const useFrameStore = create<FrameState>((set, get) => ({
         const previewTabIndex = g.tabs.findIndex((t: TabItem) => !t.pinned);
         let newTabs: TabItem[];
         if (previewTabIndex !== -1) {
-          newTabs = g.tabs.map((t: TabItem, i: number) =>
-            i === previewTabIndex ? { ...tab, pinned: false } : t,
-          );
+          newTabs = g.tabs.map((t: TabItem, i: number) => (i === previewTabIndex ? { ...tab, pinned: false } : t));
         } else {
           newTabs = [{ ...tab, pinned: false }, ...g.tabs];
         }

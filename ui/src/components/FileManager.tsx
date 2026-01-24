@@ -1,35 +1,35 @@
-import React, { useEffect, useCallback, useState, useRef } from "react";
 import {
-  File,
-  Folder,
-  ChevronRight,
-  FileText,
-  Image,
-  Film,
-  Music,
-  Archive,
-  Code,
-  FileJson,
   AlertCircle,
-  Loader2,
+  Archive,
+  ChevronRight,
+  Code,
+  File,
+  FileJson,
   FilePlus,
+  FileText,
+  Film,
+  Folder,
   FolderPlus,
+  Image,
+  Loader2,
+  Music,
 } from "lucide-react";
-import { useFileManagerStore, type FileItem } from "@/stores/fileManagerStore";
-import { useFrameStore } from "@/stores/frameStore";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { fileApi } from "@/api/file";
+import { type Locale, useTranslation } from "@/lib/i18n";
+import { useSettingsStore } from "@/lib/settings";
+import { type FileItem, useFileManagerStore } from "@/stores/fileManagerStore";
+import { useFrameStore } from "@/stores/frameStore";
+import FileDetailSheet from "./FileDetailSheet";
 import FileManagerBreadcrumb from "./FileManagerBreadcrumb";
 import FileManagerToolbar from "./FileManagerToolbar";
-import FileDetailSheet from "./FileDetailSheet";
-import { useSettingsStore } from "@/lib/settings";
-import { useTranslation, type Locale } from "@/lib/i18n";
 
 function formatFileSize(bytes: number): string {
   if (bytes === 0) return "0 B";
   const k = 1024;
   const sizes = ["B", "KB", "MB", "GB"];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i];
+  return parseFloat((bytes / k ** i).toFixed(1)) + " " + sizes[i];
 }
 
 function formatDate(dateStr: string): string {
@@ -101,10 +101,7 @@ interface FileManagerProps {
   onFileOpen?: (file: FileItem) => void;
 }
 
-const FileManager: React.FC<FileManagerProps> = ({
-  initialPath = ".",
-  onFileOpen,
-}) => {
+const FileManager: React.FC<FileManagerProps> = ({ initialPath = ".", onFileOpen }) => {
   const {
     currentPath,
     setFiles,
@@ -129,9 +126,7 @@ const FileManager: React.FC<FileManagerProps> = ({
   const locale = (useSettingsStore((s) => s.settings.locale) || "zh") as Locale;
   const t = useTranslation(locale);
 
-  const [showNewDialog, setShowNewDialog] = useState<"file" | "folder" | null>(
-    null,
-  );
+  const [showNewDialog, setShowNewDialog] = useState<"file" | "folder" | null>(null);
   const [newName, setNewName] = useState("");
   const [renameFile, setRenameFile] = useState<FileItem | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
@@ -194,7 +189,7 @@ const FileManager: React.FC<FileManagerProps> = ({
         setLoading(false);
       }
     },
-    [setFiles, setLoading, setError],
+    [setFiles, setLoading, setError]
   );
 
   useEffect(() => {
@@ -403,10 +398,7 @@ const FileManager: React.FC<FileManagerProps> = ({
             setNewName("");
           }}
         >
-          <div
-            className="w-full max-w-md bg-ide-panel rounded-t-xl p-4"
-            onClick={(e) => e.stopPropagation()}
-          >
+          <div className="w-full max-w-md bg-ide-panel rounded-t-xl p-4" onClick={(e) => e.stopPropagation()}>
             <h3 className="text-sm font-medium text-ide-text mb-3">
               {renameFile
                 ? t("common.rename")
@@ -434,13 +426,7 @@ const FileManager: React.FC<FileManagerProps> = ({
                 {t("common.cancel")}
               </button>
               <button
-                onClick={
-                  renameFile
-                    ? handleRename
-                    : showNewDialog === "file"
-                      ? handleNewFile
-                      : handleNewFolder
-                }
+                onClick={renameFile ? handleRename : showNewDialog === "file" ? handleNewFile : handleNewFolder}
                 className="flex-1 py-2 rounded-md bg-ide-accent text-ide-bg text-sm font-medium"
               >
                 {renameFile ? t("common.rename") : t("common.create")}
@@ -462,14 +448,7 @@ interface FileItemProps {
   onLongPress: () => void;
 }
 
-const FileListItem: React.FC<FileItemProps> = ({
-  file,
-  selected,
-  focused,
-  selectionMode,
-  onClick,
-  onLongPress,
-}) => {
+const FileListItem: React.FC<FileItemProps> = ({ file, selected, focused, selectionMode, onClick, onLongPress }) => {
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleTouchStart = () => {
@@ -505,33 +484,16 @@ const FileListItem: React.FC<FileItemProps> = ({
       )}
       {getFileIcon(file)}
       <div className="flex-1 min-w-0">
-        <div
-          className={`text-sm truncate ${file.isHidden ? "text-ide-mute" : "text-ide-text"}`}
-        >
-          {file.name}
-        </div>
+        <div className={`text-sm truncate ${file.isHidden ? "text-ide-mute" : "text-ide-text"}`}>{file.name}</div>
       </div>
-      <div className="text-[10px] text-ide-mute shrink-0">
-        {file.isDir ? "--" : formatFileSize(file.size)}
-      </div>
-      <div className="text-[10px] text-ide-mute shrink-0 w-12 text-right">
-        {formatDate(file.modTime)}
-      </div>
-      {file.isDir && (
-        <ChevronRight size={18} className="text-ide-mute shrink-0" />
-      )}
+      <div className="text-[10px] text-ide-mute shrink-0">{file.isDir ? "--" : formatFileSize(file.size)}</div>
+      <div className="text-[10px] text-ide-mute shrink-0 w-12 text-right">{formatDate(file.modTime)}</div>
+      {file.isDir && <ChevronRight size={18} className="text-ide-mute shrink-0" />}
     </div>
   );
 };
 
-const FileGridItem: React.FC<FileItemProps> = ({
-  file,
-  selected,
-  focused,
-  selectionMode,
-  onClick,
-  onLongPress,
-}) => {
+const FileGridItem: React.FC<FileItemProps> = ({ file, selected, focused, selectionMode, onClick, onLongPress }) => {
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleTouchStart = () => {
@@ -563,12 +525,8 @@ const FileGridItem: React.FC<FileItemProps> = ({
           }`}
         />
       )}
-      <div className="w-10 h-10 flex items-center justify-center">
-        {getFileIcon(file)}
-      </div>
-      <div
-        className={`text-[11px] text-center truncate w-full ${file.isHidden ? "text-ide-mute" : "text-ide-text"}`}
-      >
+      <div className="w-10 h-10 flex items-center justify-center">{getFileIcon(file)}</div>
+      <div className={`text-[11px] text-center truncate w-full ${file.isHidden ? "text-ide-mute" : "text-ide-text"}`}>
         {file.name}
       </div>
     </div>

@@ -1,10 +1,10 @@
-import React, { useEffect, useCallback, useMemo } from "react";
-import GitChangesView from "./GitChangesView";
-import GitHistoryView from "./GitHistoryView";
-import { useGitStore, type GitFileNode, type Locale } from "@/stores";
+import { FileText, GitBranch, History, RefreshCw } from "lucide-react";
+import React, { useCallback, useEffect, useMemo } from "react";
 import type { GitCommit } from "@/api/git";
 import { usePageTopBar } from "@/hooks/usePageTopBar";
-import { GitBranch, RefreshCw, FileText, History } from "lucide-react";
+import { type GitFileNode, type Locale, useGitStore } from "@/stores";
+import GitChangesView from "./GitChangesView";
+import GitHistoryView from "./GitHistoryView";
 
 interface GitViewProps {
   path: string;
@@ -26,12 +26,7 @@ const i18n = {
   },
 };
 
-const GitView: React.FC<GitViewProps> = ({
-  path,
-  locale,
-  onFileDiff,
-  isActive = true,
-}) => {
+const GitView: React.FC<GitViewProps> = ({ path, locale, onFileDiff, isActive = true }) => {
   const t = i18n[locale] || i18n.en;
 
   const {
@@ -82,13 +77,8 @@ const GitView: React.FC<GitViewProps> = ({
   const handleBranchClick = useCallback(() => {
     if (branches.length === 0) return;
 
-    const branchList = branches
-      .map((b, i) => `${i + 1}. ${b}${b === currentBranch ? " (current)" : ""}`)
-      .join("\n");
-    const input = prompt(
-      `Select branch:\n${branchList}\n\nEnter branch name:`,
-      currentBranch,
-    );
+    const branchList = branches.map((b, i) => `${i + 1}. ${b}${b === currentBranch ? " (current)" : ""}`).join("\n");
+    const input = prompt(`Select branch:\n${branchList}\n\nEnter branch name:`, currentBranch);
 
     if (input && input !== currentBranch && branches.includes(input)) {
       switchBranch(input);
@@ -120,8 +110,7 @@ const GitView: React.FC<GitViewProps> = ({
             <FileText size={12} />
             <span className="font-medium">
               {t.changes}
-              {stagedFiles.length + unstagedFiles.length > 0 &&
-                ` (${stagedFiles.length + unstagedFiles.length})`}
+              {stagedFiles.length + unstagedFiles.length > 0 && ` (${stagedFiles.length + unstagedFiles.length})`}
             </span>
           </div>
           <div
@@ -139,9 +128,7 @@ const GitView: React.FC<GitViewProps> = ({
       ),
       rightButtons: [
         {
-          icon: (
-            <RefreshCw size={18} className={isLoading ? "animate-spin" : ""} />
-          ),
+          icon: <RefreshCw size={18} className={isLoading ? "animate-spin" : ""} />,
           onClick: handleRefresh,
           disabled: isLoading,
         },
@@ -170,7 +157,7 @@ const GitView: React.FC<GitViewProps> = ({
         onFileDiff(diff.old, diff.new, `${file.name} [DIFF]`);
       }
     },
-    [getDiff, onFileDiff],
+    [getDiff, onFileDiff]
   );
 
   const handleCommitSelect = useCallback(
@@ -178,13 +165,10 @@ const GitView: React.FC<GitViewProps> = ({
       setSelectedCommit(commitInfo);
       setSelectedCommitFiles([]);
     },
-    [setSelectedCommit, setSelectedCommitFiles],
+    [setSelectedCommit, setSelectedCommitFiles]
   );
 
-  const handleHistoryFileClick = useCallback(
-    async (_commit: GitCommit, _filePath: string) => {},
-    [],
-  );
+  const handleHistoryFileClick = useCallback(async (_commit: GitCommit, _filePath: string) => {}, []);
 
   const handleCommit = useCallback(async () => {
     await commit();

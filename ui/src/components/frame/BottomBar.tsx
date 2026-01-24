@@ -1,22 +1,6 @@
+import { Box, Files, FolderOpen, GitGraph, Home, Maximize, Menu, Minimize, Settings, Terminal } from "lucide-react";
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import {
-  Menu,
-  Files,
-  GitGraph,
-  Terminal,
-  FolderOpen,
-  Box,
-  Settings,
-  Maximize,
-  Minimize,
-  Home,
-} from "lucide-react";
-import {
-  useFrameStore,
-  type PageGroup,
-  type ViewType,
-  type BottomBarButton,
-} from "@/stores/frameStore";
+import { type BottomBarButton, type PageGroup, useFrameStore, type ViewType } from "@/stores/frameStore";
 
 interface BottomBarProps {
   onMenuClick?: () => void;
@@ -58,9 +42,7 @@ const GroupButton: React.FC<GroupButtonProps> = ({
       return (
         <div
           className={`flex h-full items-center gap-0.5 px-1 ${
-            hasMultipleGroups
-              ? "bg-ide-panel/70 border border-ide-border/30 rounded-md shadow-inner"
-              : ""
+            hasMultipleGroups ? "bg-ide-panel/70 border border-ide-border/30 rounded-md shadow-inner" : ""
           }`}
         >
           {(["files", "git", "terminal"] as ViewType[]).map((view) => (
@@ -68,9 +50,7 @@ const GroupButton: React.FC<GroupButtonProps> = ({
               key={view}
               onClick={() => onViewClick(group.id, view)}
               className={`px-2 h-full rounded flex items-center transition-all ${
-                isActive && group.activeView === view
-                  ? "text-ide-accent"
-                  : "text-ide-mute hover:text-ide-text"
+                isActive && group.activeView === view ? "text-ide-accent" : "text-ide-mute hover:text-ide-text"
               }`}
             >
               {VIEW_ICONS[view]}
@@ -83,9 +63,7 @@ const GroupButton: React.FC<GroupButtonProps> = ({
       <button
         onClick={() => onGroupClick(group.id)}
         className={`px-3 h-full rounded flex items-center gap-2 transition-all ${
-          isActive
-            ? "bg-ide-panel text-ide-accent shadow-sm"
-            : "text-ide-mute hover:text-ide-text"
+          isActive ? "bg-ide-panel text-ide-accent shadow-sm" : "text-ide-mute hover:text-ide-text"
         }`}
         title={group.name}
       >
@@ -98,9 +76,7 @@ const GroupButton: React.FC<GroupButtonProps> = ({
     <button
       onClick={() => onGroupClick(group.id)}
       className={`px-3 h-full rounded flex items-center gap-2 transition-all ${
-        isActive
-          ? "bg-ide-panel text-ide-accent shadow-sm"
-          : "text-ide-mute hover:text-ide-text"
+        isActive ? "bg-ide-panel text-ide-accent shadow-sm" : "text-ide-mute hover:text-ide-text"
       }`}
       title={group.name}
     >
@@ -136,7 +112,7 @@ const BottomBar: React.FC<BottomBarProps> = ({ onMenuClick }) => {
       lastClickTime.current[groupId] = now;
       setActiveGroup(groupId);
     },
-    [activeGroupId, setActiveGroup, setCurrentActiveTab],
+    [activeGroupId, setActiveGroup, setCurrentActiveTab]
   );
 
   const handleViewClick = useCallback(
@@ -144,7 +120,7 @@ const BottomBar: React.FC<BottomBarProps> = ({ onMenuClick }) => {
       setActiveGroup(groupId);
       setFolderView(groupId, view);
     },
-    [setActiveGroup, setFolderView],
+    [setActiveGroup, setFolderView]
   );
 
   const shouldExpand = (group: PageGroup) => {
@@ -175,11 +151,7 @@ const BottomBar: React.FC<BottomBarProps> = ({ onMenuClick }) => {
       ? bottomBarConfig.rightButtons
       : [
           {
-            icon: isFullscreen ? (
-              <Minimize size={18} />
-            ) : (
-              <Maximize size={18} />
-            ),
+            icon: isFullscreen ? <Minimize size={18} /> : <Maximize size={18} />,
             label: isFullscreen ? "Exit Fullscreen" : "Fullscreen",
             onClick: handleToggleFullscreen,
             active: isFullscreen,
@@ -190,8 +162,7 @@ const BottomBar: React.FC<BottomBarProps> = ({ onMenuClick }) => {
     return null;
   }
 
-  const useCustomItems =
-    bottomBarConfig.customItems && bottomBarConfig.customItems.length > 0;
+  const useCustomItems = bottomBarConfig.customItems && bottomBarConfig.customItems.length > 0;
   const hasMultipleGroups = groups.length > 1;
   const isOnlyHome = groups.length === 1 && groups[0].type === "home";
   const showGroupBar = groups.length > 0 && !useCustomItems && !isOnlyHome;
@@ -199,10 +170,7 @@ const BottomBar: React.FC<BottomBarProps> = ({ onMenuClick }) => {
   return (
     <>
       <footer className="h-14 pb-safe bg-ide-panel border-t border-ide-border flex items-center justify-between z-20 shadow-[0_-5px_15px_rgba(0,0,0,0.1)]">
-        <button
-          onClick={onMenuClick}
-          className="h-full px-4 flex items-center gap-3"
-        >
+        <button onClick={onMenuClick} className="h-full px-4 flex items-center gap-3">
           <div className={cornerButtonClass}>
             <Menu size={18} />
           </div>

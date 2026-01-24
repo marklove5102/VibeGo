@@ -1,5 +1,5 @@
 import React from "react";
-import { useFrameStore, type TopBarButton } from "@/stores/frameStore";
+import { type TopBarButton, useFrameStore } from "@/stores/frameStore";
 
 const ButtonComponent: React.FC<{ button: TopBarButton }> = ({ button }) => {
   return (
@@ -25,10 +25,8 @@ const TopBar: React.FC = () => {
     return null;
   }
 
-  const hasLeftButtons =
-    topBarConfig.leftButtons && topBarConfig.leftButtons.length > 0;
-  const hasRightButtons =
-    topBarConfig.rightButtons && topBarConfig.rightButtons.length > 0;
+  const hasLeftButtons = topBarConfig.leftButtons && topBarConfig.leftButtons.length > 0;
+  const hasRightButtons = topBarConfig.rightButtons && topBarConfig.rightButtons.length > 0;
   const hasCenter = topBarConfig.centerContent;
 
   return (
@@ -41,17 +39,13 @@ const TopBar: React.FC = () => {
         </div>
       )}
 
-      {hasLeftButtons && hasCenter && (
-        <div className="w-px h-5 bg-ide-border mx-1 shrink-0" />
-      )}
+      {hasLeftButtons && hasCenter && <div className="w-px h-5 bg-ide-border mx-1 shrink-0" />}
 
       {hasCenter && (
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 overflow-x-auto no-scrollbar touch-pan-x h-full">
             {typeof topBarConfig.centerContent === "string" ? (
-              <span className="text-sm font-medium text-ide-text whitespace-nowrap">
-                {topBarConfig.centerContent}
-              </span>
+              <span className="text-sm font-medium text-ide-text whitespace-nowrap">{topBarConfig.centerContent}</span>
             ) : (
               topBarConfig.centerContent
             )}

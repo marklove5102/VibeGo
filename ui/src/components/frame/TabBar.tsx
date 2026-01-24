@@ -1,23 +1,7 @@
-import React, { useCallback, useRef, useEffect } from "react";
-import {
-  X,
-  Plus,
-  RefreshCw,
-  FolderOpen,
-  GitGraph,
-  FileText,
-  FileDiff,
-  Terminal,
-  Box,
-  Edit,
-  Eye,
-} from "lucide-react";
-import {
-  useFrameStore,
-  type TabItem,
-  type ViewType,
-} from "@/stores/frameStore";
-import { usePreviewStore, getPreviewType } from "@/stores/previewStore";
+import { Box, Edit, Eye, FileDiff, FileText, FolderOpen, GitGraph, Plus, RefreshCw, Terminal, X } from "lucide-react";
+import React, { useCallback, useEffect, useRef } from "react";
+import { type TabItem, useFrameStore, type ViewType } from "@/stores/frameStore";
+import { getPreviewType, usePreviewStore } from "@/stores/previewStore";
 
 interface TabBarProps {
   onAction?: () => void;
@@ -77,7 +61,7 @@ const TabBar: React.FC<TabBarProps> = ({ onAction, onBackToList }) => {
       e.stopPropagation();
       removeCurrentTab(tabId);
     },
-    [removeCurrentTab],
+    [removeCurrentTab]
   );
 
   const handleTabClick = useCallback(
@@ -90,7 +74,7 @@ const TabBar: React.FC<TabBarProps> = ({ onAction, onBackToList }) => {
       lastClickTime.current[tabId] = now;
       setCurrentActiveTab(tabId);
     },
-    [setCurrentActiveTab, pinTab],
+    [setCurrentActiveTab, pinTab]
   );
 
   const handleBackClick = useCallback(() => {
@@ -113,15 +97,11 @@ const TabBar: React.FC<TabBarProps> = ({ onAction, onBackToList }) => {
     return <FolderOpen size={18} />;
   };
 
-  const isFilesView =
-    activeGroup?.type === "folder" &&
-    currentView === "files" &&
-    activeTabId === null;
+  const isFilesView = activeGroup?.type === "folder" && currentView === "files" && activeTabId === null;
   const isGitView = activeGroup?.type === "folder" && currentView === "git";
   const showRefreshButton = isFilesView || isGitView;
   const showBackButton = activeGroup?.type === "folder" || tabs.length > 0;
-  const showActionButton =
-    activeGroup?.type !== "home" && activeGroup?.type !== "settings";
+  const showActionButton = activeGroup?.type !== "home" && activeGroup?.type !== "settings";
 
   const activeTab = tabs.find((t) => t.id === activeTabId);
   const isCodeFile =
@@ -144,9 +124,7 @@ const TabBar: React.FC<TabBarProps> = ({ onAction, onBackToList }) => {
           >
             {getViewIcon()}
           </button>
-          {tabs.length > 0 && (
-            <div className="w-px h-5 bg-ide-border mx-1 shrink-0" />
-          )}
+          {tabs.length > 0 && <div className="w-px h-5 bg-ide-border mx-1 shrink-0" />}
         </div>
       )}
 
@@ -167,11 +145,7 @@ const TabBar: React.FC<TabBarProps> = ({ onAction, onBackToList }) => {
               }`}
             >
               {getTabIcon(tab)}
-              <span
-                className={`max-w-[80px] truncate font-medium ${!tab.pinned ? "italic" : ""}`}
-              >
-                {tab.title}
-              </span>
+              <span className={`max-w-[80px] truncate font-medium ${!tab.pinned ? "italic" : ""}`}>{tab.title}</span>
               {tab.closable !== false && (
                 <button
                   onClick={(e) => handleCloseTab(e, tab.id)}
@@ -197,16 +171,8 @@ const TabBar: React.FC<TabBarProps> = ({ onAction, onBackToList }) => {
                 {editMode ? <Eye size={18} /> : <Edit size={18} />}
               </button>
             ) : (
-              <button
-                onClick={onAction}
-                className={cornerButtonClass}
-                title={showRefreshButton ? "Refresh" : "New"}
-              >
-                {showRefreshButton ? (
-                  <RefreshCw size={18} />
-                ) : (
-                  <Plus size={18} />
-                )}
+              <button onClick={onAction} className={cornerButtonClass} title={showRefreshButton ? "Refresh" : "New"}>
+                {showRefreshButton ? <RefreshCw size={18} /> : <Plus size={18} />}
               </button>
             )}
           </>

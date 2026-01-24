@@ -1,5 +1,5 @@
+import { Box, Files, GitGraph, Terminal } from "lucide-react";
 import React from "react";
-import { Files, GitGraph, Terminal, Box } from "lucide-react";
 import { AppView } from "@/stores/appStore";
 
 export interface PageConfig {
@@ -16,11 +16,7 @@ export interface PageConfig {
 }
 
 export interface PageComponentProps {
-  onOpenTab?: (tab: {
-    id: string;
-    title: string;
-    data?: Record<string, unknown>;
-  }) => void;
+  onOpenTab?: (tab: { id: string; title: string; data?: Record<string, unknown> }) => void;
 }
 
 const pageRegistry = new Map<string, PageConfig>();
@@ -37,9 +33,7 @@ export const getPage = (id: string): PageConfig | undefined => {
   return pageRegistry.get(id);
 };
 
-export const getPageByViewType = (
-  viewType: AppView,
-): PageConfig | undefined => {
+export const getPageByViewType = (viewType: AppView): PageConfig | undefined => {
   for (const config of pageRegistry.values()) {
     if (config.viewType === viewType) return config;
   }

@@ -1,6 +1,5 @@
-
-import { createRoot } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { createRoot } from "react-dom/client";
 import "@/index.css";
 import "@/lib/monaco";
 import "@fontsource-variable/jetbrains-mono";
@@ -17,29 +16,20 @@ const isCancelError = (error: unknown): boolean => {
       e.name === "Canceled" ||
       e.message === "Canceled" ||
       (typeof e.message === "string" &&
-        (e.message.includes("canceled") ||
-          e.message.includes("Canceled") ||
-          e.message.includes("aborted")))
+        (e.message.includes("canceled") || e.message.includes("Canceled") || e.message.includes("aborted")))
     );
   }
   return false;
 };
 
 const originalConsoleError = console.error;
-console.error = function (...args) {
+console.error = (...args) => {
   // Check if any argument is a Canceled error related to Monaco/Editor
   const shouldIgnore = args.some((arg) => {
-    const str =
-      arg instanceof Error
-        ? arg.message + (arg.stack || "")
-        : typeof arg === "string"
-          ? arg
-          : "";
+    const str = arg instanceof Error ? arg.message + (arg.stack || "") : typeof arg === "string" ? arg : "";
 
     return (
-      (str.includes("Canceled") ||
-        str.includes("canceled") ||
-        str.includes("aborted")) &&
+      (str.includes("Canceled") || str.includes("canceled") || str.includes("aborted")) &&
       (str.includes("monaco") ||
         str.includes("editor") ||
         str.includes("installHook") ||
@@ -58,19 +48,15 @@ window.addEventListener(
     const msg = e.message || "";
     const filename = e.filename || "";
     if (
-      (isCancelError(e.error) ||
-        msg.includes("Canceled") ||
-        msg.includes("canceled")) &&
-      (filename.includes("monaco") ||
-        filename.includes("editor") ||
-        filename.includes("installHook"))
+      (isCancelError(e.error) || msg.includes("Canceled") || msg.includes("canceled")) &&
+      (filename.includes("monaco") || filename.includes("editor") || filename.includes("installHook"))
     ) {
       e.preventDefault();
       e.stopImmediatePropagation();
       return true;
     }
   },
-  true,
+  true
 );
 
 window.addEventListener("unhandledrejection", (e) => {
@@ -93,5 +79,5 @@ createRoot(document.getElementById("root")!).render(
   // removing it helps stabilize the editor init sequence
   <QueryClientProvider client={queryClient}>
     <App />
-  </QueryClientProvider>,
+  </QueryClientProvider>
 );

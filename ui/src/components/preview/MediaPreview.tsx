@@ -1,7 +1,7 @@
+import { Download, ExternalLink } from "lucide-react";
 import React from "react";
 import { fileApi } from "@/api/file";
 import { usePreviewStore } from "@/stores/previewStore";
-import { Download, ExternalLink } from "lucide-react";
 
 const MediaPreview: React.FC = () => {
   const { file } = usePreviewStore();
@@ -11,16 +11,12 @@ const MediaPreview: React.FC = () => {
   const mediaUrl = fileApi.downloadUrl(file.path);
   const isVideo =
     file.mimeType?.startsWith("video/") ||
-    [".mp4", ".mov", ".avi", ".mkv", ".webm", ".m4v"].includes(
-      file.extension?.toLowerCase() || "",
-    );
+    [".mp4", ".mov", ".avi", ".mkv", ".webm", ".m4v"].includes(file.extension?.toLowerCase() || "");
 
   return (
     <div className="h-full w-full flex flex-col bg-ide-bg">
       <div className="flex items-center gap-2 px-3 py-2 border-b border-ide-border bg-ide-panel">
-        <span className="text-xs text-ide-mute truncate flex-1">
-          {file.name}
-        </span>
+        <span className="text-xs text-ide-mute truncate flex-1">{file.name}</span>
         <a
           href={mediaUrl}
           download={file.name}

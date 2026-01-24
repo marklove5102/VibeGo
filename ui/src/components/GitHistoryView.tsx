@@ -1,13 +1,7 @@
-import React, { useState, useCallback } from "react";
-import {
-  ChevronDown,
-  ChevronRight,
-  GitCommit as GitCommitIcon,
-  Clock,
-  User,
-} from "lucide-react";
-import type { Locale } from "@/stores";
+import { ChevronDown, ChevronRight, Clock, GitCommit as GitCommitIcon, User } from "lucide-react";
+import React, { useCallback, useState } from "react";
 import type { GitCommit } from "@/api/git";
+import type { Locale } from "@/stores";
 
 interface GitHistoryViewProps {
   commits: GitCommit[];
@@ -94,13 +88,8 @@ const CommitItem: React.FC<CommitItemProps> = ({
   const shortHash = commit.hash.substring(0, 7);
 
   return (
-    <div
-      className={`border-b border-ide-border/50 ${isSelected ? "bg-ide-accent/5" : ""}`}
-    >
-      <div
-        className="flex items-start gap-2 px-3 py-2.5 cursor-pointer hover:bg-ide-accent/10"
-        onClick={onToggle}
-      >
+    <div className={`border-b border-ide-border/50 ${isSelected ? "bg-ide-accent/5" : ""}`}>
+      <div className="flex items-start gap-2 px-3 py-2.5 cursor-pointer hover:bg-ide-accent/10" onClick={onToggle}>
         <div className="pt-0.5">
           {isExpanded ? (
             <ChevronDown size={14} className="text-ide-mute" />
@@ -109,9 +98,7 @@ const CommitItem: React.FC<CommitItemProps> = ({
           )}
         </div>
         <div className="flex-1 min-w-0">
-          <div className="text-sm text-ide-text font-medium line-clamp-2">
-            {commit.message}
-          </div>
+          <div className="text-sm text-ide-text font-medium line-clamp-2">{commit.message}</div>
           <div className="flex items-center gap-3 mt-1 text-[10px] text-ide-mute">
             <span className="flex items-center gap-1">
               <User size={10} />
@@ -140,14 +127,10 @@ const CommitItem: React.FC<CommitItemProps> = ({
                 onFileClick(file.path);
               }}
             >
-              <span
-                className={`w-4 text-center font-bold text-xs ${getStatusColor(file.status)}`}
-              >
+              <span className={`w-4 text-center font-bold text-xs ${getStatusColor(file.status)}`}>
                 {file.status[0].toUpperCase()}
               </span>
-              <span className="text-xs text-ide-text truncate">
-                {file.path}
-              </span>
+              <span className="text-xs text-ide-text truncate">{file.path}</span>
             </div>
           ))}
         </div>
@@ -177,23 +160,15 @@ const GitHistoryView: React.FC<GitHistoryViewProps> = ({
         onCommitSelect(commit);
       }
     },
-    [expandedHash, onCommitSelect],
+    [expandedHash, onCommitSelect]
   );
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-32 text-ide-mute text-sm">
-        {t.loading}
-      </div>
-    );
+    return <div className="flex items-center justify-center h-32 text-ide-mute text-sm">{t.loading}</div>;
   }
 
   if (commits.length === 0) {
-    return (
-      <div className="flex items-center justify-center h-32 text-ide-mute text-sm">
-        {t.noCommits}
-      </div>
-    );
+    return <div className="flex items-center justify-center h-32 text-ide-mute text-sm">{t.noCommits}</div>;
   }
 
   return (

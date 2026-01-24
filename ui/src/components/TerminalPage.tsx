@@ -1,10 +1,10 @@
+import { Plus, Terminal, X } from "lucide-react";
 import React, { useCallback, useEffect, useMemo } from "react";
-import { useTerminalStore, type TerminalSession } from "@/stores/terminalStore";
-import { useTerminalClose, useTerminalCreate } from "@/hooks/useTerminal";
 import { usePageTopBar } from "@/hooks/usePageTopBar";
+import { useTerminalClose, useTerminalCreate } from "@/hooks/useTerminal";
+import { type TerminalSession, useTerminalStore } from "@/stores/terminalStore";
 import TerminalInstance from "./TerminalInstance";
 import TerminalListManager from "./TerminalListManager";
-import { Plus, X, Terminal } from "lucide-react";
 
 interface TerminalPageProps {
   groupId: string;
@@ -14,15 +14,9 @@ interface TerminalPageProps {
 const EMPTY_TERMINALS: TerminalSession[] = [];
 
 const TerminalPage: React.FC<TerminalPageProps> = ({ groupId, cwd }) => {
-  const terminals = useTerminalStore(
-    (s) => s.terminalsByGroup[groupId] || EMPTY_TERMINALS,
-  );
-  const activeTerminalId = useTerminalStore(
-    (s) => s.activeIdByGroup[groupId] ?? null,
-  );
-  const listManagerOpen = useTerminalStore(
-    (s) => s.listManagerOpenByGroup[groupId] ?? true,
-  );
+  const terminals = useTerminalStore((s) => s.terminalsByGroup[groupId] || EMPTY_TERMINALS);
+  const activeTerminalId = useTerminalStore((s) => s.activeIdByGroup[groupId] ?? null);
+  const listManagerOpen = useTerminalStore((s) => s.listManagerOpenByGroup[groupId] ?? true);
 
   const setActiveId = useTerminalStore((s) => s.setActiveId);
   const setListManagerOpen = useTerminalStore((s) => s.setListManagerOpen);
@@ -55,21 +49,14 @@ const TerminalPage: React.FC<TerminalPageProps> = ({ groupId, cwd }) => {
       }
     }
     setListManagerOpen(groupId, !listManagerOpen);
-  }, [
-    groupId,
-    listManagerOpen,
-    setListManagerOpen,
-    terminals,
-    activeTerminalId,
-    setActiveId,
-  ]);
+  }, [groupId, listManagerOpen, setListManagerOpen, terminals, activeTerminalId, setActiveId]);
 
   const handleCloseTerminal = useCallback(
     (e: React.MouseEvent, terminalId: string) => {
       e.stopPropagation();
       closeTerminalMutation.mutate(terminalId);
     },
-    [closeTerminalMutation],
+    [closeTerminalMutation]
   );
 
   useEffect(() => {
@@ -82,7 +69,7 @@ const TerminalPage: React.FC<TerminalPageProps> = ({ groupId, cwd }) => {
     (terminalId: string) => {
       setActiveId(groupId, terminalId);
     },
-    [groupId, setActiveId],
+    [groupId, setActiveId]
   );
 
   const displayTerminals = useMemo(() => [...terminals].reverse(), [terminals]);
@@ -106,8 +93,7 @@ const TerminalPage: React.FC<TerminalPageProps> = ({ groupId, cwd }) => {
         terminals.length > 0 ? (
           <div className="flex items-center gap-2 overflow-x-auto no-scrollbar touch-pan-x h-full">
             {displayTerminals.map((terminal) => {
-              const isActive =
-                !listManagerOpen && terminal.id === activeTerminalId;
+              const isActive = !listManagerOpen && terminal.id === activeTerminalId;
               return (
                 <div
                   key={terminal.id}
@@ -119,9 +105,7 @@ const TerminalPage: React.FC<TerminalPageProps> = ({ groupId, cwd }) => {
                   }`}
                 >
                   <Terminal size={12} />
-                  <span
-                    className={`max-w-[80px] truncate font-medium ${!terminal.pinned ? "italic" : ""}`}
-                  >
+                  <span className={`max-w-[80px] truncate font-medium ${!terminal.pinned ? "italic" : ""}`}>
                     {terminal.name}
                   </span>
                   <button
@@ -174,11 +158,7 @@ const TerminalPage: React.FC<TerminalPageProps> = ({ groupId, cwd }) => {
           />
         ) : (
           terminals.map((terminal) => (
-            <TerminalInstance
-              key={terminal.id}
-              terminalId={terminal.id}
-              isActive={terminal.id === activeTerminalId}
-            />
+            <TerminalInstance key={terminal.id} terminalId={terminal.id} isActive={terminal.id === activeTerminalId} />
           ))
         )}
       </div>

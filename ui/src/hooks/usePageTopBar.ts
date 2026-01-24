@@ -1,10 +1,7 @@
-import { useEffect, type DependencyList } from "react";
-import { useFrameStore, type TopBarConfig } from "@/stores/frameStore";
+import { type DependencyList, useEffect } from "react";
+import { type TopBarConfig, useFrameStore } from "@/stores/frameStore";
 
-export function usePageTopBar(
-  config: TopBarConfig | null,
-  deps: DependencyList,
-) {
+export function usePageTopBar(config: TopBarConfig | null, deps: DependencyList) {
   const setTopBarConfig = useFrameStore((s) => s.setTopBarConfig);
 
   useEffect(() => {

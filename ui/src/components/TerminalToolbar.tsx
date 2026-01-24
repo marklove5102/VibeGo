@@ -1,5 +1,5 @@
+import { LayoutList, Plus, Trash2 } from "lucide-react";
 import React from "react";
-import { Plus, LayoutList, Trash2 } from "lucide-react";
 import type { TerminalSession } from "@/stores/terminalStore";
 import TerminalTabs from "./TerminalTabs";
 
@@ -36,25 +36,17 @@ const TerminalToolbar: React.FC<TerminalToolbarProps> = ({
               onTabClose={onTabClose}
             />
           ) : (
-            <span className="text-sm font-medium text-ide-text ml-2">
-              Terminals
-            </span>
+            <span className="text-sm font-medium text-ide-text ml-2">Terminals</span>
           )}
         </div>
 
         <div className="flex items-center gap-1 pl-2 border-l border-ide-border ml-2">
           <button
             onClick={onToggleListMode}
-            className={`p-2 rounded-md hover:bg-ide-bg ${
-              isListMode ? "text-ide-mute" : "text-ide-accent"
-            }`}
+            className={`p-2 rounded-md hover:bg-ide-bg ${isListMode ? "text-ide-mute" : "text-ide-accent"}`}
             title={isListMode ? "Back to Terminal" : "Terminal List"}
           >
-            {isListMode ? (
-              <LayoutList size={18} className="rotate-180" />
-            ) : (
-              <LayoutList size={18} />
-            )}
+            {isListMode ? <LayoutList size={18} className="rotate-180" /> : <LayoutList size={18} />}
           </button>
 
           <button

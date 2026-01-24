@@ -1,33 +1,31 @@
-import React, { useEffect, useCallback, useState } from "react";
-import {
-  useAppStore,
-  usePreviewStore,
-  useFileManagerStore,
-  useFrameStore,
-  useSessionStore,
-  type FileItem,
-  type Theme,
-  type Locale,
-} from "@/stores";
-
-import { AppFrame, NewGroupMenu } from "@/components/frame";
-import FileManager from "@/components/FileManager";
-import GitView from "@/components/GitView";
-import TerminalPage from "@/components/TerminalPage";
-import ProjectMenu from "@/components/ProjectMenu";
-import NewPageMenu from "@/components/NewPageMenu";
+import React, { useCallback, useEffect, useState } from "react";
+import { fileApi } from "@/api/file";
 import DiffView from "@/components/DiffView";
+import DirectoryPicker from "@/components/DirectoryPicker";
+import FileManager from "@/components/FileManager";
+import { AppFrame, NewGroupMenu } from "@/components/frame";
+import GitView from "@/components/GitView";
+import HomePage from "@/components/HomePage";
+import NewPageMenu from "@/components/NewPageMenu";
+import ProjectMenu from "@/components/ProjectMenu";
 import { FilePreview } from "@/components/preview";
 import SettingsPage from "@/components/SettingsPage";
-import HomePage from "@/components/HomePage";
-import DirectoryPicker from "@/components/DirectoryPicker";
-import { fileApi } from "@/api/file";
+import TerminalPage from "@/components/TerminalPage";
 import { useSettingsStore } from "@/lib/settings";
+import {
+  type FileItem,
+  type Locale,
+  type Theme,
+  useAppStore,
+  useFileManagerStore,
+  useFrameStore,
+  usePreviewStore,
+  useSessionStore,
+} from "@/stores";
 import "@/plugins";
 
 const App: React.FC = () => {
-  const { theme, locale, isMenuOpen, setMenuOpen, setTheme, setLocale } =
-    useAppStore();
+  const { theme, locale, isMenuOpen, setMenuOpen, setTheme, setLocale } = useAppStore();
 
   const resetPreview = usePreviewStore((s) => s.reset);
   const { currentPath } = useFileManagerStore();
@@ -43,7 +41,7 @@ const App: React.FC = () => {
   const addCurrentTab = useFrameStore((s) => s.addCurrentTab);
   const openPreviewTab = useFrameStore((s) => s.openPreviewTab);
   const addPluginGroup = useFrameStore((s) => s.addPluginGroup);
-  const addSettingsGroup = useFrameStore ((s) => s.addSettingsGroup);
+  const addSettingsGroup = useFrameStore((s) => s.addSettingsGroup);
   const initDefaultGroups = useFrameStore((s) => s.initDefaultGroups);
   const showHomePage = useFrameStore((s) => s.showHomePage);
 
@@ -124,7 +122,7 @@ const App: React.FC = () => {
         },
       });
     },
-    [addCurrentTab],
+    [addCurrentTab]
   );
 
   const handleFileOpen = useCallback(
@@ -135,7 +133,7 @@ const App: React.FC = () => {
         data: { type: "code", path: file.path, file },
       });
     },
-    [openPreviewTab],
+    [openPreviewTab]
   );
 
   const handleBackToList = useCallback(() => {
@@ -193,43 +191,34 @@ const App: React.FC = () => {
         data: { type: "plugin", pluginId: activeGroup.pluginId },
       });
     }
-  }, [
-    activeGroup,
-    currentView,
-    currentPath,
-    addCurrentTab,
-    tabs.length,
-    activeTabId,
-  ]);
+  }, [activeGroup, currentView, currentPath, addCurrentTab, tabs.length, activeTabId]);
 
   const handleOpenDirectory = useCallback(() => {
     setDirectoryPickerOpen(true);
   }, []);
 
-  const createSessionFromFolder = useSessionStore(
-    (s) => s.createSessionFromFolder,
-  );
+  const createSessionFromFolder = useSessionStore((s) => s.createSessionFromFolder);
 
   const handleDirectorySelect = useCallback(
     async (path: string) => {
       await createSessionFromFolder(path);
       setDirectoryPickerOpen(false);
     },
-    [createSessionFromFolder],
+    [createSessionFromFolder]
   );
 
   const handleOpenFolder = useCallback(
     async (path: string) => {
       await createSessionFromFolder(path);
     },
-    [createSessionFromFolder],
+    [createSessionFromFolder]
   );
 
   const handleNewPlugin = useCallback(
     (pluginId: string) => {
       addPluginGroup(pluginId, pluginId);
     },
-    [addPluginGroup],
+    [addPluginGroup]
   );
 
   const activeTab = tabs.find((t) => t.id === activeTabId);
@@ -251,23 +240,14 @@ const App: React.FC = () => {
 
     if (activeGroup.type === "plugin") {
       return (
-        <div className="h-full flex items-center justify-center text-ide-mute">
-          Plugin: {activeGroup.pluginId}
-        </div>
+        <div className="h-full flex items-center justify-center text-ide-mute">Plugin: {activeGroup.pluginId}</div>
       );
     }
 
     if (activeGroup.type === "folder") {
       if (currentView === "git") {
         if (activeTabId === null) {
-          return (
-            <GitView
-              path={activeGroup.path}
-              locale={locale}
-              onFileDiff={handleGitDiff}
-              isActive={true}
-            />
-          );
+          return <GitView path={activeGroup.path} locale={locale} onFileDiff={handleGitDiff} isActive={true} />;
         }
         if (activeTab?.data?.type === "diff") {
           return (
@@ -298,20 +278,13 @@ const App: React.FC = () => {
                   isHidden: false,
                   mode: "",
                   modTime: "",
-                  extension: activeTab.title.includes(".")
-                    ? "." + activeTab.title.split(".").pop()
-                    : "",
+                  extension: activeTab.title.includes(".") ? "." + activeTab.title.split(".").pop() : "",
                 }
               }
             />
           );
         }
-        return (
-          <FileManager
-            initialPath={activeGroup.path}
-            onFileOpen={handleFileOpen}
-          />
-        );
+        return <FileManager initialPath={activeGroup.path} onFileOpen={handleFileOpen} />;
       }
     }
 
@@ -320,11 +293,7 @@ const App: React.FC = () => {
 
   return (
     <>
-      <AppFrame
-        onMenuOpen={() => setMenuOpen(true)}
-        onTabAction={handleTabAction}
-        onBackToList={handleBackToList}
-      >
+      <AppFrame onMenuOpen={() => setMenuOpen(true)} onTabAction={handleTabAction} onBackToList={handleBackToList}>
         {renderContent()}
       </AppFrame>
       <ProjectMenu

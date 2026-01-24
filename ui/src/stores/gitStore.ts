@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { gitApi, type GitFileStatus, type GitCommit, type GitDiff } from "@/api/git";
+import { type GitCommit, type GitDiff, type GitFileStatus, gitApi } from "@/api/git";
 
 export interface GitFileNode {
   id: string;
@@ -125,17 +125,18 @@ export const useGitStore = create<GitState>((set, get) => ({
   setSelectedCommitFiles: (files) => set({ selectedCommitFiles: files }),
   setActiveTab: (tab) => set({ activeTab: tab }),
 
-  reset: () => set({
-    files: [],
-    stagedFiles: [],
-    unstagedFiles: [],
-    commits: [],
-    selectedCommit: null,
-    selectedCommitFiles: [],
-    commitMessage: "",
-    isLoading: false,
-    error: null,
-  }),
+  reset: () =>
+    set({
+      files: [],
+      stagedFiles: [],
+      unstagedFiles: [],
+      commits: [],
+      selectedCommit: null,
+      selectedCommitFiles: [],
+      commitMessage: "",
+      isLoading: false,
+      error: null,
+    }),
 
   fetchStatus: async () => {
     const { currentPath } = get();
@@ -151,7 +152,9 @@ export const useGitStore = create<GitState>((set, get) => ({
         files: [...staged, ...unstaged],
       });
     } catch (err) {
-      set({ error: err instanceof Error ? err.message : "Failed to fetch status" });
+      set({
+        error: err instanceof Error ? err.message : "Failed to fetch status",
+      });
     } finally {
       set({ isLoading: false });
     }
@@ -166,7 +169,9 @@ export const useGitStore = create<GitState>((set, get) => ({
       const res = await gitApi.log(currentPath, limit);
       set({ commits: res.commits });
     } catch (err) {
-      set({ error: err instanceof Error ? err.message : "Failed to fetch log" });
+      set({
+        error: err instanceof Error ? err.message : "Failed to fetch log",
+      });
     } finally {
       set({ isLoading: false });
     }
@@ -179,11 +184,13 @@ export const useGitStore = create<GitState>((set, get) => ({
     try {
       const res = await gitApi.branches(currentPath);
       set({
-        branches: res.branches.map(b => b.name),
+        branches: res.branches.map((b) => b.name),
         currentBranch: res.currentBranch,
       });
     } catch (err) {
-      set({ error: err instanceof Error ? err.message : "Failed to fetch branches" });
+      set({
+        error: err instanceof Error ? err.message : "Failed to fetch branches",
+      });
     }
   },
 
@@ -197,7 +204,9 @@ export const useGitStore = create<GitState>((set, get) => ({
       await fetchBranches();
       await fetchStatus();
     } catch (err) {
-      set({ error: err instanceof Error ? err.message : "Failed to switch branch" });
+      set({
+        error: err instanceof Error ? err.message : "Failed to switch branch",
+      });
     } finally {
       set({ isLoading: false });
     }
@@ -211,7 +220,9 @@ export const useGitStore = create<GitState>((set, get) => ({
       await gitApi.add(currentPath, [path]);
       await fetchStatus();
     } catch (err) {
-      set({ error: err instanceof Error ? err.message : "Failed to stage file" });
+      set({
+        error: err instanceof Error ? err.message : "Failed to stage file",
+      });
     }
   },
 
@@ -223,7 +234,9 @@ export const useGitStore = create<GitState>((set, get) => ({
       await gitApi.reset(currentPath, [path]);
       await fetchStatus();
     } catch (err) {
-      set({ error: err instanceof Error ? err.message : "Failed to unstage file" });
+      set({
+        error: err instanceof Error ? err.message : "Failed to unstage file",
+      });
     }
   },
 
@@ -232,10 +245,15 @@ export const useGitStore = create<GitState>((set, get) => ({
     if (!currentPath || unstagedFiles.length === 0) return;
 
     try {
-      await gitApi.add(currentPath, unstagedFiles.map((f) => f.path));
+      await gitApi.add(
+        currentPath,
+        unstagedFiles.map((f) => f.path)
+      );
       await fetchStatus();
     } catch (err) {
-      set({ error: err instanceof Error ? err.message : "Failed to stage all files" });
+      set({
+        error: err instanceof Error ? err.message : "Failed to stage all files",
+      });
     }
   },
 
@@ -244,10 +262,15 @@ export const useGitStore = create<GitState>((set, get) => ({
     if (!currentPath || stagedFiles.length === 0) return;
 
     try {
-      await gitApi.reset(currentPath, stagedFiles.map((f) => f.path));
+      await gitApi.reset(
+        currentPath,
+        stagedFiles.map((f) => f.path)
+      );
       await fetchStatus();
     } catch (err) {
-      set({ error: err instanceof Error ? err.message : "Failed to unstage all files" });
+      set({
+        error: err instanceof Error ? err.message : "Failed to unstage all files",
+      });
     }
   },
 
@@ -259,7 +282,9 @@ export const useGitStore = create<GitState>((set, get) => ({
       await gitApi.checkout(currentPath, [path]);
       await fetchStatus();
     } catch (err) {
-      set({ error: err instanceof Error ? err.message : "Failed to discard changes" });
+      set({
+        error: err instanceof Error ? err.message : "Failed to discard changes",
+      });
     }
   },
 

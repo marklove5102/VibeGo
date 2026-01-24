@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { terminalApi } from "@/api/terminal";
 import { useTerminalStore } from "@/stores";
 
@@ -19,12 +19,7 @@ export function useTerminalCreate(groupId: string) {
   const addTerminal = useTerminalStore((s) => s.addTerminal);
 
   return useMutation({
-    mutationFn: (opts?: {
-      name?: string;
-      cwd?: string;
-      cols?: number;
-      rows?: number;
-    }) => terminalApi.create(opts),
+    mutationFn: (opts?: { name?: string; cwd?: string; cols?: number; rows?: number }) => terminalApi.create(opts),
     onSuccess: (data) => {
       const name = data.name || "Terminal";
       addTerminal(groupId, { id: data.id, name });

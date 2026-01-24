@@ -1,14 +1,7 @@
 import { create } from "zustand";
 import type { FileItem } from "./fileManagerStore";
 
-export type PreviewType =
-  | "code"
-  | "image"
-  | "video"
-  | "audio"
-  | "pdf"
-  | "markdown"
-  | "unsupported";
+export type PreviewType = "code" | "image" | "video" | "audio" | "pdf" | "markdown" | "unsupported";
 
 interface PreviewState {
   file: FileItem | null;
@@ -71,10 +64,7 @@ const textMimeTypes = [
   "application/toml",
 ];
 
-export function getPreviewType(
-  mimeType?: string,
-  extension?: string,
-): PreviewType {
+export function getPreviewType(mimeType?: string, extension?: string): PreviewType {
   if (!mimeType && !extension) return "unsupported";
 
   const ext = extension?.toLowerCase() || "";
@@ -84,10 +74,8 @@ export function getPreviewType(
   if (mime.startsWith("video/")) return "video";
   if (mime.startsWith("audio/")) return "audio";
   if (mime === "application/pdf") return "pdf";
-  if (mime.startsWith("text/markdown") || ext === ".md" || ext === ".mdx")
-    return "markdown";
-  if (mime.startsWith("text/") || textMimeTypes.some((t) => mime.includes(t)))
-    return "code";
+  if (mime.startsWith("text/markdown") || ext === ".md" || ext === ".mdx") return "markdown";
+  if (mime.startsWith("text/") || textMimeTypes.some((t) => mime.includes(t))) return "code";
 
   const codeExtensions = [
     ".js",
@@ -165,16 +153,9 @@ export function getPreviewType(
 
   if (codeExtensions.includes(ext)) return "code";
   if (ext === ".pdf") return "pdf";
-  if (
-    [".jpg", ".jpeg", ".png", ".gif", ".svg", ".webp", ".bmp", ".ico"].includes(
-      ext,
-    )
-  )
-    return "image";
-  if ([".mp4", ".mov", ".avi", ".mkv", ".webm", ".m4v"].includes(ext))
-    return "video";
-  if ([".mp3", ".wav", ".ogg", ".flac", ".m4a", ".aac"].includes(ext))
-    return "audio";
+  if ([".jpg", ".jpeg", ".png", ".gif", ".svg", ".webp", ".bmp", ".ico"].includes(ext)) return "image";
+  if ([".mp4", ".mov", ".avi", ".mkv", ".webm", ".m4v"].includes(ext)) return "video";
+  if ([".mp3", ".wav", ".ogg", ".flac", ".m4a", ".aac"].includes(ext)) return "audio";
 
   return "unsupported";
 }

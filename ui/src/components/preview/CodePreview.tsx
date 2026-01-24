@@ -1,12 +1,9 @@
-import React, { useEffect, useRef, useMemo } from "react";
 import Editor, { type OnMount } from "@monaco-editor/react";
-import {
-  usePreviewStore,
-  getLanguageFromExtension,
-} from "@/stores/previewStore";
-import { useAppStore } from "@/stores/appStore";
 import { Loader2, Save } from "lucide-react";
+import React, { useEffect, useMemo, useRef } from "react";
 import { fileApi } from "@/api/file";
+import { useAppStore } from "@/stores/appStore";
+import { getLanguageFromExtension, usePreviewStore } from "@/stores/previewStore";
 
 interface CodePreviewProps {
   onSave?: () => void;
@@ -14,16 +11,7 @@ interface CodePreviewProps {
 
 const CodePreview: React.FC<CodePreviewProps> = ({ onSave }) => {
   const appTheme = useAppStore((s) => s.theme);
-  const {
-    file,
-    content,
-    originalContent,
-    editMode,
-    isDirty,
-    setContent,
-    setIsDirty,
-    setError,
-  } = usePreviewStore();
+  const { file, content, originalContent, editMode, isDirty, setContent, setIsDirty, setError } = usePreviewStore();
 
   const editorRef = useRef<Parameters<OnMount>[0] | null>(null);
 

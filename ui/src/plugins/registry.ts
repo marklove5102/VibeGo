@@ -1,6 +1,6 @@
-import React from "react";
 import type { LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
+import React from "react";
 
 export interface TopBarButton {
   icon: ReactNode;
@@ -89,9 +89,7 @@ class PluginRegistry {
   }
 
   getAll(): Plugin[] {
-    return Array.from(this.plugins.values()).sort(
-      (a, b) => (a.order ?? 100) - (b.order ?? 100),
-    );
+    return Array.from(this.plugins.values()).sort((a, b) => (a.order ?? 100) - (b.order ?? 100));
   }
 
   subscribe(listener: () => void): () => void {

@@ -1,9 +1,9 @@
-import React, { useState, useCallback } from "react";
 import { FolderOpen, Terminal } from "lucide-react";
-import RecentSessionList from "./RecentSessionList";
-import DirectoryPicker from "./DirectoryPicker";
-import { useTranslation, type Locale } from "@/lib/i18n";
+import React, { useCallback, useState } from "react";
+import { type Locale, useTranslation } from "@/lib/i18n";
 import { useSessionStore } from "@/stores/sessionStore";
+import DirectoryPicker from "./DirectoryPicker";
+import RecentSessionList from "./RecentSessionList";
 
 interface HomePageProps {
   onOpenFolder: (path: string) => void;
@@ -14,9 +14,7 @@ const HomePage: React.FC<HomePageProps> = ({ locale }) => {
   const t = useTranslation(locale);
   const [isPickerOpen, setPickerOpen] = useState(false);
   const [pathInput, setPathInput] = useState("");
-  const createSessionFromFolder = useSessionStore(
-    (s) => s.createSessionFromFolder,
-  );
+  const createSessionFromFolder = useSessionStore((s) => s.createSessionFromFolder);
 
   const handleSwitchSession = useCallback(() => {}, []);
 
@@ -25,7 +23,7 @@ const HomePage: React.FC<HomePageProps> = ({ locale }) => {
       await createSessionFromFolder(path);
       setPickerOpen(false);
     },
-    [createSessionFromFolder],
+    [createSessionFromFolder]
   );
 
   const handlePathSubmit = async (e: React.FormEvent) => {
@@ -45,18 +43,12 @@ const HomePage: React.FC<HomePageProps> = ({ locale }) => {
               <Terminal size={28} className="text-ide-accent sm:hidden" />
               <Terminal size={32} className="text-ide-accent hidden sm:block" />
             </div>
-            <h1 className="text-xl sm:text-2xl font-bold text-ide-text mb-2">
-              VibeGo
-            </h1>
-            <p className="text-sm sm:text-base text-ide-mute">
-              {t("home.welcome")}
-            </p>
+            <h1 className="text-xl sm:text-2xl font-bold text-ide-text mb-2">VibeGo</h1>
+            <p className="text-sm sm:text-base text-ide-mute">{t("home.welcome")}</p>
           </div>
 
           <div className="space-y-3">
-            <div className="text-xs text-ide-mute uppercase font-bold">
-              {t("home.openDirectory")}
-            </div>
+            <div className="text-xs text-ide-mute uppercase font-bold">{t("home.openDirectory")}</div>
             <div className="flex flex-col sm:flex-row gap-2">
               <button
                 onClick={() => setPickerOpen(true)}
@@ -86,10 +78,7 @@ const HomePage: React.FC<HomePageProps> = ({ locale }) => {
 
           <div className="space-y-3">
             <div className="bg-ide-panel border border-ide-border rounded-xl p-3 sm:p-4">
-              <RecentSessionList
-                onSwitchSession={handleSwitchSession}
-                locale={locale}
-              />
+              <RecentSessionList onSwitchSession={handleSwitchSession} locale={locale} />
             </div>
           </div>
         </div>
