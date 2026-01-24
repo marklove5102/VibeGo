@@ -2,3 +2,4 @@
 *.db
 ui/dist/index.html
 /tmp
+ui/CLAUDE.md
