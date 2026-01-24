@@ -1,9 +1,10 @@
 import { DiffEditor } from "@monaco-editor/react";
 import { AlertTriangle, Check, X } from "lucide-react";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { fileApi } from "@/api/file";
 import type { Locale } from "@/stores";
 import "@/lib/monaco";
+import { useAppStore } from "@/stores/app-store";
 
 interface ConflictViewProps {
   repoPath: string;
@@ -105,6 +106,7 @@ const ConflictView: React.FC<ConflictViewProps> = ({
   onCancel,
 }) => {
   const t = i18n[locale] || i18n.en;
+  const appTheme = useAppStore((s) => s.theme);
   const [loading, setLoading] = useState(true);
   const [ours, setOurs] = useState("");
   const [theirs, setTheirs] = useState("");
@@ -112,6 +114,10 @@ const ConflictView: React.FC<ConflictViewProps> = ({
   const [activeTab, setActiveTab] = useState<"compare" | "edit">("compare");
   const compareModelIdRef = useRef(`git-conflict-compare-${Date.now()}-${Math.random().toString(36).slice(2)}`);
   const editModelIdRef = useRef(`git-conflict-edit-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+
+  const editorTheme = useMemo(() => {
+    return appTheme === "light" ? "light" : "vs-dark";
+  }, [appTheme]);
 
   const language = getLanguageFromFilename(filePath);
   const filename = filePath.split("/").pop() || filePath;
@@ -207,7 +213,7 @@ const ConflictView: React.FC<ConflictViewProps> = ({
             original={ours}
             modified={theirs}
             language={language}
-            theme="vs-dark"
+            theme={editorTheme}
             keepCurrentOriginalModel={true}
             keepCurrentModifiedModel={true}
             originalModelPath={`${compareModelIdRef.current}-original`}
@@ -226,7 +232,7 @@ const ConflictView: React.FC<ConflictViewProps> = ({
             original={ours}
             modified={resolved}
             language={language}
-            theme="vs-dark"
+            theme={editorTheme}
             keepCurrentOriginalModel={true}
             keepCurrentModifiedModel={true}
             originalModelPath={`${editModelIdRef.current}-original`}

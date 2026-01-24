@@ -3,6 +3,7 @@ import { Columns2, Plus, Rows2 } from "lucide-react";
 import React, { useMemo, useRef, useState } from "react";
 import type * as Monaco from "monaco-editor";
 import "@/lib/monaco";
+import { useAppStore } from "@/stores/app-store";
 
 interface DiffViewProps {
   original: string;
@@ -67,10 +68,15 @@ const DiffView: React.FC<DiffViewProps> = ({
   allowPartialStaging = false,
   onStageSelected,
 }) => {
+  const appTheme = useAppStore((s) => s.theme);
   const [renderSideBySide, setRenderSideBySide] = useState(true);
   const editorRef = useRef<Monaco.editor.IStandaloneDiffEditor | null>(null);
   const [hasSelection, setHasSelection] = useState(false);
   const modelIdRef = useRef(`git-diff-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+
+  const editorTheme = useMemo(() => {
+    return appTheme === "light" ? "light" : "vs-dark";
+  }, [appTheme]);
 
   const detectedLanguage = useMemo(() => {
     return language || getLanguageFromFilename(filename);
@@ -159,7 +165,7 @@ const DiffView: React.FC<DiffViewProps> = ({
           original={original}
           modified={modified}
           language={detectedLanguage}
-          theme="vs-dark"
+          theme={editorTheme}
           keepCurrentOriginalModel={true}
           keepCurrentModifiedModel={true}
           originalModelPath={`${modelIdRef.current}-original`}
