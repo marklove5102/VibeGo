@@ -12,6 +12,8 @@ async function request<T>(endpoint: string, options?: RequestInit): Promise<T> {
   return res.json();
 }
 
+export type TerminalStatus = "running" | "exited" | "closed";
+
 export interface TerminalInfo {
   id: string;
   name: string;
@@ -19,8 +21,7 @@ export interface TerminalInfo {
   cwd: string;
   cols: number;
   rows: number;
-  status: string;
-  pty_status: string;
+  status: TerminalStatus;
   exit_code: number;
   history_size: number;
   created_at: number;

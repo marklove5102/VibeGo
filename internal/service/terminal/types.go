@@ -15,7 +15,6 @@ type TerminalInfo struct {
 	Cols      int    `json:"cols"`
 	Rows      int    `json:"rows"`
 	Status    string `json:"status"`
-	PTYStatus string `json:"pty_status"`
 	CreatedAt int64  `json:"created_at"`
 	UpdatedAt int64  `json:"updated_at"`
 }
@@ -75,7 +74,6 @@ func sessionToInfo(s *model.TerminalSession) *TerminalInfo {
 		Cols:      s.Cols,
 		Rows:      s.Rows,
 		Status:    s.Status,
-		PTYStatus: s.PTYStatus,
 		CreatedAt: s.CreatedAt,
 		UpdatedAt: s.UpdatedAt,
 	}

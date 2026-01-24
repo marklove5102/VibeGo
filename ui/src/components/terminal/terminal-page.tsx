@@ -32,7 +32,7 @@ const TerminalPage: React.FC<TerminalPageProps> = ({ groupId, cwd }) => {
 
   const handleTerminalExited = useCallback(
     (terminalId: string) => {
-      setTerminalStatus(groupId, terminalId, "closed", "exited");
+      setTerminalStatus(groupId, terminalId, "exited");
     },
     [groupId, setTerminalStatus]
   );
@@ -98,7 +98,7 @@ const TerminalPage: React.FC<TerminalPageProps> = ({ groupId, cwd }) => {
           <div className="flex items-center gap-2 overflow-x-auto no-scrollbar touch-pan-x h-full">
             {displayTerminals.map((terminal) => {
               const isActive = !listManagerOpen && terminal.id === activeTerminalId;
-              const isClosed = terminal.status === "closed" || terminal.ptyStatus === "exited";
+              const isClosed = terminal.status !== "running";
               return (
                 <div
                   key={terminal.id}
@@ -184,7 +184,7 @@ const TerminalPage: React.FC<TerminalPageProps> = ({ groupId, cwd }) => {
               key={terminal.id}
               terminalId={terminal.id}
               isActive={terminal.id === activeTerminalId}
-              isExited={terminal.status === "closed" || terminal.ptyStatus === "exited"}
+              isExited={terminal.status !== "running"}
               onExited={() => handleTerminalExited(terminal.id)}
             />
           ))

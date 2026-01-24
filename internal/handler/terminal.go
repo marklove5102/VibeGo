@@ -47,7 +47,6 @@ type TerminalInfo struct {
 	Cols        int    `json:"cols"`
 	Rows        int    `json:"rows"`
 	Status      string `json:"status"`
-	PTYStatus   string `json:"pty_status"`
 	ExitCode    int    `json:"exit_code"`
 	HistorySize int64  `json:"history_size"`
 	CreatedAt   int64  `json:"created_at"`
@@ -77,7 +76,6 @@ func (h *TerminalHandler) List(c *gin.Context) {
 			Cols:      s.Cols,
 			Rows:      s.Rows,
 			Status:    s.Status,
-			PTYStatus: s.PTYStatus,
 			CreatedAt: s.CreatedAt,
 			UpdatedAt: s.UpdatedAt,
 		}

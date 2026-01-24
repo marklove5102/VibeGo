@@ -139,7 +139,7 @@ const TerminalListManager: React.FC<TerminalListManagerProps> = ({
             {terminals.map((terminal) => {
               const isCurrent = terminal.id === activeTerminalId;
               const isEditing = editingId === terminal.id;
-              const isClosed = terminal.status === "closed" || terminal.ptyStatus === "exited";
+              const isClosed = terminal.status !== "running";
 
               return (
                 <div

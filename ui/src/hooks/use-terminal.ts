@@ -35,7 +35,7 @@ export function useTerminalClose(groupId: string) {
   return useMutation({
     mutationFn: (id: string) => terminalApi.close(id),
     onSuccess: (_, id) => {
-      setTerminalStatus(groupId, id, "closed", "exited");
+      setTerminalStatus(groupId, id, "closed");
       queryClient.invalidateQueries({ queryKey: terminalKeys.list() });
     },
   });

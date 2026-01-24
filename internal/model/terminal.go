@@ -9,7 +9,6 @@ type TerminalSession struct {
 	Cols        int    `gorm:"column:cols" json:"cols"`
 	Rows        int    `gorm:"column:rows" json:"rows"`
 	Status      string `gorm:"column:status" json:"status"`
-	PTYStatus   string `gorm:"column:pty_status" json:"pty_status"`
 	ExitCode    int    `gorm:"column:exit_code" json:"exit_code"`
 	HistorySize int64  `gorm:"column:history_size" json:"history_size"`
 	CreatedAt   int64  `gorm:"column:created_at" json:"created_at"`
@@ -21,9 +20,7 @@ func (TerminalSession) TableName() string {
 }
 
 const (
-	StatusActive = "active"
-	StatusClosed = "closed"
-
-	PTYStatusRunning = "running"
-	PTYStatusExited  = "exited"
+	StatusRunning = "running"
+	StatusExited  = "exited"
+	StatusClosed  = "closed"
 )

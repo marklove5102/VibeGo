@@ -110,11 +110,8 @@ func TestTerminalHandlerList(t *testing.T) {
 	for _, term := range terminals {
 		if term.ID == info1.ID || term.ID == info2.ID {
 			found = true
-			if term.Status != model.StatusActive {
-				t.Errorf("expected status %s, got %s", model.StatusActive, term.Status)
-			}
-			if term.PTYStatus != model.PTYStatusRunning {
-				t.Errorf("expected PTY status %s, got %s", model.PTYStatusRunning, term.PTYStatus)
+			if term.Status != model.StatusRunning {
+				t.Errorf("expected status %s, got %s", model.StatusRunning, term.Status)
 			}
 		}
 	}
@@ -201,7 +198,7 @@ func TestTerminalHistoryPersistence(t *testing.T) {
 		t.Fatal("session not found")
 	}
 
-	if found.PTYStatus != model.PTYStatusRunning {
-		t.Errorf("expected PTY status %s, got %s", model.PTYStatusRunning, found.PTYStatus)
+	if found.Status != model.StatusRunning {
+		t.Errorf("expected status %s, got %s", model.StatusRunning, found.Status)
 	}
 }

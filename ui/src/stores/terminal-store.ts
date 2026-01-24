@@ -1,14 +1,12 @@
 import { create } from "zustand";
 
-export type TerminalStatus = "active" | "closed";
-export type PTYStatus = "running" | "exited";
+export type TerminalStatus = "running" | "exited" | "closed";
 
 export interface TerminalSession {
   id: string;
   name: string;
   pinned?: boolean;
   status?: TerminalStatus;
-  ptyStatus?: PTYStatus;
 }
 
 interface TerminalState {
@@ -26,7 +24,7 @@ interface TerminalState {
   updateTerminal: (groupId: string, id: string, updates: Partial<TerminalSession>) => void;
   renameTerminal: (groupId: string, id: string, name: string) => void;
   pinTerminal: (groupId: string, id: string) => void;
-  setTerminalStatus: (groupId: string, id: string, status: TerminalStatus, ptyStatus?: PTYStatus) => void;
+  setTerminalStatus: (groupId: string, id: string, status: TerminalStatus) => void;
   isListManagerOpen: (groupId: string) => boolean;
   setListManagerOpen: (groupId: string, open: boolean) => void;
   reset: () => void;
@@ -46,7 +44,7 @@ export const useTerminalStore = create<TerminalState>((set, get) => ({
       return {
         terminalsByGroup: {
           ...s.terminalsByGroup,
-          [groupId]: [...(s.terminalsByGroup[groupId] || []), { ...terminal, status: "active" as TerminalStatus, ptyStatus: "running" as PTYStatus }],
+          [groupId]: [...(s.terminalsByGroup[groupId] || []), { ...terminal, status: "running" as TerminalStatus }],
         },
         activeIdByGroup: {
           ...s.activeIdByGroup,
@@ -150,12 +148,12 @@ export const useTerminalStore = create<TerminalState>((set, get) => ({
       },
     })),
 
-  setTerminalStatus: (groupId, id, status, ptyStatus) =>
+  setTerminalStatus: (groupId, id, status) =>
     set((s) => ({
       terminalsByGroup: {
         ...s.terminalsByGroup,
         [groupId]: (s.terminalsByGroup[groupId] || []).map((t) =>
-          t.id === id ? { ...t, status, ptyStatus: ptyStatus ?? t.ptyStatus } : t
+          t.id === id ? { ...t, status } : t
         ),
       },
     })),

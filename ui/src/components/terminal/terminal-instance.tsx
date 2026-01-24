@@ -14,7 +14,11 @@ interface TerminalInstanceProps {
   onExited?: () => void;
 }
 
-type TranslationFn = (key: string) => string;
+interface CallbackRefs {
+  isExited: boolean;
+  onExited?: () => void;
+  t: (key: string) => string;
+}
 
 const getXtermTheme = (appTheme: Theme): ITheme => {
   const isDark = appTheme !== "light";
@@ -100,30 +104,20 @@ const TerminalInstance: React.FC<TerminalInstanceProps> = ({ terminalId, isActiv
   const fitAddonRef = useRef<FitAddon | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const initializedRef = useRef(false);
-  const isExitedRef = useRef(isExited);
-  const onExitedRef = useRef(onExited);
-  const tRef = useRef<TranslationFn>((key: string) => key);
   const isUnmountingRef = useRef(false);
+  const callbacksRef = useRef<CallbackRefs>({ isExited, onExited, t: (key: string) => key });
 
   const theme = useAppStore((s) => s.theme);
   const locale = useAppStore((s) => s.locale);
   const t = useTranslation(locale);
 
   useEffect(() => {
-    tRef.current = t;
-  }, [t]);
-
-  useEffect(() => {
-    onExitedRef.current = onExited;
-  }, [onExited]);
-
-  useEffect(() => {
-    isExitedRef.current = isExited;
+    callbacksRef.current = { isExited, onExited, t };
     if (isExited && terminalRef.current) {
       terminalRef.current.options.cursorBlink = false;
       terminalRef.current.options.disableStdin = true;
     }
-  }, [isExited]);
+  }, [isExited, onExited, t]);
 
   const connectWebSocket = useCallback(
     (terminal: Terminal) => {
@@ -162,11 +156,12 @@ const TerminalInstance: React.FC<TerminalInstanceProps> = ({ terminalId, isActiv
               console.warn("Failed to decode base64:", e);
             }
           } else if (msg.type === "pty_exited") {
-            terminal.write(`\r\n[${tRef.current("terminal.processExited")}]\r\n`);
+            const { t: translate, onExited: exitCallback } = callbacksRef.current;
+            terminal.write(`\r\n[${translate("terminal.processExited")}]\r\n`);
             terminal.options.cursorBlink = false;
             terminal.options.disableStdin = true;
-            isExitedRef.current = true;
-            onExitedRef.current?.();
+            callbacksRef.current.isExited = true;
+            exitCallback?.();
           }
         } catch (e) {
           console.warn("Failed to parse WebSocket message:", e);
@@ -175,15 +170,17 @@ const TerminalInstance: React.FC<TerminalInstanceProps> = ({ terminalId, isActiv
 
       ws.onclose = () => {
         if (isUnmountingRef.current) return;
-        terminal.write(`\r\n[${tRef.current("terminal.connectionClosed")}]\r\n`);
+        const { t: translate, onExited: exitCallback } = callbacksRef.current;
+        terminal.write(`\r\n[${translate("terminal.connectionClosed")}]\r\n`);
         terminal.options.cursorBlink = false;
         terminal.options.disableStdin = true;
-        isExitedRef.current = true;
-        onExitedRef.current?.();
+        callbacksRef.current.isExited = true;
+        exitCallback?.();
       };
 
       ws.onerror = () => {
-        terminal.write(`\r\n[${tRef.current("terminal.connectionError")}]\r\n`);
+        const { t: translate } = callbacksRef.current;
+        terminal.write(`\r\n[${translate("terminal.connectionError")}]\r\n`);
       };
     },
     [terminalId]
@@ -222,7 +219,7 @@ const TerminalInstance: React.FC<TerminalInstanceProps> = ({ terminalId, isActiv
     fitAddonRef.current = fitAddon;
 
     terminal.onData((data) => {
-      if (isExitedRef.current) return;
+      if (callbacksRef.current.isExited) return;
       if (wsRef.current?.readyState === WebSocket.OPEN) {
         const msg = {
           type: "cmd",

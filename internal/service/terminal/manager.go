@@ -31,7 +31,7 @@ type activeTerminal struct {
 	Done          chan struct{}
 	historyBuffer *historyBuffer
 	historyMu     sync.RWMutex
-	ptyStatus     atomic.Value
+	status        atomic.Value
 	flushTicker   *time.Ticker
 	bufferSize    int
 	encoder       *base64.Encoding
@@ -100,8 +100,7 @@ func (m *Manager) Create(opts CreateOptions) (*TerminalInfo, error) {
 		Cwd:       cwd,
 		Cols:      cols,
 		Rows:      rows,
-		Status:    model.StatusActive,
-		PTYStatus: model.PTYStatusRunning,
+		Status:    model.StatusRunning,
 		CreatedAt: now,
 		UpdatedAt: now,
 	}
@@ -121,7 +120,7 @@ func (m *Manager) Create(opts CreateOptions) (*TerminalInfo, error) {
 		bufferSize:    m.bufferSize,
 		encoder:       base64.StdEncoding,
 	}
-	active.ptyStatus.Store(model.PTYStatusRunning)
+	active.status.Store(model.StatusRunning)
 
 	m.terminals.Store(session.ID, active)
 
@@ -159,8 +158,7 @@ func (m *Manager) Get(id string) (*TerminalInfo, bool) {
 		Cwd:       at.Session.Cwd,
 		Cols:      at.Session.Cols,
 		Rows:      at.Session.Rows,
-		Status:    at.Session.Status,
-		PTYStatus: at.ptyStatus.Load().(string),
+		Status:    at.status.Load().(string),
 		CreatedAt: at.Session.CreatedAt,
 		UpdatedAt: at.Session.UpdatedAt,
 	}, true
@@ -209,7 +207,6 @@ func (m *Manager) Close(id string) error {
 
 	m.db.Model(&model.TerminalSession{}).Where("id = ?", id).Updates(map[string]any{
 		"status":     model.StatusClosed,
-		"pty_status": model.PTYStatusExited,
 		"updated_at": time.Now().Unix(),
 	})
 
@@ -262,10 +259,10 @@ func (m *Manager) ptyReadLoop(at *activeTerminal) {
 func (m *Manager) monitorPTY(at *activeTerminal, pty *localCommand) {
 	<-pty.ptyClosed
 
-	at.ptyStatus.Store(model.PTYStatusExited)
+	at.status.Store(model.StatusExited)
 
 	m.db.Model(&model.TerminalSession{}).Where("id = ?", at.ID).Updates(map[string]any{
-		"pty_status": model.PTYStatusExited,
+		"status":     model.StatusExited,
 		"updated_at": time.Now().Unix(),
 	})
 
@@ -386,9 +383,8 @@ func (m *Manager) replayHistory(at *activeTerminal, mst master) error {
 }
 
 func (m *Manager) CleanupOnStart() {
-	m.db.Model(&model.TerminalSession{}).Where("pty_status = ?", model.PTYStatusRunning).Updates(map[string]any{
-		"status":     model.StatusClosed,
-		"pty_status": model.PTYStatusExited,
+	m.db.Model(&model.TerminalSession{}).Where("status = ?", model.StatusRunning).Updates(map[string]any{
+		"status":     model.StatusExited,
 		"updated_at": time.Now().Unix(),
 	})
 }
