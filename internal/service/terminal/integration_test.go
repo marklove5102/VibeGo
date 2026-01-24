@@ -36,8 +36,8 @@ func TestManager_CreateAndClose(t *testing.T) {
 		t.Fatalf("failed to create terminal: %v", err)
 	}
 
-	if info.Status != model.StatusActive {
-		t.Errorf("expected status %s, got %s", model.StatusActive, info.Status)
+	if info.Status != model.StatusRunning {
+		t.Errorf("expected status %s, got %s", model.StatusRunning, info.Status)
 	}
 
 	gotInfo, ok := manager.Get(info.ID)
