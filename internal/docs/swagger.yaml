@@ -7,6 +7,18 @@ definitions:
     required:
     - id
     type: object
+  handler.CreateBranchRequest:
+    properties:
+      branch:
+        type: string
+      from:
+        type: string
+      path:
+        type: string
+    required:
+    - branch
+    - path
+    type: object
   handler.DeleteBatchRequest:
     properties:
       ids:
@@ -15,6 +27,16 @@ definitions:
         type: array
     required:
     - ids
+    type: object
+  handler.DeleteBranchRequest:
+    properties:
+      branch:
+        type: string
+      path:
+        type: string
+    required:
+    - branch
+    - path
     type: object
   handler.DeleteTerminalRequest:
     properties:
@@ -322,6 +344,19 @@ definitions:
       path:
         type: string
     type: object
+  handler.GitAddPatchRequest:
+    properties:
+      filePath:
+        type: string
+      patch:
+        type: string
+      path:
+        type: string
+    required:
+    - filePath
+    - patch
+    - path
+    type: object
   handler.GitCloneRequest:
     properties:
       path:
@@ -331,6 +366,29 @@ definitions:
     required:
     - path
     - url
+    type: object
+  handler.GitCommitDiffRequest:
+    properties:
+      commit:
+        type: string
+      filePath:
+        type: string
+      path:
+        type: string
+    required:
+    - commit
+    - filePath
+    - path
+    type: object
+  handler.GitCommitFilesRequest:
+    properties:
+      commit:
+        type: string
+      path:
+        type: string
+    required:
+    - commit
+    - path
     type: object
   handler.GitCommitRequest:
     properties:
@@ -354,6 +412,15 @@ definitions:
         type: string
     required:
     - filePath
+    - path
+    type: object
+  handler.GitFetchRequest:
+    properties:
+      path:
+        type: string
+      remote:
+        type: string
+    required:
     - path
     type: object
   handler.GitFilesRequest:
@@ -391,6 +458,26 @@ definitions:
     required:
     - path
     type: object
+  handler.GitPullRequest:
+    properties:
+      branch:
+        type: string
+      path:
+        type: string
+      remote:
+        type: string
+    required:
+    - path
+    type: object
+  handler.GitPushRequest:
+    properties:
+      path:
+        type: string
+      remote:
+        type: string
+    required:
+    - path
+    type: object
   handler.GitResetRequest:
     properties:
       files:
@@ -400,6 +487,19 @@ definitions:
       path:
         type: string
     required:
+    - path
+    type: object
+  handler.GitResolveConflictRequest:
+    properties:
+      content:
+        type: string
+      filePath:
+        type: string
+      path:
+        type: string
+    required:
+    - content
+    - filePath
     - path
     type: object
   handler.GitShowRequest:
@@ -412,6 +512,24 @@ definitions:
         type: string
     required:
     - filePath
+    - path
+    type: object
+  handler.GitStashIndexRequest:
+    properties:
+      index:
+        type: integer
+      path:
+        type: string
+    required:
+    - path
+    type: object
+  handler.GitStashRequest:
+    properties:
+      message:
+        type: string
+      path:
+        type: string
+    required:
     - path
     type: object
   handler.LoginRequest:
@@ -467,6 +585,16 @@ definitions:
         type: string
       username:
         type: string
+    type: object
+  handler.SwitchBranchRequest:
+    properties:
+      branch:
+        type: string
+      path:
+        type: string
+    required:
+    - branch
+    - path
     type: object
   handler.TerminalInfo:
     properties:
@@ -1222,6 +1350,78 @@ paths:
       summary: Stage files
       tags:
       - Git
+  /api/git/add-patch:
+    post:
+      consumes:
+      - application/json
+      description: Apply a unified diff patch to the staging area (uses git CLI for
+        git apply --cached)
+      parameters:
+      - description: Add patch request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handler.GitAddPatchRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: boolean
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Apply patch to staging
+      tags:
+      - Git
+  /api/git/branches:
+    post:
+      consumes:
+      - application/json
+      description: Get list of local branches and current branch
+      parameters:
+      - description: Path request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handler.GitPathRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: List branches
+      tags:
+      - Git
   /api/git/checkout:
     post:
       consumes:
@@ -1329,6 +1529,182 @@ paths:
       summary: Create commit
       tags:
       - Git
+  /api/git/commit-diff:
+    post:
+      consumes:
+      - application/json
+      description: Get diff of a specific file in a commit compared to its parent
+      parameters:
+      - description: Commit diff request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handler.GitCommitDiffRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Get commit file diff
+      tags:
+      - Git
+  /api/git/commit-files:
+    post:
+      consumes:
+      - application/json
+      description: Get list of changed files in a specific commit
+      parameters:
+      - description: Commit files request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handler.GitCommitFilesRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Get commit files
+      tags:
+      - Git
+  /api/git/conflicts:
+    post:
+      consumes:
+      - application/json
+      description: Get list of files with merge conflicts
+      parameters:
+      - description: Path request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handler.GitPathRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: List conflict files
+      tags:
+      - Git
+  /api/git/create-branch:
+    post:
+      consumes:
+      - application/json
+      description: Create a new branch from HEAD or specified source
+      parameters:
+      - description: Create branch request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handler.CreateBranchRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Create branch
+      tags:
+      - Git
+  /api/git/delete-branch:
+    post:
+      consumes:
+      - application/json
+      description: Delete a local branch (cannot delete current branch)
+      parameters:
+      - description: Delete branch request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handler.DeleteBranchRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: boolean
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Delete branch
+      tags:
+      - Git
   /api/git/diff:
     post:
       consumes:
@@ -1362,6 +1738,42 @@ paths:
               type: string
             type: object
       summary: Get file diff
+      tags:
+      - Git
+  /api/git/fetch:
+    post:
+      consumes:
+      - application/json
+      description: Fetch updates from a remote repository
+      parameters:
+      - description: Fetch request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handler.GitFetchRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: boolean
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Fetch from remote
       tags:
       - Git
   /api/git/init:
@@ -1435,6 +1847,113 @@ paths:
       summary: Get git log
       tags:
       - Git
+  /api/git/pull:
+    post:
+      consumes:
+      - application/json
+      description: Pull updates from a remote repository and merge
+      parameters:
+      - description: Pull request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handler.GitPullRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: boolean
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Pull from remote
+      tags:
+      - Git
+  /api/git/push:
+    post:
+      consumes:
+      - application/json
+      description: Push local commits to a remote repository
+      parameters:
+      - description: Push request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handler.GitPushRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: boolean
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Push to remote
+      tags:
+      - Git
+  /api/git/remotes:
+    post:
+      consumes:
+      - application/json
+      description: Get list of remote repositories
+      parameters:
+      - description: Path request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handler.GitPathRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: List remotes
+      tags:
+      - Git
   /api/git/reset:
     post:
       consumes:
@@ -1469,6 +1988,43 @@ paths:
               type: string
             type: object
       summary: Unstage files
+      tags:
+      - Git
+  /api/git/resolve-conflict:
+    post:
+      consumes:
+      - application/json
+      description: Resolve a merge conflict by writing resolved content and staging
+        the file
+      parameters:
+      - description: Resolve conflict request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handler.GitResolveConflictRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: boolean
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Resolve conflict
       tags:
       - Git
   /api/git/show:
@@ -1513,6 +2069,152 @@ paths:
       summary: Show file at ref
       tags:
       - Git
+  /api/git/stash:
+    post:
+      consumes:
+      - application/json
+      description: Stash current working directory changes (uses git CLI as go-git
+        lacks native stash support)
+      parameters:
+      - description: Stash request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handler.GitStashRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Stash changes
+      tags:
+      - Git
+  /api/git/stash-drop:
+    post:
+      consumes:
+      - application/json
+      description: Remove a stash entry without applying (uses git CLI as go-git lacks
+        native stash support)
+      parameters:
+      - description: Stash index request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handler.GitStashIndexRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: boolean
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Drop stash
+      tags:
+      - Git
+  /api/git/stash-list:
+    post:
+      consumes:
+      - application/json
+      description: Get list of stashed changes (uses git CLI as go-git lacks native
+        stash support)
+      parameters:
+      - description: Path request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handler.GitPathRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: List stashes
+      tags:
+      - Git
+  /api/git/stash-pop:
+    post:
+      consumes:
+      - application/json
+      description: Apply and remove a stash entry (uses git CLI as go-git lacks native
+        stash support)
+      parameters:
+      - description: Stash index request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handler.GitStashIndexRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: boolean
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Pop stash
+      tags:
+      - Git
   /api/git/status:
     post:
       consumes:
@@ -1546,6 +2248,41 @@ paths:
               type: string
             type: object
       summary: Get git status
+      tags:
+      - Git
+  /api/git/switch-branch:
+    post:
+      consumes:
+      - application/json
+      description: Checkout to a different branch
+      parameters:
+      - description: Switch branch request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handler.SwitchBranchRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Switch branch
       tags:
       - Git
   /api/git/undo:
