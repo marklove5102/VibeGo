@@ -1,5 +1,5 @@
 import { Terminal } from "lucide-react";
-import React from "react";
+import type React from "react";
 import TerminalPage from "@/components/TerminalPage";
 import { type PluginViewProps, registerPlugin } from "../registry";
 
