@@ -2,13 +2,13 @@ package model
 
 type TerminalSession struct {
 	ID          string `gorm:"column:id;primaryKey" json:"id"`
-	UserID      string `gorm:"column:user_id;index" json:"user_id"`
+	UserID      string `gorm:"column:user_id;index:idx_user_status;constraint:OnDelete:CASCADE" json:"user_id"`
 	Name        string `gorm:"column:name" json:"name"`
 	Shell       string `gorm:"column:shell" json:"shell"`
 	Cwd         string `gorm:"column:cwd" json:"cwd"`
 	Cols        int    `gorm:"column:cols" json:"cols"`
 	Rows        int    `gorm:"column:rows" json:"rows"`
-	Status      string `gorm:"column:status" json:"status"`
+	Status      string `gorm:"column:status;index:idx_user_status" json:"status"`
 	ExitCode    int    `gorm:"column:exit_code" json:"exit_code"`
 	HistorySize int64  `gorm:"column:history_size" json:"history_size"`
 	CreatedAt   int64  `gorm:"column:created_at" json:"created_at"`
