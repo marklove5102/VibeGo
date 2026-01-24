@@ -4,8 +4,6 @@ import {
   Files,
   GitGraph,
   Terminal,
-  Cpu,
-  Wifi,
   FolderOpen,
   Box,
   Settings,
@@ -257,32 +255,17 @@ const BottomBar: React.FC<BottomBarProps> = ({ onMenuClick }) => {
         )}
 
         <div className="flex items-center gap-2 px-4">
-          <div className="flex items-center gap-2">
-            {rightButtons.map((button, index) => (
-              <button
-                key={index}
-                onClick={button.onClick}
-                disabled={button.disabled}
-                title={button.label}
-                className={`${cornerButtonClass} ${button.label ? "px-3" : "w-8"} gap-1.5 text-xs ${button.active ? "bg-ide-accent text-ide-bg border-ide-accent" : ""} ${button.disabled ? "opacity-50 cursor-not-allowed" : ""}`}
-              >
-                <span className="text-[16px] leading-none">{button.icon}</span>
-                {button.label && (
-                  <span className="hidden sm:inline">{button.label}</span>
-                )}
-              </button>
-            ))}
-          </div>
-          <div className="hidden sm:flex items-center gap-3 text-ide-mute text-[10px] font-bold">
-            <div className="flex items-center gap-1">
-              <Cpu size={14} />
-              <span>12%</span>
-            </div>
-            <div className="flex items-center gap-1 text-ide-accent animate-pulse">
-              <Wifi size={14} />
-              <span>ONLINE</span>
-            </div>
-          </div>
+          {rightButtons.map((button, index) => (
+            <button
+              key={index}
+              onClick={button.onClick}
+              disabled={button.disabled}
+              title={button.label}
+              className={`${cornerButtonClass} ${button.active ? "bg-ide-accent text-ide-bg border-ide-accent" : ""} ${button.disabled ? "opacity-50 cursor-not-allowed" : ""}`}
+            >
+              {button.icon}
+            </button>
+          ))}
         </div>
       </footer>
     </>
