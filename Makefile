@@ -1,4 +1,4 @@
-.PHONY: generate-docs
+.PHONY: generate-docs clean-code format
 
 generate-docs:
 	@echo "Generating docs..."
@@ -10,4 +10,9 @@ clean-code:
 
 format:
 	gofmt -w .
-	cd ui && pnpm format
+
+dev-server:
+	go run main.go --log-level debug
+
+dev-ui:
+	cd ui && pnpm run dev
