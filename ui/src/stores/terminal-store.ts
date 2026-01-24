@@ -1,9 +1,14 @@
 import { create } from "zustand";
 
+export type TerminalStatus = "active" | "closed";
+export type PTYStatus = "running" | "exited";
+
 export interface TerminalSession {
   id: string;
   name: string;
   pinned?: boolean;
+  status?: TerminalStatus;
+  ptyStatus?: PTYStatus;
 }
 
 interface TerminalState {
@@ -21,6 +26,7 @@ interface TerminalState {
   updateTerminal: (groupId: string, id: string, updates: Partial<TerminalSession>) => void;
   renameTerminal: (groupId: string, id: string, name: string) => void;
   pinTerminal: (groupId: string, id: string) => void;
+  setTerminalStatus: (groupId: string, id: string, status: TerminalStatus, ptyStatus?: PTYStatus) => void;
   isListManagerOpen: (groupId: string) => boolean;
   setListManagerOpen: (groupId: string, open: boolean) => void;
   reset: () => void;
@@ -37,24 +43,19 @@ export const useTerminalStore = create<TerminalState>((set, get) => ({
 
   addTerminal: (groupId, terminal) =>
     set((s) => {
-      const isRestoring = s.terminalsByGroup[groupId]?.length > 0;
       return {
         terminalsByGroup: {
           ...s.terminalsByGroup,
-          [groupId]: [...(s.terminalsByGroup[groupId] || []), terminal],
+          [groupId]: [...(s.terminalsByGroup[groupId] || []), { ...terminal, status: "active" as TerminalStatus, ptyStatus: "running" as PTYStatus }],
         },
-        activeIdByGroup: isRestoring
-          ? s.activeIdByGroup
-          : {
-              ...s.activeIdByGroup,
-              [groupId]: terminal.id,
-            },
-        listManagerOpenByGroup: isRestoring
-          ? s.listManagerOpenByGroup
-          : {
-              ...s.listManagerOpenByGroup,
-              [groupId]: false,
-            },
+        activeIdByGroup: {
+          ...s.activeIdByGroup,
+          [groupId]: terminal.id,
+        },
+        listManagerOpenByGroup: {
+          ...s.listManagerOpenByGroup,
+          [groupId]: false,
+        },
       };
     }),
 
@@ -146,6 +147,16 @@ export const useTerminalStore = create<TerminalState>((set, get) => ({
       terminalsByGroup: {
         ...s.terminalsByGroup,
         [groupId]: (s.terminalsByGroup[groupId] || []).map((t) => (t.id === id ? { ...t, pinned: true } : t)),
+      },
+    })),
+
+  setTerminalStatus: (groupId, id, status, ptyStatus) =>
+    set((s) => ({
+      terminalsByGroup: {
+        ...s.terminalsByGroup,
+        [groupId]: (s.terminalsByGroup[groupId] || []).map((t) =>
+          t.id === id ? { ...t, status, ptyStatus: ptyStatus ?? t.ptyStatus } : t
+        ),
       },
     })),
 

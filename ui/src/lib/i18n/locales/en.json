@@ -32,6 +32,16 @@
     "replace": "Replace",
     "delete": "Delete"
   },
+  "dialog": {
+    "ok": "OK",
+    "confirm": "Confirm",
+    "deleteFile": "Delete \"{name}\"?",
+    "deleteItems": "Delete {count} items?",
+    "selectBranch": "Select Branch",
+    "enterBranchName": "Enter branch name",
+    "newFileName": "New File Name",
+    "enterFileName": "Enter file name..."
+  },
   "fileDetail": {
     "size": "Size",
     "modified": "Modified",
@@ -75,12 +85,20 @@
     "noTerminals": "No terminals",
     "createToStart": "Create a new terminal to get started",
     "active": "Active",
+    "closed": "Closed",
     "deleteTitle": "Delete Terminal",
     "deleteConfirm": "Are you sure you want to delete this terminal session? This action cannot be undone.",
     "clearAllTitle": "Clear All Terminals",
     "clearAllConfirm": "Are you sure you want to close all terminal sessions?",
     "connectionClosed": "Connection closed",
-    "connectionError": "Connection error"
+    "connectionError": "Connection error",
+    "manageHistory": "Manage Terminal History",
+    "historyTitle": "Terminal History",
+    "noHistory": "No history",
+    "selected": "selected",
+    "deleteHistoryTitle": "Delete Terminal History",
+    "deleteHistoryConfirm": "Are you sure you want to delete {count} terminal history records? This action cannot be undone.",
+    "readOnly": "Read Only"
   },
   "fileTree": {
     "projectRoot": "Project Root"

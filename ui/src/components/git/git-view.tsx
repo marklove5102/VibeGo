@@ -1,8 +1,10 @@
 import { FileText, GitBranch, History, RefreshCw } from "lucide-react";
 import React, { useCallback, useEffect, useMemo } from "react";
 import type { GitCommit } from "@/api/git";
+import { useDialog } from "@/components/common";
 import { usePageTopBar } from "@/hooks/use-page-top-bar";
-import { type GitFileNode, type Locale, useGitStore } from "@/stores";
+import { type Locale, useTranslation } from "@/lib/i18n";
+import { type GitFileNode, useGitStore } from "@/stores";
 import GitChangesView from "./git-changes-view";
 import GitHistoryView from "./git-history-view";
 
@@ -28,6 +30,8 @@ const i18n = {
 
 const GitView: React.FC<GitViewProps> = ({ path, locale, onFileDiff, isActive = true }) => {
   const t = i18n[locale] || i18n.en;
+  const tCommon = useTranslation(locale);
+  const dialog = useDialog();
 
   const {
     stagedFiles,
@@ -74,16 +78,18 @@ const GitView: React.FC<GitViewProps> = ({ path, locale, onFileDiff, isActive = 
     }
   }, [fetchStatus, fetchLog, activeTab]);
 
-  const handleBranchClick = useCallback(() => {
+  const handleBranchClick = useCallback(async () => {
     if (branches.length === 0) return;
 
-    const branchList = branches.map((b, i) => `${i + 1}. ${b}${b === currentBranch ? " (current)" : ""}`).join("\n");
-    const input = prompt(`Select branch:\n${branchList}\n\nEnter branch name:`, currentBranch);
+    const input = await dialog.prompt(
+      tCommon("dialog.selectBranch"),
+      { defaultValue: currentBranch, placeholder: tCommon("dialog.enterBranchName") }
+    );
 
     if (input && input !== currentBranch && branches.includes(input)) {
       switchBranch(input);
     }
-  }, [branches, currentBranch, switchBranch]);
+  }, [branches, currentBranch, switchBranch, dialog, tCommon]);
 
   const topBarConfig = useMemo(() => {
     if (!isActive) return null;

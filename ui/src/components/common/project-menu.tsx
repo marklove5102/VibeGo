@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import React from "react";
 import { fileApi } from "@/api/file";
+import { useDialog } from "@/components/common";
 import { type Locale, useTranslation } from "@/lib/i18n";
 import { getSettingSchema, useSettingsStore } from "@/lib/settings";
 import { useFrameStore, usePreviewStore } from "@/stores";
@@ -40,6 +41,7 @@ const ProjectMenu: React.FC<ProjectMenuProps> = ({
   onNewPage,
 }) => {
   const t = useTranslation(locale);
+  const dialog = useDialog();
   const settings = useSettingsStore((s) => s.settings);
   const setSetting = useSettingsStore((s) => s.set);
   const themeSchema = getSettingSchema("theme");
@@ -101,7 +103,7 @@ const ProjectMenu: React.FC<ProjectMenuProps> = ({
   };
 
   const handleClosePage = () => {
-    if (activeGroup && activeGroup.type !== "home") {
+    if (activeGroup) {
       removeGroup(activeGroup.id);
     }
     onClose();
@@ -121,7 +123,7 @@ const ProjectMenu: React.FC<ProjectMenuProps> = ({
 
   const handleSaveAs = async () => {
     if (!file) return;
-    const newPath = prompt(t("common.saveAs"), file.path);
+    const newPath = await dialog.prompt(t("common.saveAs"), { defaultValue: file.path });
     if (newPath && newPath !== file.path) {
       try {
         await fileApi.write(newPath, content);

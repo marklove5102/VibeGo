@@ -32,6 +32,16 @@
     "replace": "替换",
     "delete": "删除"
   },
+  "dialog": {
+    "ok": "确定",
+    "confirm": "确认",
+    "deleteFile": "删除 \"{name}\"？",
+    "deleteItems": "删除 {count} 项？",
+    "selectBranch": "选择分支",
+    "enterBranchName": "输入分支名称",
+    "newFileName": "新文件名",
+    "enterFileName": "输入文件名..."
+  },
   "fileDetail": {
     "size": "大小",
     "modified": "修改时间",
@@ -75,12 +85,20 @@
     "noTerminals": "无终端",
     "createToStart": "创建一个新终端开始使用",
     "active": "活动",
+    "closed": "已关闭",
     "deleteTitle": "删除终端",
     "deleteConfirm": "确定要删除此终端会话吗？此操作无法撤销。",
     "clearAllTitle": "清空所有终端",
     "clearAllConfirm": "确定要关闭所有终端会话吗？",
     "connectionClosed": "连接已关闭",
-    "connectionError": "连接错误"
+    "connectionError": "连接错误",
+    "manageHistory": "管理终端历史",
+    "historyTitle": "终端历史",
+    "noHistory": "无历史记录",
+    "selected": "已选择",
+    "deleteHistoryTitle": "删除终端历史",
+    "deleteHistoryConfirm": "确定要删除 {count} 条终端历史记录吗？此操作无法撤销。",
+    "readOnly": "只读"
   },
   "fileTree": {
     "projectRoot": "项目根目录"

@@ -14,8 +14,9 @@ import {
   Loader2,
   Music,
 } from "lucide-react";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef } from "react";
 import { fileApi } from "@/api/file";
+import { useDialog } from "@/components/common";
 import { type Locale, useTranslation } from "@/lib/i18n";
 import { useSettingsStore } from "@/lib/settings";
 import { type FileItem, useFileManagerStore } from "@/stores/file-manager-store";
@@ -125,35 +126,9 @@ const FileManager: React.FC<FileManagerProps> = ({ initialPath = ".", onFileOpen
   const setPageMenuItems = useFrameStore((s) => s.setPageMenuItems);
   const locale = (useSettingsStore((s) => s.settings.locale) || "zh") as Locale;
   const t = useTranslation(locale);
+  const dialog = useDialog();
 
-  const [showNewDialog, setShowNewDialog] = useState<"file" | "folder" | null>(null);
-  const [newName, setNewName] = useState("");
-  const [renameFile, setRenameFile] = useState<FileItem | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    setPageMenuItems([
-      {
-        id: "new-file",
-        icon: <FilePlus size={20} />,
-        label: t("fileManager.newFile"),
-        onClick: () => {
-          setShowNewDialog("file");
-          setNewName("");
-        },
-      },
-      {
-        id: "new-folder",
-        icon: <FolderPlus size={20} />,
-        label: t("fileManager.newFolder"),
-        onClick: () => {
-          setShowNewDialog("folder");
-          setNewName("");
-        },
-      },
-    ]);
-    return () => setPageMenuItems([]);
-  }, [t, setPageMenuItems]);
 
   const loadFiles = useCallback(
     async (path: string, initialize = false) => {
@@ -203,6 +178,63 @@ const FileManager: React.FC<FileManagerProps> = ({ initialPath = ".", onFileOpen
     loadFiles(currentPath);
   }, [currentPath, loadFiles]);
 
+  const handleShowNewFileDialog = useCallback(async () => {
+    const name = await dialog.prompt(t("fileManager.newFile"), { placeholder: t("fileManager.enterName") });
+    if (name?.trim()) {
+      try {
+        await fileApi.create({ path: `${currentPath}/${name}`, isDir: false });
+        loadFiles(currentPath);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Failed to create file");
+      }
+    }
+  }, [dialog, t, currentPath, loadFiles, setError]);
+
+  const handleShowNewFolderDialog = useCallback(async () => {
+    const name = await dialog.prompt(t("fileManager.newFolder"), { placeholder: t("fileManager.enterName") });
+    if (name?.trim()) {
+      try {
+        await fileApi.mkdir(`${currentPath}/${name}`);
+        loadFiles(currentPath);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Failed to create folder");
+      }
+    }
+  }, [dialog, t, currentPath, loadFiles, setError]);
+
+  const handleShowRenameDialog = useCallback(async (file: FileItem) => {
+    const name = await dialog.prompt(t("common.rename"), { defaultValue: file.name, placeholder: t("fileManager.enterName") });
+    if (name?.trim() && name !== file.name) {
+      const dir = file.path.substring(0, file.path.lastIndexOf("/"));
+      const newPath = `${dir}/${name}`;
+      try {
+        await fileApi.rename(file.path, newPath);
+        setDetailFile(null);
+        loadFiles(currentPath);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Failed to rename");
+      }
+    }
+  }, [dialog, t, currentPath, loadFiles, setError, setDetailFile]);
+
+  useEffect(() => {
+    setPageMenuItems([
+      {
+        id: "new-file",
+        icon: <FilePlus size={20} />,
+        label: t("fileManager.newFile"),
+        onClick: handleShowNewFileDialog,
+      },
+      {
+        id: "new-folder",
+        icon: <FolderPlus size={20} />,
+        label: t("fileManager.newFolder"),
+        onClick: handleShowNewFolderDialog,
+      },
+    ]);
+    return () => setPageMenuItems([]);
+  }, [t, setPageMenuItems, handleShowNewFileDialog, handleShowNewFolderDialog]);
+
   const sortedFiles = getSortedFiles();
 
   const handleFileClick = (file: FileItem) => {
@@ -221,32 +253,14 @@ const FileManager: React.FC<FileManagerProps> = ({ initialPath = ".", onFileOpen
 
   const handleRefresh = () => loadFiles(currentPath);
 
-  const handleNewFile = async () => {
-    if (!newName.trim()) return;
-    try {
-      await fileApi.create({ path: `${currentPath}/${newName}`, isDir: false });
-      setShowNewDialog(null);
-      setNewName("");
-      loadFiles(currentPath);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to create file");
-    }
-  };
-
-  const handleNewFolder = async () => {
-    if (!newName.trim()) return;
-    try {
-      await fileApi.mkdir(`${currentPath}/${newName}`);
-      setShowNewDialog(null);
-      setNewName("");
-      loadFiles(currentPath);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to create folder");
-    }
-  };
 
   const handleDelete = async (file: FileItem) => {
-    if (!confirm(`Delete "${file.name}"?`)) return;
+    const confirmed = await dialog.confirm(
+      t("dialog.deleteFile").replace("{name}", file.name),
+      undefined,
+      { confirmVariant: "danger", confirmText: t("common.delete") }
+    );
+    if (!confirmed) return;
     try {
       await fileApi.delete(file.path);
       setDetailFile(null);
@@ -258,7 +272,12 @@ const FileManager: React.FC<FileManagerProps> = ({ initialPath = ".", onFileOpen
 
   const handleDeleteSelected = async () => {
     if (selectedFiles.size === 0) return;
-    if (!confirm(`Delete ${selectedFiles.size} items?`)) return;
+    const confirmed = await dialog.confirm(
+      t("dialog.deleteItems").replace("{count}", String(selectedFiles.size)),
+      undefined,
+      { confirmVariant: "danger", confirmText: t("common.delete") }
+    );
+    if (!confirmed) return;
     try {
       await fileApi.batchDelete(Array.from(selectedFiles));
       clearSelection();
@@ -268,24 +287,8 @@ const FileManager: React.FC<FileManagerProps> = ({ initialPath = ".", onFileOpen
     }
   };
 
-  const handleRename = async () => {
-    if (!renameFile || !newName.trim()) return;
-    const dir = renameFile.path.substring(0, renameFile.path.lastIndexOf("/"));
-    const newPath = `${dir}/${newName}`;
-    try {
-      await fileApi.rename(renameFile.path, newPath);
-      setRenameFile(null);
-      setNewName("");
-      setDetailFile(null);
-      loadFiles(currentPath);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to rename");
-    }
-  };
-
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (showNewDialog || renameFile) return;
       const target = e.target as HTMLElement;
       if (target.tagName === "INPUT" || target.tagName === "TEXTAREA") return;
       switch (e.key) {
@@ -311,21 +314,15 @@ const FileManager: React.FC<FileManagerProps> = ({ initialPath = ".", onFileOpen
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [focusIndex, sortedFiles, showNewDialog, renameFile]);
+  }, [focusIndex, sortedFiles]);
 
   return (
     <div className="h-full flex flex-col bg-ide-bg">
       <FileManagerBreadcrumb />
       <FileManagerToolbar
         onRefresh={handleRefresh}
-        onNewFile={() => {
-          setShowNewDialog("file");
-          setNewName("");
-        }}
-        onNewFolder={() => {
-          setShowNewDialog("folder");
-          setNewName("");
-        }}
+        onNewFile={handleShowNewFileDialog}
+        onNewFolder={handleShowNewFolderDialog}
         onDeleteSelected={handleDeleteSelected}
       />
 
@@ -382,59 +379,8 @@ const FileManager: React.FC<FileManagerProps> = ({ initialPath = ".", onFileOpen
         open={!!detailFile}
         onClose={() => setDetailFile(null)}
         onDelete={handleDelete}
-        onRename={(f) => {
-          setRenameFile(f);
-          setNewName(f.name);
-          setDetailFile(null);
-        }}
+        onRename={handleShowRenameDialog}
       />
-
-      {(showNewDialog || renameFile) && (
-        <div
-          className="fixed inset-0 bg-black/50 flex items-end justify-center z-50 backdrop-blur-sm"
-          onClick={() => {
-            setShowNewDialog(null);
-            setRenameFile(null);
-            setNewName("");
-          }}
-        >
-          <div className="w-full max-w-md bg-ide-panel rounded-t-xl p-4" onClick={(e) => e.stopPropagation()}>
-            <h3 className="text-sm font-medium text-ide-text mb-3">
-              {renameFile
-                ? t("common.rename")
-                : showNewDialog === "file"
-                  ? t("fileManager.newFile")
-                  : t("fileManager.newFolder")}
-            </h3>
-            <input
-              type="text"
-              value={newName}
-              onChange={(e) => setNewName(e.target.value)}
-              placeholder={t("fileManager.enterName")}
-              className="w-full px-3 py-2 bg-ide-bg border border-ide-border rounded-md text-sm text-ide-text mb-3"
-              autoFocus
-            />
-            <div className="flex gap-2">
-              <button
-                onClick={() => {
-                  setShowNewDialog(null);
-                  setRenameFile(null);
-                  setNewName("");
-                }}
-                className="flex-1 py-2 rounded-md bg-ide-bg text-ide-mute text-sm"
-              >
-                {t("common.cancel")}
-              </button>
-              <button
-                onClick={renameFile ? handleRename : showNewDialog === "file" ? handleNewFile : handleNewFolder}
-                className="flex-1 py-2 rounded-md bg-ide-accent text-ide-bg text-sm font-medium"
-              >
-                {renameFile ? t("common.rename") : t("common.create")}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

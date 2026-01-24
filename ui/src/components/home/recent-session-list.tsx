@@ -1,5 +1,6 @@
 import { Check, ChevronRight, Clock, Edit2, Layers, Trash2, X } from "lucide-react";
 import React from "react";
+import { useDialog } from "@/components/common";
 import { type Locale, useTranslation } from "@/lib/i18n";
 import { useSessionStore } from "@/stores/session-store";
 
@@ -10,6 +11,7 @@ interface RecentSessionListProps {
 
 const RecentSessionList: React.FC<RecentSessionListProps> = ({ onSwitchSession, locale }) => {
   const t = useTranslation(locale);
+  const dialog = useDialog();
   const sessions = useSessionStore((s) => s.sessions);
   const currentSessionId = useSessionStore((s) => s.currentSessionId);
   const loading = useSessionStore((s) => s.loading);
@@ -29,12 +31,22 @@ const RecentSessionList: React.FC<RecentSessionListProps> = ({ onSwitchSession, 
   const handleDelete = async (e: React.MouseEvent, sessionId: string) => {
     e.stopPropagation();
     const session = sessions.find((s) => s.id === sessionId);
-    if (!confirm(t("session.deleteConfirm").replace("{name}", session?.name || ""))) return;
+    const confirmed = await dialog.confirm(
+      t("session.deleteConfirm").replace("{name}", session?.name || ""),
+      undefined,
+      { confirmVariant: "danger", confirmText: t("common.delete") }
+    );
+    if (!confirmed) return;
     await deleteSession(sessionId);
   };
 
   const handleClearAll = async () => {
-    if (!confirm(t("session.clearAllConfirm"))) return;
+    const confirmed = await dialog.confirm(
+      t("session.clearAllConfirm"),
+      undefined,
+      { confirmVariant: "danger", confirmText: t("session.clearAll") }
+    );
+    if (!confirmed) return;
     await clearAllSessions();
   };
 

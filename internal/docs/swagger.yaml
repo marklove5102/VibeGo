@@ -7,6 +7,22 @@ definitions:
     required:
     - id
     type: object
+  handler.DeleteBatchRequest:
+    properties:
+      ids:
+        items:
+          type: string
+        type: array
+    required:
+    - ids
+    type: object
+  handler.DeleteTerminalRequest:
+    properties:
+      id:
+        type: string
+    required:
+    - id
+    type: object
   handler.DirSizeReq:
     properties:
       path:
@@ -1712,6 +1728,75 @@ paths:
               type: string
             type: object
       summary: Close terminal session
+      tags:
+      - Terminal
+  /api/terminal/delete:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Terminal ID
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handler.DeleteTerminalRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: boolean
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Delete terminal session and its history
+      tags:
+      - Terminal
+  /api/terminal/delete-batch:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Terminal IDs
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handler.DeleteBatchRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Delete multiple terminal sessions and their history
       tags:
       - Terminal
   /api/terminal/list:

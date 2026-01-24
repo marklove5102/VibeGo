@@ -34,6 +34,8 @@ func (h *TerminalHandler) Register(r *gin.RouterGroup) {
 	g.GET("", h.List)
 	g.POST("", h.New)
 	g.POST("/close", h.Close)
+	g.POST("/delete", h.Delete)
+	g.POST("/delete-batch", h.DeleteBatch)
 	g.GET("/ws/:id", h.WebSocket)
 }
 
@@ -141,6 +143,62 @@ func (h *TerminalHandler) Close(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"ok": true})
+}
+
+type DeleteTerminalRequest struct {
+	ID string `json:"id" binding:"required"`
+}
+
+// Delete godoc
+// @Summary Delete terminal session and its history
+// @Tags Terminal
+// @Accept json
+// @Produce json
+// @Param request body DeleteTerminalRequest true "Terminal ID"
+// @Success 200 {object} map[string]bool
+// @Failure 400 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Router /api/terminal/delete [post]
+func (h *TerminalHandler) Delete(c *gin.Context) {
+	var req DeleteTerminalRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if err := h.manager.Delete(req.ID); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true})
+}
+
+type DeleteBatchRequest struct {
+	IDs []string `json:"ids" binding:"required"`
+}
+
+// DeleteBatch godoc
+// @Summary Delete multiple terminal sessions and their history
+// @Tags Terminal
+// @Accept json
+// @Produce json
+// @Param request body DeleteBatchRequest true "Terminal IDs"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Router /api/terminal/delete-batch [post]
+func (h *TerminalHandler) DeleteBatch(c *gin.Context) {
+	var req DeleteBatchRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	deleted := 0
+	for _, id := range req.IDs {
+		if err := h.manager.Delete(id); err == nil {
+			deleted++
+		}
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true, "deleted": deleted})
 }
 
 // WebSocket godoc

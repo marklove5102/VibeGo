@@ -4,6 +4,7 @@ import "@/index.css";
 import "@/lib/monaco";
 import "@fontsource-variable/jetbrains-mono";
 import App from "@/app.tsx";
+import { DialogProvider } from "@/components/common";
 
 const isCancelError = (error: unknown): boolean => {
   if (error instanceof DOMException) {
@@ -75,9 +76,9 @@ const queryClient = new QueryClient({
 });
 
 createRoot(document.getElementById("root")!).render(
-  // StrictMode causes double-mounting in dev, which can trigger Monaco cancellation errors
-  // removing it helps stabilize the editor init sequence
   <QueryClientProvider client={queryClient}>
-    <App />
+    <DialogProvider>
+      <App />
+    </DialogProvider>
   </QueryClientProvider>
 );

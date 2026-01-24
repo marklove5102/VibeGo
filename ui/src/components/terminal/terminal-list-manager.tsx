@@ -1,4 +1,4 @@
-import { ArrowLeft, Check, Edit2, Terminal, Trash2, X } from "lucide-react";
+import { ArrowLeft, Check, Edit2, History, Terminal, Trash2, X } from "lucide-react";
 import React, { useState } from "react";
 import {
   AlertDialog,
@@ -19,9 +19,11 @@ interface TerminalListManagerProps {
   activeTerminalId: string | null;
   onSelect: (id: string) => void;
   onRename: (id: string, name: string) => void;
+  onClose: (id: string) => void;
   onDelete: (id: string) => void;
   onClearAll: () => void;
   onBack: () => void;
+  onManageHistory?: () => void;
   embedded?: boolean;
 }
 
@@ -30,9 +32,11 @@ const TerminalListManager: React.FC<TerminalListManagerProps> = ({
   activeTerminalId,
   onSelect,
   onRename,
+  onClose,
   onDelete,
   onClearAll,
   onBack,
+  onManageHistory,
   embedded = false,
 }) => {
   const locale = useAppStore((s) => s.locale);
@@ -41,6 +45,11 @@ const TerminalListManager: React.FC<TerminalListManagerProps> = ({
   const [editName, setEditName] = useState("");
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
+
+  const handleCloseClick = (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    onClose(id);
+  };
 
   const handleDeleteClick = (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
@@ -106,20 +115,14 @@ const TerminalListManager: React.FC<TerminalListManagerProps> = ({
         </div>
       )}
 
-      {/* 
-        If embedded, we might still want a way to Clear All? 
-        Let's add a small action bar or floating button if list is long?
-        For now, let's assume TopBar doesn't have "Clear All" but "New".
-        Let's add a list header inside the list area if embedded?
-      */}
       {embedded && terminals.length > 0 && (
         <div className="flex justify-end px-3 py-2">
           <button
             onClick={handleClearAllClick}
-            className="text-xs text-ide-mute hover:text-red-500 flex items-center gap-1 transition-colors"
+            className="p-2 rounded-md text-ide-mute hover:bg-ide-bg hover:text-red-500 flex items-center gap-1 text-xs"
           >
-            <Trash2 size={12} />
-            <span>Clear All</span>
+            <Trash2 size={14} />
+            <span>{t("terminal.clearAll")}</span>
           </button>
         </div>
       )}
@@ -136,6 +139,7 @@ const TerminalListManager: React.FC<TerminalListManagerProps> = ({
             {terminals.map((terminal) => {
               const isCurrent = terminal.id === activeTerminalId;
               const isEditing = editingId === terminal.id;
+              const isClosed = terminal.status === "closed" || terminal.ptyStatus === "exited";
 
               return (
                 <div
@@ -144,7 +148,9 @@ const TerminalListManager: React.FC<TerminalListManagerProps> = ({
                   className={`group flex items-center gap-2 p-2.5 rounded-lg border transition-all cursor-pointer ${
                     isCurrent
                       ? "bg-ide-accent/10 border-ide-accent/30"
-                      : "border-transparent hover:bg-ide-bg hover:border-ide-border"
+                      : isClosed
+                        ? "border-transparent hover:bg-ide-bg/50 hover:border-ide-border opacity-60"
+                        : "border-transparent hover:bg-ide-bg hover:border-ide-border"
                   }`}
                 >
                   <div
@@ -152,7 +158,7 @@ const TerminalListManager: React.FC<TerminalListManagerProps> = ({
                       isCurrent ? "bg-ide-accent/20" : "bg-ide-bg group-hover:bg-ide-panel"
                     }`}
                   >
-                    <Terminal size={18} className={isCurrent ? "text-ide-accent" : "text-ide-mute"} />
+                    <Terminal size={18} className={isCurrent ? "text-ide-accent" : isClosed ? "text-ide-mute/50" : "text-ide-mute"} />
                   </div>
 
                   <div className="flex-1 min-w-0">
@@ -171,13 +177,13 @@ const TerminalListManager: React.FC<TerminalListManagerProps> = ({
                         />
                         <button
                           onClick={() => handleRename(terminal.id)}
-                          className="p-1 text-green-500 hover:bg-ide-panel rounded"
+                          className="p-2 rounded-md text-green-500 hover:bg-ide-bg"
                         >
                           <Check size={14} />
                         </button>
                         <button
                           onClick={() => setEditingId(null)}
-                          className="p-1 text-red-500 hover:bg-ide-panel rounded"
+                          className="p-2 rounded-md text-red-500 hover:bg-ide-bg"
                         >
                           <X size={14} />
                         </button>
@@ -185,13 +191,20 @@ const TerminalListManager: React.FC<TerminalListManagerProps> = ({
                     ) : (
                       <div className="flex items-center gap-2">
                         <span
-                          className={`font-medium truncate text-sm ${isCurrent ? "text-ide-accent" : "text-ide-text"}`}
+                          className={`font-medium truncate text-sm ${
+                            isCurrent ? "text-ide-accent" : isClosed ? "text-ide-mute" : "text-ide-text"
+                          }`}
                         >
                           {terminal.name}
                         </span>
-                        {isCurrent && (
+                        {isCurrent && !isClosed && (
                           <span className="text-[10px] bg-ide-accent text-ide-bg px-1.5 py-0.5 rounded font-bold">
                             {t("terminal.active")}
+                          </span>
+                        )}
+                        {isClosed && (
+                          <span className="text-[10px] bg-ide-mute/30 text-ide-mute px-1.5 py-0.5 rounded">
+                            {t("terminal.closed")}
                           </span>
                         )}
                       </div>
@@ -199,16 +212,24 @@ const TerminalListManager: React.FC<TerminalListManagerProps> = ({
                   </div>
 
                   {!isEditing && (
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-0.5">
                       <button
                         onClick={(e) => startEditing(e, terminal)}
-                        className="p-1.5 rounded hover:bg-ide-bg text-ide-mute hover:text-ide-accent opacity-0 group-hover:opacity-100 transition-opacity"
+                        className="p-2 rounded-md text-ide-mute hover:bg-ide-bg hover:text-ide-text opacity-0 group-hover:opacity-100 transition-opacity"
                       >
                         <Edit2 size={14} />
                       </button>
+                      {!isClosed && (
+                        <button
+                          onClick={(e) => handleCloseClick(e, terminal.id)}
+                          className="p-2 rounded-md text-ide-mute hover:bg-ide-bg hover:text-ide-text"
+                        >
+                          <X size={14} />
+                        </button>
+                      )}
                       <button
                         onClick={(e) => handleDeleteClick(e, terminal.id)}
-                        className="p-1.5 rounded hover:bg-ide-bg text-ide-mute hover:text-red-500"
+                        className="p-2 rounded-md text-ide-mute hover:bg-ide-bg hover:text-red-500"
                       >
                         <Trash2 size={14} />
                       </button>
@@ -220,6 +241,18 @@ const TerminalListManager: React.FC<TerminalListManagerProps> = ({
           </div>
         )}
       </div>
+
+      {onManageHistory && (
+        <div className="px-3 py-3 border-t border-ide-border">
+          <button
+            onClick={onManageHistory}
+            className="text-sm text-blue-500 hover:text-blue-400 flex items-center gap-1.5 transition-colors"
+          >
+            <History size={14} />
+            <span>{t("terminal.manageHistory")}</span>
+          </button>
+        </div>
+      )}
 
       <AlertDialog open={!!deleteId} onOpenChange={(open) => !open && setDeleteId(null)}>
         <AlertDialogContent>

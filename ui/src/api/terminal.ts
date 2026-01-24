@@ -42,6 +42,18 @@ export const terminalApi = {
       body: JSON.stringify({ id }),
     }),
 
+  delete: (id: string) =>
+    request<{ ok: boolean }>("/terminal/delete", {
+      method: "POST",
+      body: JSON.stringify({ id }),
+    }),
+
+  deleteBatch: (ids: string[]) =>
+    request<{ ok: boolean; deleted: number }>("/terminal/delete-batch", {
+      method: "POST",
+      body: JSON.stringify({ ids }),
+    }),
+
   wsUrl: (id: string) => {
     const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
     return `${proto}//${window.location.host}/api/terminal/ws/${id}`;

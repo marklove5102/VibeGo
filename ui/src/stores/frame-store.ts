@@ -302,21 +302,20 @@ export const useFrameStore = create<FrameState>((set, get) => ({
 
   removeGroup: (id) =>
     set((s) => {
-      if (id === "home") return s;
-      const groups = s.groups.filter((g) => g.id !== id);
+      const remainingGroups = s.groups.filter((g) => g.id !== id);
+      if (id === "home" && remainingGroups.length === 0) return s;
+      if (remainingGroups.length === 0) {
+        const homeGroup = createHomeGroup();
+        return {
+          groups: [homeGroup],
+          activeGroupId: homeGroup.id,
+        };
+      }
       let activeGroupId = s.activeGroupId;
       if (s.activeGroupId === id) {
-        if (groups.length > 0) {
-          activeGroupId = groups[0].id;
-        } else {
-          const homeGroup = createHomeGroup();
-          return {
-            groups: [homeGroup],
-            activeGroupId: homeGroup.id,
-          };
-        }
+        activeGroupId = remainingGroups[0].id;
       }
-      return { groups, activeGroupId };
+      return { groups: remainingGroups, activeGroupId };
     }),
 
   setActiveGroup: (id) => set({ activeGroupId: id }),

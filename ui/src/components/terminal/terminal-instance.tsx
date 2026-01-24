@@ -10,6 +10,8 @@ import { type Theme, useAppStore } from "@/stores";
 interface TerminalInstanceProps {
   terminalId: string;
   isActive: boolean;
+  isExited?: boolean;
+  onExited?: () => void;
 }
 
 const getXtermTheme = (appTheme: Theme): ITheme => {
@@ -90,16 +92,30 @@ const getXtermTheme = (appTheme: Theme): ITheme => {
   };
 };
 
-const TerminalInstance: React.FC<TerminalInstanceProps> = ({ terminalId, isActive }) => {
+const TerminalInstance: React.FC<TerminalInstanceProps> = ({ terminalId, isActive, isExited = false, onExited }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const initializedRef = useRef(false);
+  const isExitedRef = useRef(isExited);
+  const onExitedRef = useRef(onExited);
 
   const theme = useAppStore((s) => s.theme);
   const locale = useAppStore((s) => s.locale);
   const t = useTranslation(locale);
+
+  useEffect(() => {
+    onExitedRef.current = onExited;
+  }, [onExited]);
+
+  useEffect(() => {
+    isExitedRef.current = isExited;
+    if (isExited && terminalRef.current) {
+      terminalRef.current.options.cursorBlink = false;
+      terminalRef.current.options.disableStdin = true;
+    }
+  }, [isExited]);
 
   const connectWebSocket = useCallback(
     (terminal: Terminal) => {
@@ -146,6 +162,10 @@ const TerminalInstance: React.FC<TerminalInstanceProps> = ({ terminalId, isActiv
 
       ws.onclose = () => {
         terminal.write(`\r\n[${t("terminal.connectionClosed")}]\r\n`);
+        terminal.options.cursorBlink = false;
+        terminal.options.disableStdin = true;
+        isExitedRef.current = true;
+        onExitedRef.current?.();
       };
 
       ws.onerror = () => {
@@ -187,11 +207,11 @@ const TerminalInstance: React.FC<TerminalInstanceProps> = ({ terminalId, isActiv
     fitAddonRef.current = fitAddon;
 
     terminal.onData((data) => {
+      if (isExitedRef.current) return;
       if (wsRef.current?.readyState === WebSocket.OPEN) {
-        // Backend expects WSMessage protocol
         const msg = {
           type: "cmd",
-          data: btoa(data), // Encode to base64
+          data: btoa(data),
         };
         wsRef.current.send(JSON.stringify(msg));
       }

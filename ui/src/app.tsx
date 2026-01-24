@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { fileApi } from "@/api/file";
-import { DirectoryPicker, NewPageMenu, ProjectMenu } from "@/components/common";
+import { DirectoryPicker, NewPageMenu, ProjectMenu, useDialog } from "@/components/common";
 import { FileManager } from "@/components/file";
 import { AppFrame, NewGroupMenu } from "@/components/frame";
 import { DiffView, GitView } from "@/components/git";
@@ -26,6 +26,7 @@ import "@/plugins";
 
 const App: React.FC = () => {
   const { theme, locale, isMenuOpen, setMenuOpen, setTheme, setLocale } = useAppStore();
+  const dialog = useDialog();
 
   const resetPreview = usePreviewStore((s) => s.reset);
   const { currentPath } = useFileManagerStore();
@@ -170,7 +171,7 @@ const App: React.FC = () => {
               useFileManagerStore.getState().setLoading(false);
             }
           } else {
-            const newPath = prompt("New file name:");
+            const newPath = await dialog.prompt("New file name:", { placeholder: "Enter file name..." });
             if (newPath) {
               await fileApi.create({
                 path: `${currentPath}/${newPath}`,
@@ -315,7 +316,7 @@ const App: React.FC = () => {
 
   return (
     <>
-      <AppFrame onMenuOpen={() => setMenuOpen(true)} onTabAction={handleTabAction} onBackToList={handleBackToList}>
+      <AppFrame onMenuOpen={() => setMenuOpen(true)} onTabAction={handleTabAction} onBackToList={handleBackToList} onNewPage={() => setNewPageMenuOpen(true)}>
         {renderContent()}
       </AppFrame>
       <ProjectMenu

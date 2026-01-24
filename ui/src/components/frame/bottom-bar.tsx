@@ -1,4 +1,4 @@
-import { Box, Files, FolderOpen, GitGraph, Home, Maximize, Menu, Minimize, Settings, Terminal } from "lucide-react";
+import { Box, Files, FolderOpen, GitGraph, Home, Maximize, Menu, Minimize, Plus, Settings, Terminal } from "lucide-react";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { pluginRegistry } from "@/plugins/registry";
 import {
@@ -12,6 +12,7 @@ import {
 
 interface BottomBarProps {
   onMenuClick?: () => void;
+  onNewPage?: () => void;
 }
 
 const PAGE_TYPE_ICONS: Record<PageType, React.ReactNode> = {
@@ -121,7 +122,7 @@ const GroupButton: React.FC<GroupButtonProps> = ({
   );
 };
 
-const BottomBar: React.FC<BottomBarProps> = ({ onMenuClick }) => {
+const BottomBar: React.FC<BottomBarProps> = ({ onMenuClick, onNewPage }) => {
   const groups = useFrameStore((s) => s.groups);
   const activeGroupId = useFrameStore((s) => s.activeGroupId);
   const bottomBarConfig = useFrameStore((s) => s.bottomBarConfig);
@@ -253,6 +254,19 @@ const BottomBar: React.FC<BottomBarProps> = ({ onMenuClick }) => {
                 )}
               </button>
             ))}
+          </div>
+        ) : isOnlyHome && onNewPage ? (
+          <div
+            ref={containerRef}
+            className="flex h-10 bg-ide-bg rounded-lg p-1 border border-ide-border gap-1 overflow-x-auto no-scrollbar"
+          >
+            <button
+              onClick={onNewPage}
+              className="px-3 h-full rounded flex items-center gap-2 transition-all text-ide-mute hover:text-ide-accent"
+              title="New Page"
+            >
+              <Plus size={18} />
+            </button>
           </div>
         ) : (
           <div className="flex-1" />

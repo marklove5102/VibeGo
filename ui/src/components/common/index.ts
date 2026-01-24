@@ -1,3 +1,4 @@
+export { DialogProvider, useDialog } from "./dialog-provider";
 export { default as DirectoryPicker } from "./directory-picker";
 export { default as MobileToolbar } from "./mobile-toolbar";
 export { default as NewPageMenu } from "./new-page-menu";

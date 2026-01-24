@@ -30,12 +30,36 @@ export function useTerminalCreate(groupId: string) {
 
 export function useTerminalClose(groupId: string) {
   const queryClient = useQueryClient();
-  const removeTerminal = useTerminalStore((s) => s.removeTerminal);
+  const setTerminalStatus = useTerminalStore((s) => s.setTerminalStatus);
 
   return useMutation({
     mutationFn: (id: string) => terminalApi.close(id),
     onSuccess: (_, id) => {
+      setTerminalStatus(groupId, id, "closed", "exited");
+      queryClient.invalidateQueries({ queryKey: terminalKeys.list() });
+    },
+  });
+}
+
+export function useTerminalDelete(groupId: string) {
+  const queryClient = useQueryClient();
+  const removeTerminal = useTerminalStore((s) => s.removeTerminal);
+
+  return useMutation({
+    mutationFn: (id: string) => terminalApi.delete(id),
+    onSuccess: (_, id) => {
       removeTerminal(groupId, id);
+      queryClient.invalidateQueries({ queryKey: terminalKeys.list() });
+    },
+  });
+}
+
+export function useTerminalDeleteBatch() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (ids: string[]) => terminalApi.deleteBatch(ids),
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: terminalKeys.list() });
     },
   });
