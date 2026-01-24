@@ -1,6 +1,6 @@
 import { DiffEditor } from "@monaco-editor/react";
 import { AlertTriangle, Check, X } from "lucide-react";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { fileApi } from "@/api/file";
 import type { Locale } from "@/stores";
 import "@/lib/monaco";
@@ -110,6 +110,8 @@ const ConflictView: React.FC<ConflictViewProps> = ({
   const [theirs, setTheirs] = useState("");
   const [resolved, setResolved] = useState("");
   const [activeTab, setActiveTab] = useState<"compare" | "edit">("compare");
+  const compareModelIdRef = useRef(`git-conflict-compare-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+  const editModelIdRef = useRef(`git-conflict-edit-${Date.now()}-${Math.random().toString(36).slice(2)}`);
 
   const language = getLanguageFromFilename(filePath);
   const filename = filePath.split("/").pop() || filePath;
@@ -202,11 +204,14 @@ const ConflictView: React.FC<ConflictViewProps> = ({
       <div className="flex-1 overflow-hidden">
         {activeTab === "compare" ? (
           <DiffEditor
-            key={`compare-${filePath}`}
             original={ours}
             modified={theirs}
             language={language}
             theme="vs-dark"
+            keepCurrentOriginalModel={true}
+            keepCurrentModifiedModel={true}
+            originalModelPath={`${compareModelIdRef.current}-original`}
+            modifiedModelPath={`${compareModelIdRef.current}-modified`}
             options={{
               readOnly: true,
               renderSideBySide: true,
@@ -218,11 +223,14 @@ const ConflictView: React.FC<ConflictViewProps> = ({
           />
         ) : (
           <DiffEditor
-            key={`edit-${filePath}`}
             original={ours}
             modified={resolved}
             language={language}
             theme="vs-dark"
+            keepCurrentOriginalModel={true}
+            keepCurrentModifiedModel={true}
+            originalModelPath={`${editModelIdRef.current}-original`}
+            modifiedModelPath={`${editModelIdRef.current}-modified`}
             onMount={(editor) => {
               const modifiedEditor = editor.getModifiedEditor();
               modifiedEditor.onDidChangeModelContent(() => {

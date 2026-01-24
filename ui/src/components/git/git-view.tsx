@@ -34,6 +34,7 @@ const GitView: React.FC<GitViewProps> = ({ path, locale, onFileDiff, onConflict,
   const [showBranchSelector, setShowBranchSelector] = useState(false);
 
   const {
+    currentPath: currentRepoPath,
     stagedFiles,
     unstagedFiles,
     commits,
@@ -78,15 +79,13 @@ const GitView: React.FC<GitViewProps> = ({ path, locale, onFileDiff, onConflict,
     deleteBranch,
   } = useGitStore();
 
-  const prevPathRef = useRef<string | null>(null);
   const initializedRef = useRef(false);
 
   useEffect(() => {
-    const pathChanged = prevPathRef.current !== path;
+    const pathChanged = currentRepoPath !== path;
     if (pathChanged) {
       reset();
       setCurrentPath(path);
-      prevPathRef.current = path;
       initializedRef.current = false;
     }
     if (!initializedRef.current) {
@@ -98,7 +97,7 @@ const GitView: React.FC<GitViewProps> = ({ path, locale, onFileDiff, onConflict,
       fetchStashes();
       fetchConflicts();
     }
-  }, [path, setCurrentPath, reset, fetchStatus, fetchLog, fetchBranches, fetchRemotes, fetchStashes, fetchConflicts]);
+  }, [path, currentRepoPath, setCurrentPath, reset, fetchStatus, fetchLog, fetchBranches, fetchRemotes, fetchStashes, fetchConflicts]);
 
   const handleRefresh = useCallback(() => {
     fetchStatus();

@@ -70,6 +70,7 @@ const DiffView: React.FC<DiffViewProps> = ({
   const [renderSideBySide, setRenderSideBySide] = useState(true);
   const editorRef = useRef<Monaco.editor.IStandaloneDiffEditor | null>(null);
   const [hasSelection, setHasSelection] = useState(false);
+  const modelIdRef = useRef(`git-diff-${Date.now()}-${Math.random().toString(36).slice(2)}`);
 
   const detectedLanguage = useMemo(() => {
     return language || getLanguageFromFilename(filename);
@@ -155,11 +156,14 @@ const DiffView: React.FC<DiffViewProps> = ({
       </div>
       <div className="flex-1 overflow-hidden">
         <DiffEditor
-          key={`${filename}-${original.length}-${modified.length}`}
           original={original}
           modified={modified}
           language={detectedLanguage}
           theme="vs-dark"
+          keepCurrentOriginalModel={true}
+          keepCurrentModifiedModel={true}
+          originalModelPath={`${modelIdRef.current}-original`}
+          modifiedModelPath={`${modelIdRef.current}-modified`}
           onMount={(editor) => {
             editorRef.current = editor;
             const modifiedEditor = editor.getModifiedEditor();
