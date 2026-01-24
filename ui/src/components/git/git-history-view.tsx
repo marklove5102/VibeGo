@@ -1,8 +1,7 @@
 import { ChevronDown, ChevronRight, Clock, GitCommit as GitCommitIcon } from "lucide-react";
 import React, { useCallback, useState } from "react";
-import type { GitCommit } from "@/api/git";
-import type { CommitFileInfo } from "@/api/git";
-import type { Locale } from "@/stores/app-store";
+import type { GitCommit, CommitFileInfo } from "@/api/git";
+import { getTranslation, type Locale } from "@/lib/i18n";
 
 interface GitHistoryViewProps {
   commits: GitCommit[];
@@ -13,11 +12,6 @@ interface GitHistoryViewProps {
   selectedCommitFiles: CommitFileInfo[];
   selectedCommitHash: string | null;
 }
-
-const i18n = {
-  en: { noCommits: "No commits yet", loading: "Loading...", filesChanged: "files changed" },
-  zh: { noCommits: "No commits yet", loading: "Loading...", filesChanged: "files changed" },
-};
 
 const formatRelativeTime = (dateStr: string): string => {
   const date = new Date(dateStr);
@@ -60,12 +54,14 @@ interface CommitItemProps {
   commit: GitCommit;
   isExpanded: boolean;
   isSelected: boolean;
+  locale: Locale;
   onToggle: () => void;
   onFileClick: (filePath: string) => void;
   files: CommitFileInfo[];
 }
 
-const CommitItem: React.FC<CommitItemProps> = ({ commit, isExpanded, isSelected, onToggle, onFileClick, files }) => {
+const CommitItem: React.FC<CommitItemProps> = ({ commit, isExpanded, isSelected, locale, onToggle, onFileClick, files }) => {
+  const t = (key: string) => getTranslation(locale, key);
   const shortHash = commit.hash.substring(0, 7);
   const firstLine = commit.message.split("\n")[0];
 
@@ -97,7 +93,7 @@ const CommitItem: React.FC<CommitItemProps> = ({ commit, isExpanded, isSelected,
       {isExpanded && files.length > 0 && (
         <div className="bg-ide-panel/30 border-t border-ide-border/30">
           <div className="px-3 py-1 text-[10px] text-ide-mute">
-            {files.length} {i18n.en.filesChanged}
+            {files.length} {t("git.filesChanged")}
           </div>
           {files.map((file) => (
             <div
@@ -126,7 +122,7 @@ const GitHistoryView: React.FC<GitHistoryViewProps> = ({
   selectedCommitFiles,
   selectedCommitHash,
 }) => {
-  const t = i18n[locale] || i18n.en;
+  const t = (key: string) => getTranslation(locale, key);
   const [expandedHash, setExpandedHash] = useState<string | null>(null);
 
   const handleToggle = useCallback(
@@ -142,11 +138,11 @@ const GitHistoryView: React.FC<GitHistoryViewProps> = ({
   );
 
   if (isLoading && commits.length === 0) {
-    return <div className="flex items-center justify-center h-32 text-ide-mute text-sm">{t.loading}</div>;
+    return <div className="flex items-center justify-center h-32 text-ide-mute text-sm">{t("git.loading")}</div>;
   }
 
   if (commits.length === 0) {
-    return <div className="flex items-center justify-center h-32 text-ide-mute text-sm">{t.noCommits}</div>;
+    return <div className="flex items-center justify-center h-32 text-ide-mute text-sm">{t("git.noCommits")}</div>;
   }
 
   return (
@@ -157,6 +153,7 @@ const GitHistoryView: React.FC<GitHistoryViewProps> = ({
           commit={commit}
           isExpanded={expandedHash === commit.hash}
           isSelected={selectedCommitHash === commit.hash}
+          locale={locale}
           onToggle={() => handleToggle(commit)}
           onFileClick={(path) => onFileClick(commit, path)}
           files={expandedHash === commit.hash ? selectedCommitFiles : []}

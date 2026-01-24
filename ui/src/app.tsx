@@ -115,8 +115,8 @@ const App: React.FC = () => {
 
   const handleGitDiff = useCallback(
     (original: string, modified: string, title: string, filename?: string) => {
-      addCurrentTab({
-        id: `diff-${Date.now()}`,
+      openPreviewTab({
+        id: `diff-${filename || title}`,
         title,
         data: {
           type: "diff",
@@ -126,7 +126,7 @@ const App: React.FC = () => {
         },
       });
     },
-    [addCurrentTab]
+    [openPreviewTab]
   );
 
   const handleConflict = useCallback(

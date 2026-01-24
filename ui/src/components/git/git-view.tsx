@@ -1,9 +1,9 @@
-import { ArrowDown, ArrowUp, CloudUpload, GitBranch, History, FileText, RefreshCw } from "lucide-react";
+import { ArrowDown, ArrowUp, CloudUpload, GitBranch, GitGraph, History, FileText, RefreshCw } from "lucide-react";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { GitCommit } from "@/api/git";
 import { gitApi } from "@/api/git";
 import { usePageTopBar } from "@/hooks/use-page-top-bar";
-import { type Locale } from "@/lib/i18n";
+import { getTranslation, type Locale } from "@/lib/i18n";
 import { useGitStore } from "@/stores";
 import BranchSelector from "./branch-selector";
 import GitChangesView from "./git-changes-view";
@@ -17,13 +17,8 @@ interface GitViewProps {
   isActive?: boolean;
 }
 
-const i18n = {
-  en: { changes: "Changes", history: "History" },
-  zh: { changes: "Changes", history: "History" },
-};
-
 const GitView: React.FC<GitViewProps> = ({ path, locale, onFileDiff, onConflict, isActive = true }) => {
-  const t = i18n[locale] || i18n.en;
+  const t = (key: string) => getTranslation(locale, key);
   const [showBranchSelector, setShowBranchSelector] = useState(false);
 
   const {
@@ -118,23 +113,18 @@ const GitView: React.FC<GitViewProps> = ({ path, locale, onFileDiff, onConflict,
   }, [fetchStatus, fetchBranchStatus, fetchLog, activeTab]);
 
   const smartAction = useMemo(() => {
-    if (!hasRemote) return { label: "Publish", icon: <CloudUpload size={16} />, action: gitPush };
-    if (behindCount > 0) return { label: `Pull (${behindCount})`, icon: <ArrowDown size={16} />, action: gitPull };
-    if (aheadCount > 0) return { label: `Push (${aheadCount})`, icon: <ArrowUp size={16} />, action: gitPush };
-    return { label: "Fetch", icon: <RefreshCw size={16} />, action: gitFetch };
-  }, [hasRemote, aheadCount, behindCount, gitPull, gitPush, gitFetch]);
+    if (!hasRemote) return { label: t("git.publish"), icon: <CloudUpload size={14} />, action: gitPush };
+    if (behindCount > 0) return { label: `${t("git.pull")} (${behindCount})`, icon: <ArrowDown size={14} />, action: gitPull };
+    if (aheadCount > 0) return { label: `${t("git.push")} (${aheadCount})`, icon: <ArrowUp size={14} />, action: gitPush };
+    return { label: t("git.fetch"), icon: <RefreshCw size={14} />, action: gitFetch };
+  }, [hasRemote, aheadCount, behindCount, gitPull, gitPush, gitFetch, t]);
 
   const topBarConfig = useMemo(() => {
     if (!isActive) return null;
     return {
       show: true,
       leftButtons: [
-        {
-          icon: <GitBranch size={16} />,
-          label: currentBranch || "branch",
-          onClick: () => setShowBranchSelector(true),
-          disabled: branches.length === 0,
-        },
+        { icon: <GitGraph size={18} /> },
       ],
       centerContent: (
         <div className="flex items-center gap-1 h-full">
@@ -148,7 +138,7 @@ const GitView: React.FC<GitViewProps> = ({ path, locale, onFileDiff, onConflict,
           >
             <FileText size={12} />
             <span className="font-medium">
-              {t.changes}
+              {t("git.changes")}
               {allFiles.length > 0 && ` (${allFiles.length})`}
             </span>
           </div>
@@ -161,14 +151,11 @@ const GitView: React.FC<GitViewProps> = ({ path, locale, onFileDiff, onConflict,
             }`}
           >
             <History size={12} />
-            <span className="font-medium">{t.history}</span>
+            <span className="font-medium">{t("git.history")}</span>
           </div>
         </div>
       ),
       rightButtons: [
-        ...(hasRemote || aheadCount > 0
-          ? [{ icon: smartAction.icon, label: smartAction.label, onClick: smartAction.action, disabled: isLoading }]
-          : []),
         {
           icon: <RefreshCw size={16} className={isLoading ? "animate-spin" : ""} />,
           onClick: handleRefresh,
@@ -176,7 +163,7 @@ const GitView: React.FC<GitViewProps> = ({ path, locale, onFileDiff, onConflict,
         },
       ],
     };
-  }, [isActive, branches, currentBranch, activeTab, allFiles.length, isLoading, hasRemote, aheadCount, behindCount, t, setActiveTab, handleRefresh, smartAction]);
+  }, [isActive, activeTab, allFiles.length, isLoading, t, setActiveTab, handleRefresh]);
 
   usePageTopBar(topBarConfig, [topBarConfig]);
 
@@ -221,6 +208,34 @@ const GitView: React.FC<GitViewProps> = ({ path, locale, onFileDiff, onConflict,
   return (
     <>
       <div className="flex flex-col h-full bg-ide-bg">
+        <div className="h-9 flex items-center gap-2 px-3 bg-ide-panel border-b border-ide-border shrink-0">
+          <button
+            className="flex items-center gap-1.5 px-2 py-1 rounded text-xs text-ide-text hover:bg-ide-accent/10 active:bg-ide-accent/15 transition-colors min-w-0"
+            onClick={() => setShowBranchSelector(true)}
+            disabled={branches.length === 0}
+          >
+            <GitBranch size={14} className="text-ide-accent shrink-0" />
+            <span className="truncate max-w-[120px]">{currentBranch || "branch"}</span>
+            {(aheadCount > 0 || behindCount > 0) && (
+              <span className="flex items-center gap-1 shrink-0">
+                {aheadCount > 0 && <span className="text-[10px] text-blue-400">{aheadCount}<ArrowUp size={8} className="inline" /></span>}
+                {behindCount > 0 && <span className="text-[10px] text-orange-400">{behindCount}<ArrowDown size={8} className="inline" /></span>}
+              </span>
+            )}
+          </button>
+          <div className="flex-1" />
+          {(hasRemote || aheadCount > 0) && (
+            <button
+              className="flex items-center gap-1.5 px-2 py-1 rounded text-xs text-ide-accent hover:bg-ide-accent/10 active:bg-ide-accent/15 transition-colors disabled:opacity-50 shrink-0"
+              onClick={smartAction.action}
+              disabled={isLoading}
+            >
+              {smartAction.icon}
+              <span>{smartAction.label}</span>
+            </button>
+          )}
+        </div>
+
         <div className="flex-1 overflow-hidden">
           {activeTab === "changes" ? (
             <GitChangesView

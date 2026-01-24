@@ -1,6 +1,6 @@
 import { ArrowDown, ArrowUp, Check, GitBranch, Globe, Plus, Search, Trash2, X } from "lucide-react";
 import React, { useCallback, useMemo, useState } from "react";
-import type { Locale } from "@/stores/app-store";
+import { getTranslation, type Locale } from "@/lib/i18n";
 
 interface BranchSelectorProps {
   isOpen: boolean;
@@ -16,35 +16,6 @@ interface BranchSelectorProps {
   onDelete: (branch: string) => void;
 }
 
-const i18n = {
-  en: {
-    title: "Branches",
-    search: "Search branches...",
-    current: "Current",
-    local: "Local",
-    remote: "Remote",
-    create: "Create Branch",
-    newBranch: "New branch name...",
-    cancel: "Cancel",
-    confirm: "Create",
-    ahead: "ahead",
-    behind: "behind",
-  },
-  zh: {
-    title: "Branches",
-    search: "Search branches...",
-    current: "Current",
-    local: "Local",
-    remote: "Remote",
-    create: "Create Branch",
-    newBranch: "New branch name...",
-    cancel: "Cancel",
-    confirm: "Create",
-    ahead: "ahead",
-    behind: "behind",
-  },
-};
-
 const BranchSelector: React.FC<BranchSelectorProps> = ({
   isOpen,
   branches,
@@ -58,7 +29,7 @@ const BranchSelector: React.FC<BranchSelectorProps> = ({
   onCreate,
   onDelete,
 }) => {
-  const t = i18n[locale] || i18n.en;
+  const t = (key: string) => getTranslation(locale, key);
   const [search, setSearch] = useState("");
   const [isCreating, setIsCreating] = useState(false);
   const [newBranchName, setNewBranchName] = useState("");
@@ -108,7 +79,7 @@ const BranchSelector: React.FC<BranchSelectorProps> = ({
         <div className="flex items-center justify-between px-4 py-3 border-b border-ide-border">
           <div className="flex items-center gap-2">
             <GitBranch size={16} className="text-ide-accent" />
-            <span className="text-sm font-medium text-ide-text">{t.title}</span>
+            <span className="text-sm font-medium text-ide-text">{t("git.branches")}</span>
           </div>
           <button onClick={onClose} className="text-ide-mute hover:text-ide-text p-1">
             <X size={16} />
@@ -122,7 +93,7 @@ const BranchSelector: React.FC<BranchSelectorProps> = ({
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder={t.search}
+              placeholder={t("git.searchBranches")}
               className="flex-1 bg-transparent text-sm text-ide-text outline-none placeholder-ide-mute"
               autoFocus
             />
@@ -131,7 +102,7 @@ const BranchSelector: React.FC<BranchSelectorProps> = ({
 
         <div className="flex-1 overflow-y-auto">
           <div className="px-3 pt-2 pb-1">
-            <span className="text-[10px] font-bold text-ide-mute uppercase">{t.current}</span>
+            <span className="text-[10px] font-bold text-ide-mute uppercase">{t("git.current")}</span>
           </div>
           <div className="flex items-center justify-between px-4 py-2.5 bg-ide-accent/10">
             <div className="flex items-center gap-2 min-w-0">
@@ -156,7 +127,7 @@ const BranchSelector: React.FC<BranchSelectorProps> = ({
           {localBranches.length > 0 && (
             <>
               <div className="px-3 pt-3 pb-1">
-                <span className="text-[10px] font-bold text-ide-mute uppercase">{t.local}</span>
+                <span className="text-[10px] font-bold text-ide-mute uppercase">{t("git.local")}</span>
               </div>
               {localBranches.map((branch) => (
                 <div
@@ -183,7 +154,7 @@ const BranchSelector: React.FC<BranchSelectorProps> = ({
             <>
               <div className="px-3 pt-3 pb-1">
                 <span className="text-[10px] font-bold text-ide-mute uppercase flex items-center gap-1">
-                  <Globe size={10} /> {t.remote}
+                  <Globe size={10} /> {t("git.remote")}
                 </span>
               </div>
               {filteredRemote.map((branch) => (
@@ -210,7 +181,7 @@ const BranchSelector: React.FC<BranchSelectorProps> = ({
                 type="text"
                 value={newBranchName}
                 onChange={(e) => setNewBranchName(e.target.value)}
-                placeholder={t.newBranch}
+                placeholder={t("git.newBranch")}
                 className="w-full bg-ide-panel border border-ide-border rounded-lg px-3 py-2 text-sm text-ide-text outline-none focus:border-ide-accent"
                 autoFocus
                 onKeyDown={(e) => {
@@ -219,8 +190,8 @@ const BranchSelector: React.FC<BranchSelectorProps> = ({
                 }}
               />
               <div className="flex gap-2">
-                <button onClick={() => { setIsCreating(false); setNewBranchName(""); }} className="flex-1 px-3 py-2 text-sm text-ide-mute hover:text-ide-text rounded-lg">{t.cancel}</button>
-                <button onClick={handleCreate} disabled={!newBranchName.trim()} className="flex-1 px-3 py-2 text-sm bg-ide-accent text-ide-bg rounded-lg disabled:opacity-50">{t.confirm}</button>
+                <button onClick={() => { setIsCreating(false); setNewBranchName(""); }} className="flex-1 px-3 py-2 text-sm text-ide-mute hover:text-ide-text rounded-lg">{t("git.cancel")}</button>
+                <button onClick={handleCreate} disabled={!newBranchName.trim()} className="flex-1 px-3 py-2 text-sm bg-ide-accent text-ide-bg rounded-lg disabled:opacity-50">{t("git.create")}</button>
               </div>
             </div>
           ) : (
@@ -229,7 +200,7 @@ const BranchSelector: React.FC<BranchSelectorProps> = ({
               className="w-full flex items-center justify-center gap-2 px-3 py-2 text-sm text-ide-accent hover:bg-ide-accent/10 rounded-lg"
             >
               <Plus size={14} />
-              {t.create}
+              {t("git.createBranch")}
             </button>
           )}
         </div>
