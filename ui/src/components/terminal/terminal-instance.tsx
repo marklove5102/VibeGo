@@ -14,6 +14,8 @@ interface TerminalInstanceProps {
   onExited?: () => void;
 }
 
+type TranslationFn = (key: string) => string;
+
 const getXtermTheme = (appTheme: Theme): ITheme => {
   const isDark = appTheme !== "light";
 
@@ -100,10 +102,16 @@ const TerminalInstance: React.FC<TerminalInstanceProps> = ({ terminalId, isActiv
   const initializedRef = useRef(false);
   const isExitedRef = useRef(isExited);
   const onExitedRef = useRef(onExited);
+  const tRef = useRef<TranslationFn>((key: string) => key);
+  const isUnmountingRef = useRef(false);
 
   const theme = useAppStore((s) => s.theme);
   const locale = useAppStore((s) => s.locale);
   const t = useTranslation(locale);
+
+  useEffect(() => {
+    tRef.current = t;
+  }, [t]);
 
   useEffect(() => {
     onExitedRef.current = onExited;
@@ -131,7 +139,6 @@ const TerminalInstance: React.FC<TerminalInstanceProps> = ({ terminalId, isActiv
 
       ws.onopen = () => {
         terminal.focus();
-        // Trigger resize on connect to sync backend size
         if (terminalRef.current && fitAddonRef.current) {
           fitAddonRef.current.fit();
           const { cols, rows } = terminalRef.current;
@@ -161,7 +168,8 @@ const TerminalInstance: React.FC<TerminalInstanceProps> = ({ terminalId, isActiv
       };
 
       ws.onclose = () => {
-        terminal.write(`\r\n[${t("terminal.connectionClosed")}]\r\n`);
+        if (isUnmountingRef.current) return;
+        terminal.write(`\r\n[${tRef.current("terminal.connectionClosed")}]\r\n`);
         terminal.options.cursorBlink = false;
         terminal.options.disableStdin = true;
         isExitedRef.current = true;
@@ -169,10 +177,10 @@ const TerminalInstance: React.FC<TerminalInstanceProps> = ({ terminalId, isActiv
       };
 
       ws.onerror = () => {
-        terminal.write(`\r\n[${t("terminal.connectionError")}]\r\n`);
+        terminal.write(`\r\n[${tRef.current("terminal.connectionError")}]\r\n`);
       };
     },
-    [terminalId, t]
+    [terminalId]
   );
 
   useEffect(() => {
@@ -185,6 +193,7 @@ const TerminalInstance: React.FC<TerminalInstanceProps> = ({ terminalId, isActiv
     if (!containerRef.current || initializedRef.current) return;
 
     initializedRef.current = true;
+    isUnmountingRef.current = false;
 
     const terminal = new Terminal({
       cursorBlink: true,
@@ -220,6 +229,7 @@ const TerminalInstance: React.FC<TerminalInstanceProps> = ({ terminalId, isActiv
     connectWebSocket(terminal);
 
     return () => {
+      isUnmountingRef.current = true;
       if (wsRef.current) {
         wsRef.current.close();
         wsRef.current = null;

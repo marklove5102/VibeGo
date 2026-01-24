@@ -24,6 +24,7 @@ const TerminalPage: React.FC<TerminalPageProps> = ({ groupId, cwd }) => {
   const setListManagerOpen = useTerminalStore((s) => s.setListManagerOpen);
   const renameTerminal = useTerminalStore((s) => s.renameTerminal);
   const setTerminalStatus = useTerminalStore((s) => s.setTerminalStatus);
+  const removeTerminal = useTerminalStore((s) => s.removeTerminal);
 
   const closeTerminalMutation = useTerminalClose(groupId);
   const deleteTerminalMutation = useTerminalDelete(groupId);
@@ -61,14 +62,6 @@ const TerminalPage: React.FC<TerminalPageProps> = ({ groupId, cwd }) => {
     }
     setListManagerOpen(groupId, !listManagerOpen);
   }, [groupId, listManagerOpen, setListManagerOpen, terminals, activeTerminalId, setActiveId]);
-
-  const handleCloseTerminal = useCallback(
-    (e: React.MouseEvent, terminalId: string) => {
-      e.stopPropagation();
-      closeTerminalMutation.mutate(terminalId);
-    },
-    [closeTerminalMutation]
-  );
 
   useEffect(() => {
     if (terminals.length === 0) {
@@ -122,14 +115,19 @@ const TerminalPage: React.FC<TerminalPageProps> = ({ groupId, cwd }) => {
                   <span className={`max-w-[80px] truncate font-medium ${!terminal.pinned ? "italic" : ""}`}>
                     {terminal.name}
                   </span>
-                  {!isClosed && (
-                    <button
-                      onClick={(e) => handleCloseTerminal(e, terminal.id)}
-                      className="hover:text-red-500 rounded-full p-0.5 hover:bg-ide-bg"
-                    >
-                      <X size={12} />
-                    </button>
-                  )}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (isClosed) {
+                        removeTerminal(groupId, terminal.id);
+                      } else {
+                        closeTerminalMutation.mutate(terminal.id);
+                      }
+                    }}
+                    className="hover:text-red-500 rounded-full p-0.5 hover:bg-ide-bg"
+                  >
+                    <X size={12} />
+                  </button>
                 </div>
               );
             })}
@@ -150,7 +148,9 @@ const TerminalPage: React.FC<TerminalPageProps> = ({ groupId, cwd }) => {
     terminals,
     displayTerminals,
     activeTerminalId,
-    handleCloseTerminal,
+    closeTerminalMutation,
+    removeTerminal,
+    groupId,
   ]);
 
   usePageTopBar(topBarConfig, [topBarConfig]);
