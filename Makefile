@@ -1,11 +1,11 @@
 .PHONY: generate-docs clean-code format dev-server dev-ui build build-frontend build-backend package-backend build-release
 
-VERSION ?= dev
+VERSION ?= v0.0.1-dev
 DIST_DIR ?= dist
 ARTIFACTS_DIR ?= artifacts
 BINARY_NAME ?= vibego
 UI_DIR ?= ui
-RELEASE_TARGETS ?= linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64
+RELEASE_TARGETS ?= linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64
 
 generate-docs:
 	@echo "Generating docs..."
@@ -28,7 +28,7 @@ build:
 	@mkdir -p $(DIST_DIR)
 	@ext=""; \
 	if [ "$$(go env GOOS)" = "windows" ]; then ext=".exe"; fi; \
-	CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o "$(DIST_DIR)/$(BINARY_NAME)$${ext}" ./
+	CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X github.com/xxnuo/vibego/internal/version.Version=$(VERSION)" -o "$(DIST_DIR)/$(BINARY_NAME)$${ext}" ./
 
 build-frontend:
 	cd $(UI_DIR) && pnpm install --frozen-lockfile
@@ -43,7 +43,7 @@ build-backend:
 	@ext=""; \
 	if [ "$(GOOS)" = "windows" ]; then ext=".exe"; fi; \
 	output="$(BINARY_NAME)_$(VERSION)_$(GOOS)_$(GOARCH)$${ext}"; \
-	CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) go build -trimpath -ldflags "-s -w" -o "$(DIST_DIR)/$${output}" ./
+	CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) go build -trimpath -ldflags "-s -w -X github.com/xxnuo/vibego/internal/version.Version=$(VERSION)" -o "$(DIST_DIR)/$${output}" ./
 
 package-backend:
 	@if [ -z "$(GOOS)" ] || [ -z "$(GOARCH)" ]; then \

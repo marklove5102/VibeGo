@@ -1,0 +1,137 @@
+name: npm-release
+
+on:
+  release:
+    types:
+      - published
+
+jobs:
+  meta:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.meta.outputs.tag }}
+      version: ${{ steps.meta.outputs.version }}
+      should_publish_npm: ${{ steps.meta.outputs.should_publish_npm }}
+    steps:
+      - id: meta
+        env:
+          TAG_NAME: ${{ github.event.release.tag_name }}
+          IS_PRERELEASE: ${{ github.event.release.prerelease }}
+        run: |
+          set -euo pipefail
+          tag="${TAG_NAME}"
+          version="${tag#v}"
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          if [[ "${IS_PRERELEASE}" == "true" ]]; then
+            echo "should_publish_npm=false" >> "$GITHUB_OUTPUT"
+          elif [[ "${version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "should_publish_npm=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "should_publish_npm=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  publish-npm:
+    if: ${{ needs.meta.outputs.should_publish_npm == 'true' }}
+    needs: meta
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+
+      - name: Update npm
+        run: npm install -g npm@latest
+
+      - name: Download npm tarballs from release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.meta.outputs.version }}
+          TAG: ${{ needs.meta.outputs.tag }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist/npm
+          patterns=(
+            "vibego-npm-${VERSION}.tgz"
+            "vibego-npm-linux-x64-${VERSION}.tgz"
+            "vibego-npm-linux-arm64-${VERSION}.tgz"
+            "vibego-npm-darwin-x64-${VERSION}.tgz"
+            "vibego-npm-darwin-arm64-${VERSION}.tgz"
+            "vibego-npm-win32-x64-${VERSION}.tgz"
+            "vibego-npm-win32-arm64-${VERSION}.tgz"
+          )
+          for pattern in "${patterns[@]}"; do
+            gh release download "${TAG}" --repo "${GITHUB_REPOSITORY}" --pattern "${pattern}" --dir dist/npm
+          done
+
+      - name: Publish to npm
+        env:
+          VERSION: ${{ needs.meta.outputs.version }}
+        run: |
+          set -euo pipefail
+
+          publish_one() {
+            file="$1"
+            if [ ! -f "$file" ]; then
+              echo "missing tarball: $file"
+              exit 1
+            fi
+
+            set +e
+            out=$(npm publish "$file" --provenance 2>&1)
+            status=$?
+            set -e
+
+            echo "$out"
+            if [ "$status" -eq 0 ]; then
+              return 0
+            fi
+
+            if echo "$out" | grep -qiE "previously published|cannot publish over|version already exists"; then
+              return 0
+            fi
+
+            exit "$status"
+          }
+
+          platforms=(linux-x64 linux-arm64 darwin-x64 darwin-arm64 win32-x64 win32-arm64)
+          for platform in "${platforms[@]}"; do
+            publish_one "dist/npm/vibego-npm-${platform}-${VERSION}.tgz"
+          done
+          publish_one "dist/npm/vibego-npm-${VERSION}.tgz"
+
+  smoke-test:
+    if: ${{ needs.meta.outputs.should_publish_npm == 'true' }}
+    needs: [meta, publish-npm]
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+          - windows-latest
+
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install and verify
+        shell: bash
+        env:
+          VERSION: ${{ needs.meta.outputs.version }}
+        run: |
+          set -euo pipefail
+          npm i -g "vibego@${VERSION}"
+          actual="$(vibego -v | tr -d '\r\n')"
+          expected="v${VERSION}"
+          if [ "$actual" != "$expected" ]; then
+            echo "unexpected version: $actual"
+            exit 1
+          fi

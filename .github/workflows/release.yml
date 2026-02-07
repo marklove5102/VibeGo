@@ -9,7 +9,35 @@ permissions:
   contents: write
 
 jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Go tests
+        run: go test ./...
+
+      - name: Frontend checks
+        run: |
+          cd ui
+          pnpm install --frozen-lockfile
+          pnpm run lint
+          pnpm run build
+
   build:
+    needs: verify
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -25,6 +53,9 @@ jobs:
             goarch: arm64
           - goos: windows
             goarch: amd64
+          - goos: windows
+            goarch: arm64
+
     steps:
       - uses: actions/checkout@v4
         with:
@@ -53,12 +84,13 @@ jobs:
           CGO_ENABLED: 0
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
+          VERSION_TAG: ${{ github.ref_name }}
         run: |
           mkdir -p dist
           ext=""
           if [ "${GOOS}" = "windows" ]; then ext=".exe"; fi
-          output="vibego_${GITHUB_REF_NAME}_${GOOS}_${GOARCH}${ext}"
-          go build -trimpath -ldflags "-s -w" -o "dist/${output}" ./
+          output="vibego_${VERSION_TAG}_${GOOS}_${GOARCH}${ext}"
+          go build -trimpath -ldflags "-s -w -X github.com/xxnuo/vibego/internal/version.Version=${VERSION_TAG}" -o "dist/${output}" ./
 
       - name: Package artifact
         run: |
@@ -79,7 +111,16 @@ jobs:
   release:
     needs: build
     runs-on: ubuntu-latest
+
     steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: astral-sh/setup-uv@v5
+
       - uses: actions/download-artifact@v4
         with:
           path: release-artifacts
@@ -91,6 +132,10 @@ jobs:
           cd release
           sha256sum *.tar.gz > checksums.txt
 
+      - name: Stage npm packages
+        run: |
+          uv run python scripts/stage_npm_packages.py --tag "${GITHUB_REF_NAME}" --artifacts-dir release --output-dir release/npm
+
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
@@ -98,3 +143,4 @@ jobs:
           files: |
             release/*.tar.gz
             release/checksums.txt
+            release/npm/*.tgz

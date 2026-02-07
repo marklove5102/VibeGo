@@ -5,3 +5,4 @@ ui/dist/index.html
 ui/CLAUDE.md
 /ui/.vite
 /dist
+/artifacts
