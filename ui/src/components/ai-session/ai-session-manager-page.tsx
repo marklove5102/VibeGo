@@ -116,15 +116,35 @@ const DEFAULT_CONFIG = defaultConfigValue();
 function roleTone(role: string) {
   const normalized = role.toLowerCase();
   if (normalized === "assistant") {
-    return "border-sky-400/30 bg-sky-500/10";
+    return "border-l-2 border-l-blue-500/70 border-ide-border bg-ide-panel";
   }
   if (normalized === "user") {
-    return "border-emerald-400/30 bg-emerald-500/10";
+    return "border-l-2 border-l-emerald-500/70 border-ide-border bg-ide-panel";
   }
   if (normalized === "tool") {
-    return "border-amber-400/30 bg-amber-500/10";
+    return "border-l-2 border-l-amber-500/70 border-ide-border bg-ide-panel";
   }
-  return "border-ide-border bg-ide-panel/70";
+  if (normalized === "system") {
+    return "border-l-2 border-l-violet-500/70 border-ide-border bg-ide-panel";
+  }
+  return "border-l-2 border-l-ide-border border-ide-border bg-ide-panel";
+}
+
+function roleLabelTone(role: string) {
+  const normalized = role.toLowerCase();
+  if (normalized === "assistant") {
+    return "border-blue-500/30 text-blue-500";
+  }
+  if (normalized === "user") {
+    return "border-emerald-500/30 text-emerald-500";
+  }
+  if (normalized === "tool") {
+    return "border-amber-500/35 text-amber-500";
+  }
+  if (normalized === "system") {
+    return "border-violet-500/35 text-violet-500";
+  }
+  return "border-ide-border text-ide-mute";
 }
 
 function roleLabel(role: string, t: (key: string) => string) {
@@ -379,16 +399,16 @@ const AISessionManagerPage: React.FC = () => {
   };
 
   const renderList = () => (
-    <div className="h-full min-h-0 border-r border-ide-border/70 bg-ide-panel/30">
-      <div className="border-b border-ide-border/70 px-4 py-3">
+    <div className="flex h-full min-h-0 flex-col border-r border-ide-border bg-ide-bg">
+      <div className="border-b border-ide-border px-3 py-3">
         <div className="grid grid-cols-2 gap-2 text-xs">
-          <div className="rounded-xl border border-ide-border bg-ide-bg px-3 py-2">
+          <div className="rounded-lg border border-ide-border bg-ide-panel px-3 py-2">
             <div className="text-ide-mute">{t("plugin.aiSessionManager.totalSessions")}</div>
-            <div className="mt-1 text-lg font-semibold text-ide-text">{filteredSessions.length}</div>
+            <div className="mt-1 text-base font-semibold text-ide-text">{filteredSessions.length}</div>
           </div>
-          <div className="rounded-xl border border-ide-border bg-ide-bg px-3 py-2">
+          <div className="rounded-lg border border-ide-border bg-ide-panel px-3 py-2">
             <div className="text-ide-mute">{t("plugin.aiSessionManager.sourceMode")}</div>
-            <div className="mt-1 flex items-center gap-2 text-sm font-medium text-ide-text">
+            <div className="mt-1 flex items-center gap-1.5 text-xs font-medium text-ide-text">
               <Database size={14} className="text-ide-accent" />
               <span>{response?.fromCache ? t("plugin.aiSessionManager.cached") : t("plugin.aiSessionManager.live")}</span>
             </div>
@@ -400,18 +420,18 @@ const AISessionManagerPage: React.FC = () => {
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder={t("plugin.aiSessionManager.searchPlaceholder")}
-            className="h-10 w-full rounded-xl border border-ide-border bg-ide-bg pl-9 pr-3 text-sm text-ide-text placeholder:text-ide-mute outline-none transition-colors focus:border-ide-accent"
+            className="h-9 w-full rounded-md border border-ide-border bg-ide-panel pl-9 pr-3 text-sm text-ide-text placeholder:text-ide-mute outline-none transition-colors focus:border-ide-accent"
           />
         </div>
-        <div className="mt-3 flex gap-2 overflow-x-auto no-scrollbar">
+        <div className="mt-3 flex gap-2 overflow-x-auto pb-0.5 no-scrollbar">
           <button
             type="button"
             onClick={() => setProviderFilter("all")}
             className={cn(
-              "shrink-0 rounded-full border px-3 py-1.5 text-xs transition-colors",
+              "shrink-0 rounded-md border px-2.5 py-1 text-xs transition-colors",
               providerFilter === "all"
-                ? "border-ide-accent bg-ide-accent text-ide-bg"
-                : "border-ide-border bg-ide-bg text-ide-mute"
+                ? "border-ide-accent bg-ide-accent/10 text-ide-accent"
+                : "border-ide-border bg-ide-panel text-ide-mute hover:bg-ide-bg hover:text-ide-text"
             )}
           >
             {t("plugin.aiSessionManager.allProviders")}
@@ -422,10 +442,10 @@ const AISessionManagerPage: React.FC = () => {
               type="button"
               onClick={() => setProviderFilter(providerId)}
               className={cn(
-                "shrink-0 rounded-full border px-3 py-1.5 text-xs transition-colors",
+                "shrink-0 rounded-md border px-2.5 py-1 text-xs transition-colors",
                 providerFilter === providerId
-                  ? "border-ide-accent bg-ide-accent text-ide-bg"
-                  : "border-ide-border bg-ide-bg text-ide-mute"
+                  ? "border-ide-accent bg-ide-accent/10 text-ide-accent"
+                  : "border-ide-border bg-ide-panel text-ide-mute hover:bg-ide-bg hover:text-ide-text"
               )}
             >
               {providerLabels[providerId]}
@@ -433,16 +453,14 @@ const AISessionManagerPage: React.FC = () => {
           ))}
         </div>
       </div>
-      <div className="h-[calc(100%-170px)] overflow-y-auto">
+      <div className="min-h-0 flex-1 overflow-y-auto">
         {loading ? (
           <div className="flex h-full items-center justify-center text-sm text-ide-mute">{t("common.loading")}</div>
         ) : error ? (
-          <div className="m-4 rounded-2xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-400">
-            {error}
-          </div>
+          <div className="m-3 rounded-md border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-400">{error}</div>
         ) : filteredSessions.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center px-6 text-center text-ide-mute">
-            <History size={30} className="mb-3 opacity-60" />
+            <History size={28} className="mb-3 opacity-60" />
             <div className="text-sm">{t("plugin.aiSessionManager.empty")}</div>
           </div>
         ) : (
@@ -456,29 +474,29 @@ const AISessionManagerPage: React.FC = () => {
                   type="button"
                   onClick={() => onSelectSession(session)}
                   className={cn(
-                    "w-full rounded-2xl border p-3 text-left transition-colors",
+                    "w-full rounded-lg border bg-ide-panel p-3 text-left transition-colors",
                     active
-                      ? "border-ide-accent bg-ide-accent/10"
-                      : "border-ide-border bg-ide-bg hover:border-ide-accent/50"
+                      ? "border-ide-accent/50 bg-ide-accent/10"
+                      : "border-ide-border hover:border-ide-accent/40 hover:bg-ide-bg"
                   )}
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
-                        <span className="rounded-full border border-ide-border px-2 py-0.5 text-[11px] text-ide-mute">
+                        <span className="rounded-md border border-ide-border px-1.5 py-0.5 text-[11px] text-ide-mute">
                           {providerLabels[session.providerId as AIProviderId] || session.providerId}
                         </span>
                         {session.parseError ? (
-                          <span className="rounded-full bg-red-500/10 px-2 py-0.5 text-[11px] text-red-400">
+                          <span className="rounded-md border border-red-500/30 bg-red-500/10 px-1.5 py-0.5 text-[11px] text-red-400">
                             {t("plugin.aiSessionManager.parseError")}
                           </span>
                         ) : null}
                       </div>
-                      <div className="mt-2 truncate text-sm font-semibold text-ide-text">
+                      <div className="mt-2 truncate text-sm font-medium text-ide-text">
                         {session.title || session.sessionId}
                       </div>
                     </div>
-                    <div className="text-[11px] text-ide-mute">
+                    <div className="text-xs text-ide-mute">
                       {formatRelativeTime(session.lastActiveAt || session.createdAt, locale, t)}
                     </div>
                   </div>
@@ -508,14 +526,14 @@ const AISessionManagerPage: React.FC = () => {
   );
 
   const renderOutline = (compact: boolean) => (
-    <div className={cn("space-y-2", compact ? "p-4" : "border-l border-ide-border/70 p-4")}>
+    <div className={cn("space-y-2 bg-ide-bg", compact ? "p-4" : "border-l border-ide-border p-4")}>
       <div className="flex items-center gap-2 text-sm font-medium text-ide-text">
         <ListTree size={16} />
         <span>{t("plugin.aiSessionManager.outline")}</span>
       </div>
       <div className="space-y-2">
         {outlineItems.length === 0 ? (
-          <div className="rounded-xl border border-ide-border bg-ide-bg px-3 py-4 text-xs text-ide-mute">
+          <div className="rounded-md border border-ide-border bg-ide-panel px-3 py-4 text-xs text-ide-mute">
             {t("plugin.aiSessionManager.noOutline")}
           </div>
         ) : (
@@ -528,7 +546,7 @@ const AISessionManagerPage: React.FC = () => {
                 target?.scrollIntoView({ behavior: "smooth", block: "center" });
                 setOutlineOpen(false);
               }}
-              className="w-full rounded-xl border border-ide-border bg-ide-bg px-3 py-2 text-left text-xs text-ide-mute transition-colors hover:border-ide-accent/50 hover:text-ide-text"
+              className="w-full rounded-md border border-ide-border bg-ide-panel px-3 py-2 text-left text-xs text-ide-mute transition-colors hover:border-ide-accent/40 hover:bg-ide-bg hover:text-ide-text"
             >
               <div className="line-clamp-2">{item.content}</div>
             </button>
@@ -549,16 +567,18 @@ const AISessionManagerPage: React.FC = () => {
     }
     return (
       <div className="flex h-full min-h-0 flex-col bg-ide-bg">
-        <div className="border-b border-ide-border/70 px-4 py-4">
+        <div className="border-b border-ide-border px-4 py-4">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
               <div className="text-lg font-semibold text-ide-text">{selectedSession.title || selectedSession.sessionId}</div>
               <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-ide-mute">
-                <span className="rounded-full border border-ide-border px-2 py-0.5">
+                <span className="rounded-md border border-ide-border bg-ide-panel px-2 py-0.5">
                   {providerLabels[selectedSession.providerId as AIProviderId] || selectedSession.providerId}
                 </span>
                 {selectedSession.projectDir ? (
-                  <span className="rounded-full border border-ide-border px-2 py-0.5">{selectedSession.projectDir}</span>
+                  <span className="rounded-md border border-ide-border bg-ide-panel px-2 py-0.5">
+                    {selectedSession.projectDir}
+                  </span>
                 ) : null}
                 <span className="inline-flex items-center gap-1">
                   <Clock3 size={12} />
@@ -570,14 +590,14 @@ const AISessionManagerPage: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setOutlineOpen(true)}
-                className="rounded-full border border-ide-border bg-ide-panel px-3 py-1.5 text-xs text-ide-text"
+                className="rounded-md border border-ide-border bg-ide-panel px-3 py-1.5 text-xs text-ide-text transition-colors hover:bg-ide-bg"
               >
                 {t("plugin.aiSessionManager.outline")}
               </button>
             ) : null}
           </div>
           {selectedSession.parseError ? (
-            <div className="mt-3 rounded-2xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-400">
+            <div className="mt-3 rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-400">
               {selectedSession.parseError}
             </div>
           ) : null}
@@ -587,7 +607,7 @@ const AISessionManagerPage: React.FC = () => {
               value={detailSearch}
               onChange={(event) => setDetailSearch(event.target.value)}
               placeholder={t("plugin.aiSessionManager.searchInSession")}
-              className="h-10 w-full rounded-xl border border-ide-border bg-ide-panel pl-9 pr-3 text-sm text-ide-text placeholder:text-ide-mute outline-none transition-colors focus:border-ide-accent"
+              className="h-9 w-full rounded-md border border-ide-border bg-ide-panel pl-9 pr-3 text-sm text-ide-text placeholder:text-ide-mute outline-none transition-colors focus:border-ide-accent"
             />
           </div>
           {detailSearch.trim() ? (
@@ -601,21 +621,28 @@ const AISessionManagerPage: React.FC = () => {
             {detailLoading ? (
               <div className="flex h-full items-center justify-center text-sm text-ide-mute">{t("common.loading")}</div>
             ) : detailError ? (
-              <div className="rounded-2xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-400">{detailError}</div>
+              <div className="rounded-md border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-400">{detailError}</div>
             ) : messages.length === 0 ? (
               <div className="flex h-full items-center justify-center text-sm text-ide-mute">
                 {t("plugin.aiSessionManager.emptyMessages")}
               </div>
             ) : (
-              <div className="space-y-3">
+              <div className="space-y-2">
                 {messages.map((message, index) => (
                   <div
                     key={`${message.role}-${index}`}
                     id={`ai-session-message-${index}`}
-                    className={cn("rounded-2xl border px-3 py-3", roleTone(message.role))}
+                    className={cn("rounded-md border px-3 py-3", roleTone(message.role))}
                   >
                     <div className="mb-2 flex items-center justify-between gap-2 text-xs">
-                      <span className="font-medium text-ide-text">{roleLabel(message.role, t)}</span>
+                      <span
+                        className={cn(
+                          "inline-flex rounded-md border px-1.5 py-0.5 text-[11px] font-medium",
+                          roleLabelTone(message.role)
+                        )}
+                      >
+                        {roleLabel(message.role, t)}
+                      </span>
                       <span className="text-ide-mute">{formatDateTime(message.ts, locale)}</span>
                     </div>
                     <div className="whitespace-pre-wrap break-words text-sm leading-6 text-ide-text">
@@ -629,8 +656,8 @@ const AISessionManagerPage: React.FC = () => {
           {!isMobile && outlineItems.length > 0 ? renderOutline(false) : null}
         </div>
         <Sheet open={outlineOpen} onOpenChange={setOutlineOpen}>
-          <SheetContent side="bottom" className="max-h-[70vh] rounded-t-3xl border-ide-border bg-ide-panel p-0">
-            <SheetHeader className="border-b border-ide-border/70">
+          <SheetContent side="bottom" className="max-h-[70vh] rounded-t-xl border-ide-border bg-ide-bg p-0">
+            <SheetHeader className="border-b border-ide-border">
               <SheetTitle>{t("plugin.aiSessionManager.outline")}</SheetTitle>
             </SheetHeader>
             <div className="overflow-y-auto">{renderOutline(true)}</div>
@@ -661,8 +688,8 @@ const AISessionManagerPage: React.FC = () => {
                   }))
                 }
                 className={cn(
-                  "rounded-2xl border px-4 py-4 text-left transition-colors",
-                  checked ? "border-ide-accent bg-ide-accent/10" : "border-ide-border bg-ide-panel"
+                  "rounded-lg border bg-ide-panel px-4 py-4 text-left transition-colors",
+                  checked ? "border-ide-accent/50 bg-ide-accent/10" : "border-ide-border hover:bg-ide-bg"
                 )}
               >
                 <div className="text-sm font-medium text-ide-text">{t(label)}</div>
@@ -678,15 +705,17 @@ const AISessionManagerPage: React.FC = () => {
             const providerConfig = configDraft.providers[providerId] || { enabled: true, paths: [] };
             const status = providerLookup.get(providerId);
             return (
-              <div key={providerId} className="rounded-3xl border border-ide-border bg-ide-panel/40 p-4">
+              <div key={providerId} className="rounded-lg border border-ide-border bg-ide-panel p-4">
                 <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                   <div>
                     <div className="flex items-center gap-2">
                       <div className="text-sm font-semibold text-ide-text">{providerLabels[providerId]}</div>
                       <span
                         className={cn(
-                          "rounded-full px-2 py-0.5 text-[11px]",
-                          providerConfig.enabled ? "bg-emerald-500/15 text-emerald-400" : "bg-ide-bg text-ide-mute"
+                          "rounded-md border px-1.5 py-0.5 text-[11px]",
+                          providerConfig.enabled
+                            ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-500"
+                            : "border-ide-border bg-ide-bg text-ide-mute"
                         )}
                       >
                         {providerConfig.enabled ? t("plugin.aiSessionManager.enabled") : t("plugin.aiSessionManager.disabled")}
@@ -709,10 +738,10 @@ const AISessionManagerPage: React.FC = () => {
                       }))
                     }
                     className={cn(
-                      "rounded-full border px-3 py-1.5 text-xs transition-colors",
+                      "rounded-md border px-3 py-1.5 text-xs transition-colors",
                       providerConfig.enabled
-                        ? "border-ide-accent bg-ide-accent text-ide-bg"
-                        : "border-ide-border bg-ide-bg text-ide-mute"
+                        ? "border-ide-accent/50 bg-ide-accent/10 text-ide-accent"
+                        : "border-ide-border bg-ide-bg text-ide-mute hover:text-ide-text"
                     )}
                   >
                     {providerConfig.enabled ? t("plugin.aiSessionManager.disableProvider") : t("plugin.aiSessionManager.enableProvider")}
@@ -735,7 +764,7 @@ const AISessionManagerPage: React.FC = () => {
                           }))
                         }
                         placeholder={status?.paths?.[0] || t("plugin.aiSessionManager.pathPlaceholder")}
-                        className="h-10 flex-1 rounded-xl border border-ide-border bg-ide-bg px-3 text-sm text-ide-text placeholder:text-ide-mute outline-none transition-colors focus:border-ide-accent"
+                        className="h-9 flex-1 rounded-md border border-ide-border bg-ide-bg px-3 text-sm text-ide-text placeholder:text-ide-mute outline-none transition-colors focus:border-ide-accent"
                       />
                       {providerConfig.paths.length > 0 ? (
                         <button
@@ -746,7 +775,7 @@ const AISessionManagerPage: React.FC = () => {
                               paths: current.paths.filter((_, itemIndex) => itemIndex !== index),
                             }))
                           }
-                          className="rounded-xl border border-red-500/30 bg-red-500/10 px-3 text-xs text-red-400"
+                          className="rounded-md border border-red-500/30 bg-red-500/10 px-3 text-xs text-red-400"
                         >
                           {t("common.delete")}
                         </button>
@@ -762,7 +791,7 @@ const AISessionManagerPage: React.FC = () => {
                           paths: [...current.paths, ""],
                         }))
                       }
-                      className="rounded-full border border-ide-border bg-ide-bg px-3 py-1.5 text-ide-text"
+                      className="rounded-md border border-ide-border bg-ide-bg px-3 py-1.5 text-ide-text transition-colors hover:bg-ide-panel"
                     >
                       {t("plugin.aiSessionManager.addPath")}
                     </button>
@@ -774,14 +803,14 @@ const AISessionManagerPage: React.FC = () => {
             );
           })}
         </div>
-        <div className="sticky bottom-0 flex items-center justify-end gap-2 border-t border-ide-border/70 bg-ide-bg/95 py-4 backdrop-blur">
+        <div className="sticky bottom-0 flex items-center justify-end gap-2 border-t border-ide-border bg-ide-bg/95 py-4 backdrop-blur">
           <button
             type="button"
             onClick={() => {
               setConfigDraft(config);
               setView("list");
             }}
-            className="rounded-xl border border-ide-border bg-ide-panel px-4 py-2 text-sm text-ide-text"
+            className="rounded-md border border-ide-border bg-ide-panel px-4 py-2 text-sm text-ide-text transition-colors hover:bg-ide-bg"
           >
             {t("common.cancel")}
           </button>
@@ -789,7 +818,7 @@ const AISessionManagerPage: React.FC = () => {
             type="button"
             onClick={() => void saveConfig()}
             disabled={savingConfig}
-            className="rounded-xl border border-ide-accent bg-ide-accent px-4 py-2 text-sm font-medium text-ide-bg disabled:opacity-60"
+            className="rounded-md border border-ide-accent bg-ide-accent px-4 py-2 text-sm font-medium text-ide-bg transition-colors hover:bg-ide-accent/90 disabled:opacity-60"
           >
             {savingConfig ? t("common.loading") : t("plugin.aiSessionManager.saveConfig")}
           </button>
@@ -809,7 +838,7 @@ const AISessionManagerPage: React.FC = () => {
   }
 
   return (
-    <div className="grid h-full min-h-0 grid-cols-[minmax(300px,360px)_1fr]">
+    <div className="grid h-full min-h-0 grid-cols-[minmax(280px,340px)_1fr] bg-ide-bg">
       {renderList()}
       {view === "settings" ? renderSettings() : renderDetail()}
     </div>
