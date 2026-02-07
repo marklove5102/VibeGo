@@ -7,9 +7,12 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "biome lint .",
+    "lint:fix": "biome lint --write .",
     "preview": "vite preview",
     "format": "biome format --write .",
-    "check": "biome check --write .",
+    "format:check": "biome format .",
+    "check": "biome check .",
+    "check:fix": "biome check --write .",
     "update:shadcn": "pnpm dlx shadcn@latest add --all --yes --overwrite"
   },
   "dependencies": {

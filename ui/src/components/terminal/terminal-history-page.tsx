@@ -206,7 +206,12 @@ const TerminalHistoryPage: React.FC<TerminalHistoryPageProps> = ({ onBack }) => 
     return (
       <div className="flex flex-col h-full bg-ide-bg">
         <div className="flex-1 relative overflow-hidden">
-          <TerminalInstance terminalId={viewingTerminal.id} terminalName={viewingTerminal.name} isActive={true} isExited={true} />
+          <TerminalInstance
+            terminalId={viewingTerminal.id}
+            terminalName={viewingTerminal.name}
+            isActive={true}
+            isExited={true}
+          />
         </div>
       </div>
     );
