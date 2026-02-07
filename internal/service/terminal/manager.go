@@ -51,6 +51,12 @@ type Manager struct {
 	historyMaxAge        time.Duration
 }
 
+type replaySnapshot struct {
+	data   []byte
+	cursor uint64
+	reset  bool
+}
+
 func NewManager(db *gorm.DB, cfg *ManagerConfig) *Manager {
 	if cfg == nil {
 		cfg = &ManagerConfig{}
@@ -247,11 +253,13 @@ func (m *Manager) ptyReadLoop(at *activeTerminal) {
 		if n > 0 {
 			at.historyMu.Lock()
 			at.historyBuffer.Write(buf[:n])
+			_, endCursor := at.historyBuffer.CursorRange()
 			at.historyMu.Unlock()
 
 			msg := WSMessage{
-				Type: MsgTypeCmd,
-				Data: at.encoder.EncodeToString(buf[:n]),
+				Type:   MsgTypeCmd,
+				Data:   at.encoder.EncodeToString(buf[:n]),
+				Cursor: endCursor,
 			}
 			msgData, _ := json.Marshal(msg)
 
@@ -301,6 +309,10 @@ func (m *Manager) List() ([]TerminalInfo, error) {
 }
 
 func (m *Manager) Attach(id string, conn *websocket.Conn) (*Connection, error) {
+	return m.AttachWithOptions(id, conn, AttachOptions{})
+}
+
+func (m *Manager) AttachWithOptions(id string, conn *websocket.Conn, opts AttachOptions) (*Connection, error) {
 	at, ok := m.getActive(id)
 	if !ok {
 		return m.sendHistoryOnly(id, conn)
@@ -329,14 +341,13 @@ func (m *Manager) Attach(id string, conn *websocket.Conn) (*Connection, error) {
 		withBufferSize(m.bufferSize),
 		withSkipSlaveReadLoop(true),
 		withOnReady(func() {
-			m.replayHistory(at, mst)
-			if at.status.Load().(string) != model.StatusRunning {
-				exitMsg := WSMessage{Type: MsgTypePtyExited}
-				msgData, _ := json.Marshal(exitMsg)
-				mst.Write(msgData)
-			}
 			at.WebTTYs.Store(clientID, instance)
 			m.activeConns.Add(1)
+			m.replayHistory(at, mst, opts.Cursor)
+			m.sendReplayDone(mst)
+			if at.status.Load().(string) != model.StatusRunning {
+				m.sendMessage(mst, WSMessage{Type: MsgTypePtyExited})
+			}
 		}),
 		withOnClosed(func() {
 			at.WebTTYs.Delete(clientID)
@@ -367,33 +378,68 @@ func (m *Manager) sendHistoryOnly(id string, conn *websocket.Conn) (*Connection,
 	mst := newWSMaster(conn)
 
 	if len(historyData) > 0 {
-		msg := WSMessage{
-			Type: MsgTypeCmd,
-			Data: base64.StdEncoding.EncodeToString(historyData),
-		}
-		msgData, _ := json.Marshal(msg)
-		mst.Write(msgData)
+		m.sendMessage(mst, WSMessage{
+			Type:   MsgTypeCmd,
+			Data:   base64.StdEncoding.EncodeToString(historyData),
+			Cursor: uint64(len(historyData)),
+			Reset:  true,
+		})
 	}
+	m.sendReplayDone(mst)
+	m.sendMessage(mst, WSMessage{Type: MsgTypePtyExited})
+	conn.Close()
 
 	doneCh := make(chan struct{})
 	close(doneCh)
 	return &Connection{Done: doneCh}, nil
 }
 
-func (m *Manager) replayHistory(at *activeTerminal, mst master) error {
+func (m *Manager) replayHistory(at *activeTerminal, mst master, cursor uint64) error {
+	snapshot := m.getReplaySnapshot(at, cursor)
+	if len(snapshot.data) == 0 && !snapshot.reset {
+		return nil
+	}
+	msg := WSMessage{
+		Type:   MsgTypeCmd,
+		Data:   base64.StdEncoding.EncodeToString(snapshot.data),
+		Cursor: snapshot.cursor,
+		Reset:  snapshot.reset,
+	}
+	return m.sendMessage(mst, msg)
+}
+
+func (m *Manager) getReplaySnapshot(at *activeTerminal, cursor uint64) replaySnapshot {
 	at.historyMu.RLock()
+	data, ok, endCursor := at.historyBuffer.ReadFrom(cursor)
+	if ok {
+		at.historyMu.RUnlock()
+		return replaySnapshot{
+			data:   data,
+			cursor: endCursor,
+			reset:  false,
+		}
+	}
 	historyData := at.historyBuffer.Read()
+	_, endCursor = at.historyBuffer.CursorRange()
 	at.historyMu.RUnlock()
 
-	if len(historyData) > 0 {
-		msg := WSMessage{
-			Type: MsgTypeCmd,
-			Data: base64.StdEncoding.EncodeToString(historyData),
-		}
-		msgData, _ := json.Marshal(msg)
-		mst.Write(msgData)
+	return replaySnapshot{
+		data:   historyData,
+		cursor: endCursor,
+		reset:  true,
 	}
+}
 
+func (m *Manager) sendReplayDone(mst master) error {
+	return m.sendMessage(mst, WSMessage{Type: MsgTypeReplayDone})
+}
+
+func (m *Manager) sendMessage(mst master, msg WSMessage) error {
+	msgData, err := json.Marshal(msg)
+	if err != nil {
+		return err
+	}
+	_, err = mst.Write(msgData)
 	return nil
 }
 

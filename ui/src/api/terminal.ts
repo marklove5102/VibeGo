@@ -55,8 +55,12 @@ export const terminalApi = {
       body: JSON.stringify({ ids }),
     }),
 
-  wsUrl: (id: string) => {
+  wsUrl: (id: string, cursor?: number) => {
     const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
-    return `${proto}//${window.location.host}/api/terminal/ws/${id}`;
+    const url = `${proto}//${window.location.host}/api/terminal/ws/${id}`;
+    if (cursor === undefined || cursor <= 0) {
+      return url;
+    }
+    return `${url}?cursor=${cursor}`;
   },
 };

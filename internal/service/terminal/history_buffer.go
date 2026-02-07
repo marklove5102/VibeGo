@@ -5,11 +5,13 @@ import (
 )
 
 type historyBuffer struct {
-	buf      []byte
-	capacity int
-	start    int
-	length   int
-	mu       sync.RWMutex
+	buf         []byte
+	capacity    int
+	start       int
+	length      int
+	startCursor uint64
+	endCursor   uint64
+	mu          sync.RWMutex
 }
 
 func newHistoryBuffer(capacity int) *historyBuffer {
@@ -34,6 +36,8 @@ func (hb *historyBuffer) Write(data []byte) (int, error) {
 		copy(hb.buf, data[n-hb.capacity:])
 		hb.start = 0
 		hb.length = hb.capacity
+		hb.endCursor += uint64(n)
+		hb.startCursor = hb.endCursor - uint64(hb.length)
 		return n, nil
 	}
 
@@ -44,7 +48,9 @@ func (hb *historyBuffer) Write(data []byte) (int, error) {
 			hb.length++
 		} else {
 			hb.start = (hb.start + 1) % hb.capacity
+			hb.startCursor++
 		}
+		hb.endCursor++
 	}
 
 	return n, nil
@@ -54,6 +60,43 @@ func (hb *historyBuffer) Read() []byte {
 	hb.mu.RLock()
 	defer hb.mu.RUnlock()
 
+	return hb.readLocked()
+}
+
+func (hb *historyBuffer) ReadFrom(cursor uint64) ([]byte, bool, uint64) {
+	hb.mu.RLock()
+	defer hb.mu.RUnlock()
+
+	if cursor < hb.startCursor || cursor > hb.endCursor {
+		return nil, false, hb.endCursor
+	}
+
+	if cursor == hb.endCursor {
+		return nil, true, hb.endCursor
+	}
+
+	all := hb.readLocked()
+	if len(all) == 0 {
+		return nil, true, hb.endCursor
+	}
+
+	offset := int(cursor - hb.startCursor)
+	if offset < 0 || offset > len(all) {
+		return nil, false, hb.endCursor
+	}
+
+	data := make([]byte, len(all)-offset)
+	copy(data, all[offset:])
+	return data, true, hb.endCursor
+}
+
+func (hb *historyBuffer) CursorRange() (uint64, uint64) {
+	hb.mu.RLock()
+	defer hb.mu.RUnlock()
+	return hb.startCursor, hb.endCursor
+}
+
+func (hb *historyBuffer) readLocked() []byte {
 	if hb.length == 0 {
 		return nil
 	}
@@ -76,6 +119,7 @@ func (hb *historyBuffer) Reset() {
 
 	hb.start = 0
 	hb.length = 0
+	hb.startCursor = hb.endCursor
 }
 
 func (hb *historyBuffer) Len() int {

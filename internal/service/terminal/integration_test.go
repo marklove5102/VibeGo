@@ -1,6 +1,8 @@
 package terminal
 
 import (
+	"encoding/base64"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -342,4 +344,91 @@ func TestManager_AttachNonExistent(t *testing.T) {
 		conn.Close()
 	}
 	time.Sleep(100 * time.Millisecond)
+}
+
+func TestManager_SendHistoryOnlyIncludesReplayDoneAndExited(t *testing.T) {
+	db := setupTestDB(t)
+	manager := NewManager(db, &ManagerConfig{Shell: "/bin/sh"})
+
+	session := &model.TerminalSession{
+		ID:        "history-only-session",
+		Name:      "history-only",
+		Shell:     "/bin/sh",
+		Cwd:       os.TempDir(),
+		Cols:      80,
+		Rows:      24,
+		Status:    model.StatusExited,
+		CreatedAt: time.Now().Unix(),
+		UpdatedAt: time.Now().Unix(),
+	}
+	if err := db.Create(session).Error; err != nil {
+		t.Fatalf("failed to create session: %v", err)
+	}
+	if err := db.Create(&model.TerminalHistory{
+		SessionID: session.ID,
+		Data:      []byte("history payload"),
+		CreatedAt: time.Now().Unix(),
+	}).Error; err != nil {
+		t.Fatalf("failed to create history: %v", err)
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		upgrader := websocket.Upgrader{}
+		conn, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			return
+		}
+		_, _ = manager.AttachWithOptions(session.ID, conn, AttachOptions{Cursor: 999})
+	}))
+	defer server.Close()
+
+	wsURL := "ws" + strings.TrimPrefix(server.URL, "http")
+	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+	if err != nil {
+		t.Fatalf("failed to dial: %v", err)
+	}
+	defer conn.Close()
+
+	var gotCmd bool
+	var gotReplayDone bool
+	var gotExited bool
+
+	for {
+		_, raw, readErr := conn.ReadMessage()
+		if readErr != nil {
+			break
+		}
+		var msg WSMessage
+		if err := json.Unmarshal(raw, &msg); err != nil {
+			t.Fatalf("failed to decode ws message: %v", err)
+		}
+		switch msg.Type {
+		case MsgTypeCmd:
+			gotCmd = true
+			if !msg.Reset {
+				t.Fatalf("expected reset cmd")
+			}
+			decoded, err := base64.StdEncoding.DecodeString(msg.Data)
+			if err != nil {
+				t.Fatalf("failed to decode cmd data: %v", err)
+			}
+			if string(decoded) != "history payload" {
+				t.Fatalf("expected history payload, got %q", string(decoded))
+			}
+		case MsgTypeReplayDone:
+			gotReplayDone = true
+		case MsgTypePtyExited:
+			gotExited = true
+		}
+	}
+
+	if !gotCmd {
+		t.Fatal("expected cmd history message")
+	}
+	if !gotReplayDone {
+		t.Fatal("expected replay_done message")
+	}
+	if !gotExited {
+		t.Fatal("expected pty_exited message")
+	}
 }

@@ -152,3 +152,60 @@ func TestHistoryBufferWrapMultipleTimes(t *testing.T) {
 		t.Errorf("expected %q, got %q", expected, read)
 	}
 }
+
+func TestHistoryBufferReadFromCursor(t *testing.T) {
+	hb := newHistoryBuffer(5)
+
+	start, end := hb.CursorRange()
+	if start != 0 || end != 0 {
+		t.Fatalf("expected empty cursor range 0,0 got %d,%d", start, end)
+	}
+
+	hb.Write([]byte("abc"))
+	data, ok, next := hb.ReadFrom(1)
+	if !ok {
+		t.Fatal("expected cursor hit")
+	}
+	if next != 3 {
+		t.Fatalf("expected next cursor 3, got %d", next)
+	}
+	if !bytes.Equal(data, []byte("bc")) {
+		t.Fatalf("expected %q, got %q", []byte("bc"), data)
+	}
+
+	hb.Write([]byte("def"))
+
+	data, ok, next = hb.ReadFrom(0)
+	if ok {
+		t.Fatal("expected cursor miss after wrap")
+	}
+	if next != 6 {
+		t.Fatalf("expected next cursor 6, got %d", next)
+	}
+	if data != nil {
+		t.Fatalf("expected nil data on miss, got %q", data)
+	}
+
+	data, ok, next = hb.ReadFrom(4)
+	if !ok {
+		t.Fatal("expected cursor hit")
+	}
+	if next != 6 {
+		t.Fatalf("expected next cursor 6, got %d", next)
+	}
+	if !bytes.Equal(data, []byte("ef")) {
+		t.Fatalf("expected %q, got %q", []byte("ef"), data)
+	}
+}
+
+func TestHistoryBufferResetKeepsCursorContinuity(t *testing.T) {
+	hb := newHistoryBuffer(5)
+	hb.Write([]byte("abc"))
+	hb.Reset()
+	hb.Write([]byte("xy"))
+
+	start, end := hb.CursorRange()
+	if start != 3 || end != 5 {
+		t.Fatalf("expected cursor range 3,5 got %d,%d", start, end)
+	}
+}

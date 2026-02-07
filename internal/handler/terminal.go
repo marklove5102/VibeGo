@@ -2,6 +2,7 @@ package handler
 
 import (
 	"net/http"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
@@ -219,7 +220,14 @@ func (h *TerminalHandler) WebSocket(c *gin.Context) {
 		return
 	}
 
-	termConn, err := h.manager.Attach(id, conn)
+	cursor := uint64(0)
+	if raw := c.Query("cursor"); raw != "" {
+		if parsed, parseErr := strconv.ParseUint(raw, 10, 64); parseErr == nil {
+			cursor = parsed
+		}
+	}
+
+	termConn, err := h.manager.AttachWithOptions(id, conn, terminal.AttachOptions{Cursor: cursor})
 	if err != nil {
 		log.Error().Err(err).Str("id", id).Msg("Failed to attach to terminal")
 		conn.Close()

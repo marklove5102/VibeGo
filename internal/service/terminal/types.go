@@ -31,6 +31,10 @@ type Connection struct {
 	Done <-chan struct{}
 }
 
+type AttachOptions struct {
+	Cursor uint64
+}
+
 type ManagerConfig struct {
 	Shell                string
 	BufferSize           int

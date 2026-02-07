@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { terminalApi } from "../api/terminal";
 import { type SessionInfo, sessionApi } from "../api/session";
 import { cleanupAllTerminals } from "../services/terminal-cleanup-service";
 import { useFileManagerStore } from "./file-manager-store";
@@ -405,6 +406,29 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
       }
 
       restoreSessionState(state);
+
+      try {
+        const terminalList = await terminalApi.list();
+        const remoteStatus = new Map(terminalList.terminals.map((terminal) => [terminal.id, terminal.status]));
+        const terminalStore = useTerminalStore.getState();
+        const normalized: Record<string, TerminalSession[]> = {};
+
+        for (const [groupId, terminals] of Object.entries(terminalStore.terminalsByGroup)) {
+          normalized[groupId] = terminals.map((terminal) => {
+            const status = remoteStatus.get(terminal.id);
+            if (status) {
+              return { ...terminal, status };
+            }
+            if (!terminal.status || terminal.status === "running") {
+              return { ...terminal, status: "exited" };
+            }
+            return terminal;
+          });
+        }
+
+        useTerminalStore.setState({ terminalsByGroup: normalized });
+      } catch {}
+
       set({ currentSessionId: id, loading: false });
       setStoredSessionId(id);
     } catch (e) {

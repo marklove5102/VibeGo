@@ -34,7 +34,7 @@ const getXtermTheme = (appTheme: Theme): ITheme => {
 
   if (appTheme === "hacker") {
     return {
-      background: "#0d0208", // Darker matrix-like
+      background: "#0d0208",
       foreground: "#00ff41",
       cursor: "#00ff41",
       selectionBackground: "rgba(0, 255, 65, 0.3)",
@@ -43,7 +43,7 @@ const getXtermTheme = (appTheme: Theme): ITheme => {
       green: "#00ff41",
       yellow: "#008f11",
       blue: "#003b00",
-      magenta: "#bd00ff", // Neon-ish
+      magenta: "#bd00ff",
       cyan: "#00fdff",
       white: "#00ff41",
       brightBlack: "#003b00",
@@ -59,9 +59,9 @@ const getXtermTheme = (appTheme: Theme): ITheme => {
 
   if (isDark) {
     return {
-      background: "#18181b", // zinc-950
-      foreground: "#d4d4d8", // zinc-300
-      cursor: "#a1a1aa", // zinc-400
+      background: "#18181b",
+      foreground: "#d4d4d8",
+      cursor: "#a1a1aa",
       selectionBackground: "rgba(161, 161, 170, 0.3)",
       black: "#18181b",
       red: "#ef4444",
@@ -82,11 +82,10 @@ const getXtermTheme = (appTheme: Theme): ITheme => {
     };
   }
 
-  // Light Theme
   return {
     background: "#ffffff",
-    foreground: "#18181b", // zinc-950
-    cursor: "#52525b", // zinc-600
+    foreground: "#18181b",
+    cursor: "#52525b",
     selectionBackground: "rgba(82, 82, 91, 0.3)",
     black: "#000000",
     red: "#ef4444",
@@ -119,6 +118,8 @@ const TerminalInstance: React.FC<TerminalInstanceProps> = ({ terminalId, isActiv
   const wasOpenRef = useRef(false);
   const initializedRef = useRef(false);
   const isUnmountingRef = useRef(false);
+  const lastCursorRef = useRef(0);
+  const isReplayingRef = useRef(false);
   const callbacksRef = useRef<CallbackRefs>({ isExited, onExited, t: (key: string) => key });
 
   const theme = useAppStore((s) => s.theme);
@@ -156,11 +157,14 @@ const TerminalInstance: React.FC<TerminalInstanceProps> = ({ terminalId, isActiv
         } catch {}
       }
 
-      const wsUrl = terminalApi.wsUrl(terminalId);
+      isReplayingRef.current = true;
+
+      const cursor = lastCursorRef.current > 0 ? lastCursorRef.current : undefined;
+      const wsUrl = terminalApi.wsUrl(terminalId, cursor);
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
 
-      const decoder = new TextDecoder("utf-8", { fatal: false });
+      let decoder = new TextDecoder("utf-8", { fatal: false });
 
       ws.onopen = () => {
         if (wsRef.current !== ws) return;
@@ -205,23 +209,40 @@ const TerminalInstance: React.FC<TerminalInstanceProps> = ({ terminalId, isActiv
         try {
           const msg = JSON.parse(event.data);
           if (msg.type === "cmd") {
+            const hasCursor = typeof msg.cursor === "number" && Number.isFinite(msg.cursor);
+            const cursorValue = hasCursor ? msg.cursor : undefined;
+            if (cursorValue !== undefined && !msg.reset && cursorValue <= lastCursorRef.current) {
+              return;
+            }
+            if (msg.reset) {
+              terminal.reset();
+              decoder = new TextDecoder("utf-8", { fatal: false });
+            }
             try {
-              const binaryString = atob(msg.data);
-              const bytes = new Uint8Array(binaryString.length);
-              for (let i = 0; i < binaryString.length; i++) {
-                bytes[i] = binaryString.charCodeAt(i);
+              if (typeof msg.data === "string" && msg.data.length > 0) {
+                const binaryString = atob(msg.data);
+                const bytes = new Uint8Array(binaryString.length);
+                for (let i = 0; i < binaryString.length; i++) {
+                  bytes[i] = binaryString.charCodeAt(i);
+                }
+                const decoded = decoder.decode(bytes, { stream: true });
+                terminal.write(decoded);
               }
-              const decoded = decoder.decode(bytes, { stream: true });
-              terminal.write(decoded);
             } catch (e) {
               console.warn("Failed to decode base64:", e);
             }
+            if (cursorValue !== undefined) {
+              lastCursorRef.current = cursorValue;
+            }
+          } else if (msg.type === "replay_done") {
+            isReplayingRef.current = false;
           } else if (msg.type === "pty_exited") {
             const { t: translate, onExited: exitCallback } = callbacksRef.current;
             terminal.write(`\r\n[${translate("terminal.processExited")}]\r\n`);
             terminal.options.cursorBlink = false;
             terminal.options.disableStdin = true;
             callbacksRef.current.isExited = true;
+            isReplayingRef.current = false;
             clearReconnectTimer();
             clearHeartbeat();
             try {
@@ -239,6 +260,7 @@ const TerminalInstance: React.FC<TerminalInstanceProps> = ({ terminalId, isActiv
       ws.onclose = () => {
         if (wsRef.current !== ws) return;
         wsRef.current = null;
+        isReplayingRef.current = false;
         clearHeartbeat();
         if (isUnmountingRef.current) return;
         if (callbacksRef.current.isExited) return;
@@ -283,6 +305,7 @@ const TerminalInstance: React.FC<TerminalInstanceProps> = ({ terminalId, isActiv
       terminalRef.current.options.disableStdin = true;
     }
     if (isExited) {
+      isReplayingRef.current = false;
       clearReconnectTimer();
       clearHeartbeat();
       if (wsRef.current) {
@@ -310,6 +333,8 @@ const TerminalInstance: React.FC<TerminalInstanceProps> = ({ terminalId, isActiv
 
     initializedRef.current = true;
     isUnmountingRef.current = false;
+    lastCursorRef.current = 0;
+    isReplayingRef.current = false;
 
     const terminal = new Terminal({
       cursorBlink: true,
@@ -333,6 +358,7 @@ const TerminalInstance: React.FC<TerminalInstanceProps> = ({ terminalId, isActiv
 
     terminal.onData((data) => {
       if (callbacksRef.current.isExited) return;
+      if (isReplayingRef.current) return;
       if (wsRef.current?.readyState === WebSocket.OPEN) {
         const msg = {
           type: "cmd",
@@ -346,6 +372,7 @@ const TerminalInstance: React.FC<TerminalInstanceProps> = ({ terminalId, isActiv
 
     return () => {
       isUnmountingRef.current = true;
+      isReplayingRef.current = false;
       clearReconnectTimer();
       clearHeartbeat();
       if (wsRef.current) {
@@ -364,16 +391,14 @@ const TerminalInstance: React.FC<TerminalInstanceProps> = ({ terminalId, isActiv
       fitAddonRef.current = null;
       initializedRef.current = false;
     };
-  }, [terminalId, connectWebSocket]); // Removed 'theme' from deps to prevent re-init
+  }, [terminalId, connectWebSocket]);
 
   useEffect(() => {
     if (isActive && fitAddonRef.current && terminalRef.current) {
-      // Small delay to ensure container is visible/sized
       setTimeout(() => {
         fitAddonRef.current?.fit();
         terminalRef.current?.focus();
 
-        // Sync size to backend
         if (wsRef.current?.readyState === WebSocket.OPEN && terminalRef.current) {
           const { cols, rows } = terminalRef.current;
           wsRef.current.send(JSON.stringify({ type: "resize", cols, rows }));
