@@ -1,9 +1,17 @@
 import React, { createContext, useCallback, useContext, useState } from "react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Drawer, DrawerContent, DrawerDescription, DrawerFooter, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
 import { Input } from "@/components/ui/input";
 import { type Locale, useTranslation } from "@/lib/i18n";
 import { useSettingsStore } from "@/lib/settings";
+import { cn } from "@/lib/utils";
 
 type DialogType = "alert" | "confirm" | "prompt";
 
@@ -122,13 +130,18 @@ export const DialogProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   return (
     <DialogContext.Provider value={{ alert, confirm, prompt }}>
       {children}
-      <Drawer open={!!dialog} onOpenChange={(open) => !open && handleClose()}>
+      <Dialog open={!!dialog} onOpenChange={(open) => !open && handleClose()}>
         {dialog && (
-          <DrawerContent onKeyDown={handleKeyDown} className="max-h-[80vh]">
-            <DrawerHeader>
-              <DrawerTitle>{dialog.title}</DrawerTitle>
-              {dialog.message && <DrawerDescription>{dialog.message}</DrawerDescription>}
-            </DrawerHeader>
+          <DialogContent
+            showCloseButton={false}
+            onKeyDown={handleKeyDown}
+            className="inset-x-0 top-auto bottom-0 translate-x-0 translate-y-0 w-full max-w-2xl rounded-t-2xl rounded-b-none border-t border-x-0 border-b-0 p-4 pb-5"
+          >
+            <div className="bg-muted mx-auto h-1.5 w-10 rounded-full" />
+            <DialogHeader>
+              <DialogTitle>{dialog.title}</DialogTitle>
+              {dialog.message && <DialogDescription>{dialog.message}</DialogDescription>}
+            </DialogHeader>
             {dialog.type === "prompt" && (
               <div className="px-4">
                 <Input
@@ -140,7 +153,7 @@ export const DialogProvider: React.FC<{ children: React.ReactNode }> = ({ childr
                 />
               </div>
             )}
-            <DrawerFooter className="pt-3">
+            <DialogFooter className="gap-3 pt-3">
               {dialog.type !== "alert" && (
                 <Button variant="outline" onClick={handleClose} className="h-11 w-full">
                   {dialog.cancelText || t("common.cancel")}
@@ -149,15 +162,18 @@ export const DialogProvider: React.FC<{ children: React.ReactNode }> = ({ childr
               <Button
                 variant={dialog.confirmVariant === "danger" ? "destructive" : "default"}
                 onClick={handleConfirm}
+                className={cn(
+                  "h-11 w-full",
+                  dialog.confirmVariant !== "danger" && "bg-ide-accent text-ide-on-accent hover:bg-ide-accent/90"
+                )}
                 autoFocus={dialog.type !== "prompt"}
-                className="h-11 w-full"
               >
                 {dialog.confirmText || (dialog.type === "alert" ? t("dialog.ok") : t("dialog.confirm"))}
               </Button>
-            </DrawerFooter>
-          </DrawerContent>
+            </DialogFooter>
+          </DialogContent>
         )}
-      </Drawer>
+      </Dialog>
     </DialogContext.Provider>
   );
 };
