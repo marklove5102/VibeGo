@@ -7,6 +7,7 @@ import { type GenericGroup, type GroupPage, type ToolGroup, useFrameStore } from
 import { type TerminalSession, useTerminalStore } from "./terminal-store";
 
 const CURRENT_SESSION_KEY = "current_session_id";
+const SESSION_STATE_BACKUP_KEY_PREFIX = "session_state_backup:";
 
 let autoSaveUnsub: (() => void) | null = null;
 let autoSaveTimer: ReturnType<typeof setTimeout> | null = null;
@@ -82,6 +83,41 @@ function createEmptySessionState(): SessionState {
     activeGroupId: null,
     fileManagerByGroup: {},
   };
+}
+
+function hasRestorableSessionContent(state: SessionState): boolean {
+  return state.openGroups.length > 0 || state.openTools.length > 0 || state.settingsOpen;
+}
+
+function getSessionStateBackupKey(id: string): string {
+  return `${SESSION_STATE_BACKUP_KEY_PREFIX}${id}`;
+}
+
+function getStoredSessionStateBackup(id: string): SessionState | null {
+  const raw = localStorage.getItem(getSessionStateBackupKey(id));
+  if (!raw) {
+    return null;
+  }
+
+  try {
+    const state = parseSessionState(raw);
+    return hasRestorableSessionContent(state) ? state : null;
+  } catch {
+    localStorage.removeItem(getSessionStateBackupKey(id));
+    return null;
+  }
+}
+
+function setStoredSessionStateBackup(id: string, state: SessionState): void {
+  if (!hasRestorableSessionContent(state)) {
+    return;
+  }
+
+  localStorage.setItem(getSessionStateBackupKey(id), JSON.stringify(state));
+}
+
+function removeStoredSessionStateBackup(id: string): void {
+  localStorage.removeItem(getSessionStateBackupKey(id));
 }
 
 function normalizeFileManagerSnapshot(
@@ -379,6 +415,7 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
       };
 
       await sessionApi.update(res.id, { state: JSON.stringify(state) });
+      setStoredSessionStateBackup(res.id, state);
 
       set({ currentSessionId: res.id });
       setStoredSessionId(res.id);
@@ -395,17 +432,44 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
       await cleanupAllTerminals();
 
       const detail = await sessionApi.get(id);
-      let state = createEmptySessionState();
+      const backupState = getStoredSessionStateBackup(id);
+      const restoreCandidates: SessionState[] = [];
 
       if (detail.state && detail.state !== "{}") {
         try {
-          state = parseSessionState(detail.state);
-        } catch {
-          state = createEmptySessionState();
-        }
+          const remoteState = parseSessionState(detail.state);
+          if (hasRestorableSessionContent(remoteState)) {
+            restoreCandidates.push(remoteState);
+          }
+        } catch {}
       }
 
-      restoreSessionState(state);
+      if (backupState) {
+        restoreCandidates.push(backupState);
+      }
+
+      if (restoreCandidates.length === 0) {
+        restoreCandidates.push(createEmptySessionState());
+      }
+
+      let restoredState = createEmptySessionState();
+      let restored = false;
+      for (const candidate of restoreCandidates) {
+        try {
+          restoreSessionState(candidate);
+          restoredState = candidate;
+          restored = true;
+          break;
+        } catch {}
+      }
+
+      if (!restored) {
+        restoreSessionState(restoredState);
+      }
+
+      if (hasRestorableSessionContent(restoredState)) {
+        setStoredSessionStateBackup(id, restoredState);
+      }
 
       try {
         const terminalList = await terminalApi.list();
@@ -442,6 +506,26 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
 
     const state = buildSessionState();
     try {
+      if (!hasRestorableSessionContent(state)) {
+        const backupState = getStoredSessionStateBackup(currentSessionId);
+        if (backupState) {
+          return;
+        }
+
+        try {
+          const detail = await sessionApi.get(currentSessionId);
+          if (detail.state && detail.state !== "{}") {
+            const remoteState = parseSessionState(detail.state);
+            if (hasRestorableSessionContent(remoteState)) {
+              setStoredSessionStateBackup(currentSessionId, remoteState);
+              return;
+            }
+          }
+        } catch {}
+      } else {
+        setStoredSessionStateBackup(currentSessionId, state);
+      }
+
       await sessionApi.update(currentSessionId, {
         state: JSON.stringify(state),
       });
@@ -453,6 +537,7 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
   deleteSession: async (id: string) => {
     try {
       await sessionApi.delete(id);
+      removeStoredSessionStateBackup(id);
       const { currentSessionId, sessions } = get();
       if (currentSessionId === id) {
         const remaining = sessions.filter((s) => s.id !== id);
@@ -476,6 +561,7 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
     try {
       for (const session of sessions) {
         await sessionApi.delete(session.id);
+        removeStoredSessionStateBackup(session.id);
       }
       set({ currentSessionId: null, sessions: [] });
       setStoredSessionId(null);
