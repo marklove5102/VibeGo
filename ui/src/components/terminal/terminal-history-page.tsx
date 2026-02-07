@@ -261,7 +261,7 @@ const TerminalHistoryPage: React.FC<TerminalHistoryPageProps> = ({ onBack }) => 
                         setSelectedIds(new Set([terminal.id]));
                         setShowDeleteConfirm(true);
                       }}
-                      className="p-2 rounded-md text-ide-mute hover:bg-ide-bg hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                      className="p-2 rounded-md text-ide-mute hover:bg-ide-bg hover:text-red-500 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity"
                     >
                       <Trash2 size={14} />
                     </button>
@@ -285,7 +285,7 @@ const TerminalHistoryPage: React.FC<TerminalHistoryPageProps> = ({ onBack }) => 
             <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
             <AlertDialogAction
               onClick={confirmDelete}
-              className="bg-red-500 hover:bg-red-600"
+              variant="destructive"
               disabled={deleteBatchMutation.isPending}
             >
               {t("common.delete")}

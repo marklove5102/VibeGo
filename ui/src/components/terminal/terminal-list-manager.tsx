@@ -262,7 +262,7 @@ const TerminalListManager: React.FC<TerminalListManagerProps> = ({
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
-            <AlertDialogAction onClick={handleConfirmDelete} className="bg-red-500 hover:bg-red-600">
+            <AlertDialogAction onClick={handleConfirmDelete} variant="destructive">
               {t("common.delete")}
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -277,7 +277,7 @@ const TerminalListManager: React.FC<TerminalListManagerProps> = ({
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
-            <AlertDialogAction onClick={handleConfirmClear} className="bg-red-500 hover:bg-red-600">
+            <AlertDialogAction onClick={handleConfirmClear} variant="destructive">
               {t("terminal.clearAll")}
             </AlertDialogAction>
           </AlertDialogFooter>

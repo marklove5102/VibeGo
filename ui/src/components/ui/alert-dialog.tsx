@@ -58,11 +58,14 @@ function AlertDialogContent({
         data-slot="alert-dialog-content"
         data-size={size}
         className={cn(
-          "bg-background data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 group/alert-dialog-content fixed top-[50%] left-[50%] z-50 grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 rounded-lg border p-6 shadow-lg duration-200 data-[size=sm]:max-w-xs data-[size=default]:sm:max-w-lg",
+          "bg-background data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:slide-out-to-bottom data-[state=open]:slide-in-from-bottom group/alert-dialog-content fixed inset-x-0 bottom-0 z-50 mx-auto grid w-full max-w-2xl gap-4 rounded-t-2xl border-t p-4 pb-5 shadow-lg duration-200 data-[size=sm]:max-w-md",
           className
         )}
         {...props}
-      />
+      >
+        <div className="bg-muted mx-auto h-1.5 w-10 rounded-full" />
+        {props.children}
+      </AlertDialogPrimitive.Content>
     </AlertDialogPortal>
   )
 }
@@ -91,7 +94,7 @@ function AlertDialogFooter({
     <div
       data-slot="alert-dialog-footer"
       className={cn(
-        "flex flex-col-reverse gap-2 group-data-[size=sm]/alert-dialog-content:grid group-data-[size=sm]/alert-dialog-content:grid-cols-2 sm:flex-row sm:justify-end",
+        "flex flex-col-reverse gap-3 pt-1",
         className
       )}
       {...props}
@@ -155,7 +158,7 @@ function AlertDialogAction({
     <Button variant={variant} size={size} asChild>
       <AlertDialogPrimitive.Action
         data-slot="alert-dialog-action"
-        className={cn(className)}
+        className={cn("h-11 w-full", className)}
         {...props}
       />
     </Button>
@@ -173,7 +176,7 @@ function AlertDialogCancel({
     <Button variant={variant} size={size} asChild>
       <AlertDialogPrimitive.Cancel
         data-slot="alert-dialog-cancel"
-        className={cn(className)}
+        className={cn("h-11 w-full", className)}
         {...props}
       />
     </Button>

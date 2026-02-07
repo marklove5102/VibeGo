@@ -1,5 +1,7 @@
 import React, { createContext, useCallback, useContext, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Drawer, DrawerContent, DrawerDescription, DrawerFooter, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
+import { Input } from "@/components/ui/input";
 import { type Locale, useTranslation } from "@/lib/i18n";
 import { useSettingsStore } from "@/lib/settings";
 
@@ -120,35 +122,27 @@ export const DialogProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   return (
     <DialogContext.Provider value={{ alert, confirm, prompt }}>
       {children}
-      {dialog && (
-        <div
-          className="fixed inset-0 z-50 bg-black/50 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0"
-          data-state="open"
-          onClick={handleClose}
-        >
-          <div
-            className="fixed left-[50%] top-[50%] z-50 grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 border bg-background p-6 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 rounded-lg sm:max-w-lg"
-            data-state="open"
-            onClick={(e) => e.stopPropagation()}
-            onKeyDown={handleKeyDown}
-          >
-            <div className="grid gap-1.5 text-center sm:text-left">
-              <h2 className="text-lg font-semibold">{dialog.title}</h2>
-              {dialog.message && <p className="text-sm text-muted-foreground">{dialog.message}</p>}
-            </div>
+      <Drawer open={!!dialog} onOpenChange={(open) => !open && handleClose()}>
+        {dialog && (
+          <DrawerContent onKeyDown={handleKeyDown} className="max-h-[80vh]">
+            <DrawerHeader>
+              <DrawerTitle>{dialog.title}</DrawerTitle>
+              {dialog.message && <DrawerDescription>{dialog.message}</DrawerDescription>}
+            </DrawerHeader>
             {dialog.type === "prompt" && (
-              <input
-                type="text"
-                value={inputValue}
-                onChange={(e) => setInputValue(e.target.value)}
-                placeholder={dialog.placeholder || ""}
-                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                autoFocus
-              />
+              <div className="px-4">
+                <Input
+                  type="text"
+                  value={inputValue}
+                  onChange={(e) => setInputValue(e.target.value)}
+                  placeholder={dialog.placeholder || ""}
+                  autoFocus
+                />
+              </div>
             )}
-            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <DrawerFooter className="pt-3">
               {dialog.type !== "alert" && (
-                <Button variant="outline" onClick={handleClose}>
+                <Button variant="outline" onClick={handleClose} className="h-11 w-full">
                   {dialog.cancelText || t("common.cancel")}
                 </Button>
               )}
@@ -156,13 +150,14 @@ export const DialogProvider: React.FC<{ children: React.ReactNode }> = ({ childr
                 variant={dialog.confirmVariant === "danger" ? "destructive" : "default"}
                 onClick={handleConfirm}
                 autoFocus={dialog.type !== "prompt"}
+                className="h-11 w-full"
               >
                 {dialog.confirmText || (dialog.type === "alert" ? t("dialog.ok") : t("dialog.confirm"))}
               </Button>
-            </div>
-          </div>
-        </div>
-      )}
+            </DrawerFooter>
+          </DrawerContent>
+        )}
+      </Drawer>
     </DialogContext.Provider>
   );
 };
