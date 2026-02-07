@@ -31,6 +31,137 @@ export interface GitDiff {
   new: string;
 }
 
+export interface GitStructuredFile {
+  path: string;
+  name: string;
+  indexStatus: string;
+  worktreeStatus: string;
+  changeType: string;
+  includedState: "none" | "partial" | "all";
+  conflicted: boolean;
+}
+
+export interface GitStatusSummary {
+  changed: number;
+  staged: number;
+  unstaged: number;
+  included: number;
+  conflicted: number;
+}
+
+export interface GitStructuredStatus {
+  files: GitStructuredFile[];
+  summary: GitStatusSummary;
+}
+
+export interface GitDiffLine {
+  kind: "context" | "add" | "del";
+  content: string;
+  oldLine: number;
+  newLine: number;
+}
+
+export interface GitDiffHunk {
+  id: string;
+  header: string;
+  oldStart: number;
+  oldLines: number;
+  newStart: number;
+  newLines: number;
+  lines: GitDiffLine[];
+  patch: string;
+}
+
+export interface GitInteractiveDiff {
+  path: string;
+  mode: "working" | "staged" | "stash";
+  patch: string;
+  patchHash: string;
+  hunks: GitDiffHunk[];
+  old: string;
+  new: string;
+  binary: boolean;
+}
+
+export interface GitDiffLineV2 {
+  id: string;
+  kind: "context" | "add" | "del";
+  content: string;
+  oldLine: number;
+  newLine: number;
+  selectable: boolean;
+}
+
+export interface GitDiffHunkV2 {
+  id: string;
+  header: string;
+  oldStart: number;
+  oldLines: number;
+  newStart: number;
+  newLines: number;
+  lines: GitDiffLineV2[];
+  patch: string;
+}
+
+export interface GitDiffStatsV2 {
+  added: number;
+  deleted: number;
+  hunks: number;
+  lines: number;
+}
+
+export interface GitDiffCapabilityV2 {
+  lineSelectable: boolean;
+}
+
+export interface GitInteractiveDiffV2 {
+  path: string;
+  mode: "working" | "staged";
+  patch: string;
+  patchHash: string;
+  hunks: GitDiffHunkV2[];
+  stats: GitDiffStatsV2;
+  capability: GitDiffCapabilityV2;
+  old: string;
+  new: string;
+  binary: boolean;
+}
+
+export interface GitApplySelectionV2Response {
+  ok: boolean;
+  status: GitStructuredStatus;
+  diff?: GitInteractiveDiffV2;
+}
+
+export interface GitStashFile {
+  path: string;
+  status: "modified" | "added" | "deleted" | "renamed" | "copied";
+}
+
+export interface GitConflictDetails {
+  path: string;
+  content: string;
+  ours: string;
+  base: string;
+  theirs: string;
+}
+
+export interface GitConflictSegmentV2 {
+  type: "plain" | "conflict";
+  text?: string;
+  blockId?: string;
+  ours?: string[];
+  base?: string[];
+  theirs?: string[];
+}
+
+export interface GitConflictDetailsV2 {
+  path: string;
+  hash: string;
+  segments: GitConflictSegmentV2[];
+  blocksTotal: number;
+}
+
 export interface CommitFileInfo {
   path: string;
   status: string;
@@ -113,6 +244,12 @@ export const gitApi = {
       body: JSON.stringify({ path }),
     }),
 
+  statusV2: (path: string) =>
+    request<GitStructuredStatus>("/git/status-v2", {
+      method: "POST",
+      body: JSON.stringify({ path }),
+    }),
+
   log: (path: string, limit = 20) =>
     request<{ commits: GitCommit[] }>("/git/log", {
       method: "POST",
@@ -123,6 +260,46 @@ export const gitApi = {
     request<GitDiff>("/git/diff", {
       method: "POST",
       body: JSON.stringify({ path, filePath }),
+    }),
+
+  fileDiff: (path: string, filePath: string, mode: "working" | "staged" = "working") =>
+    request<GitInteractiveDiff>("/git/file-diff", {
+      method: "POST",
+      body: JSON.stringify({ path, filePath, mode }),
+    }),
+
+  fileDiffV2: (path: string, filePath: string, mode: "working" | "staged" = "working") =>
+    request<GitInteractiveDiffV2>("/git/file-diff-v2", {
+      method: "POST",
+      body: JSON.stringify({ path, filePath, mode }),
+    }),
+
+  changeSelection: (
+    path: string,
+    filePath: string,
+    mode: "working" | "staged",
+    action: "include" | "exclude" | "discard",
+    patchHash: string,
+    hunkIds: string[]
+  ) =>
+    request<{ ok: boolean; status: GitStructuredStatus; diff?: GitInteractiveDiff }>("/git/change-selection", {
+      method: "POST",
+      body: JSON.stringify({ path, filePath, mode, action, patchHash, hunkIds }),
+    }),
+
+  applySelectionV2: (
+    path: string,
+    filePath: string,
+    mode: "working" | "staged",
+    target: "line" | "hunk" | "file",
+    action: "include" | "exclude" | "discard",
+    patchHash: string,
+    lineIds: string[],
+    hunkIds: string[]
+  ) =>
+    request<GitApplySelectionV2Response>("/git/apply-selection-v2", {
+      method: "POST",
+      body: JSON.stringify({ path, filePath, mode, target, action, patchHash, lineIds, hunkIds }),
     }),
 
   show: (path: string, filePath: string, ref = "HEAD") =>
@@ -249,6 +426,18 @@ export const gitApi = {
       body: JSON.stringify({ path }),
     }),
 
+  stashFiles: (path: string, index: number) =>
+    request<{ files: GitStashFile[] }>("/git/stash-files", {
+      method: "POST",
+      body: JSON.stringify({ path, index }),
+    }),
+
+  stashDiff: (path: string, index: number, filePath: string) =>
+    request<GitInteractiveDiff>("/git/stash-diff", {
+      method: "POST",
+      body: JSON.stringify({ path, index, filePath }),
+    }),
+
   stashPop: (path: string, index = 0) =>
     request<{ ok: boolean; status: StatusPayload }>("/git/stash-pop", {
       method: "POST",
@@ -271,6 +460,37 @@ export const gitApi = {
     request<{ ok: boolean }>("/git/resolve-conflict", {
       method: "POST",
       body: JSON.stringify({ path, filePath, content }),
+    }),
+
+  conflictDetails: (path: string, filePath: string) =>
+    request<GitConflictDetails>("/git/conflict-details", {
+      method: "POST",
+      body: JSON.stringify({ path, filePath }),
+    }),
+
+  conflictDetailsV2: (path: string, filePath: string) =>
+    request<GitConflictDetailsV2>("/git/conflict-details-v2", {
+      method: "POST",
+      body: JSON.stringify({ path, filePath }),
+    }),
+
+  conflictResolve: (path: string, filePath: string, mode: "ours" | "theirs" | "manual", content?: string) =>
+    request<{ ok: boolean; conflicts: string[] }>("/git/conflict-resolve", {
+      method: "POST",
+      body: JSON.stringify({ path, filePath, mode, content }),
+    }),
+
+  conflictResolveV2: (
+    path: string,
+    filePath: string,
+    mode: "line-map" | "manual" | "ours" | "theirs",
+    hash: string,
+    resolvedContent?: string,
+    manualContent?: string
+  ) =>
+    request<{ ok: boolean; conflicts: string[]; status: GitStructuredStatus }>("/git/conflict-resolve-v2", {
+      method: "POST",
+      body: JSON.stringify({ path, filePath, mode, hash, resolvedContent, manualContent }),
     }),
 
   createBranch: (path: string, branch: string, from?: string) =>

@@ -77,6 +77,8 @@
     "discardWarning": "This will permanently discard your changes. This cannot be undone.",
     "cancel": "Cancel",
     "confirm": "Discard",
+    "add": "Stage",
+    "reset": "Unstage",
     "stash": "Stash",
     "stashAll": "Stash all changes",
     "stashFile": "Stash this file",
