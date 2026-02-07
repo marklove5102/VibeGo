@@ -3,6 +3,7 @@ package terminal
 import (
 	"context"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -23,8 +24,16 @@ type localCommand struct {
 }
 
 func newLocalCommand(shell string, args []string, cwd string, cols, rows int, opts ...localCommandOption) (*localCommand, error) {
-	// Set PROMPT_EOL_MARK to empty to avoid the '%' char on Lines ending without newline (zsh feature)
 	env := append(os.Environ(), "TERM=xterm-256color", "PROMPT_EOL_MARK=")
+	if !hasEnvKey(env, "LANG") {
+		env = append(env, "LANG=C.UTF-8")
+	}
+	if !hasEnvKey(env, "LC_ALL") {
+		env = append(env, "LC_ALL=C.UTF-8")
+	}
+	if !hasEnvKey(env, "LC_CTYPE") {
+		env = append(env, "LC_CTYPE=C.UTF-8")
+	}
 
 	spawnOpts := ptyx.SpawnOpts{
 		Prog: shell,
@@ -115,4 +124,14 @@ func (lc *localCommand) Close() error {
 
 func (lc *localCommand) ExitCode() int {
 	return lc.exitCode
+}
+
+func hasEnvKey(env []string, key string) bool {
+	prefix := key + "="
+	for i := range env {
+		if strings.HasPrefix(env[i], prefix) {
+			return true
+		}
+	}
+	return false
 }

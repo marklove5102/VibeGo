@@ -20,6 +20,15 @@ interface CallbackRefs {
   t: (key: string) => string;
 }
 
+const encodeUtf8Base64 = (data: string): string => {
+  const bytes = new TextEncoder().encode(data);
+  let binary = "";
+  for (let i = 0; i < bytes.length; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary);
+};
+
 const getXtermTheme = (appTheme: Theme): ITheme => {
   const isDark = appTheme !== "light";
 
@@ -223,7 +232,7 @@ const TerminalInstance: React.FC<TerminalInstanceProps> = ({ terminalId, isActiv
       if (wsRef.current?.readyState === WebSocket.OPEN) {
         const msg = {
           type: "cmd",
-          data: btoa(data),
+          data: encodeUtf8Base64(data),
         };
         wsRef.current.send(JSON.stringify(msg));
       }
