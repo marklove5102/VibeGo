@@ -59,34 +59,44 @@ jobs:
       contents: read
 
     steps:
+      - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           registry-url: https://registry.npmjs.org
 
+      - uses: astral-sh/setup-uv@v5
+
       - name: Update npm
         run: npm install -g npm@latest
 
-      - name: Download npm tarballs from release
+      - name: Download backend artifacts from release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERSION: ${{ needs.meta.outputs.version }}
           TAG: ${{ needs.meta.outputs.tag }}
         run: |
           set -euo pipefail
-          mkdir -p dist/npm
+          mkdir -p dist/release
           patterns=(
-            "vibego-npm-${VERSION}.tgz"
-            "vibego-npm-linux-x64-${VERSION}.tgz"
-            "vibego-npm-linux-arm64-${VERSION}.tgz"
-            "vibego-npm-darwin-x64-${VERSION}.tgz"
-            "vibego-npm-darwin-arm64-${VERSION}.tgz"
-            "vibego-npm-win32-x64-${VERSION}.tgz"
-            "vibego-npm-win32-arm64-${VERSION}.tgz"
+            "vibego_v${VERSION}_linux_amd64.tar.gz"
+            "vibego_v${VERSION}_linux_arm64.tar.gz"
+            "vibego_v${VERSION}_darwin_amd64.tar.gz"
+            "vibego_v${VERSION}_darwin_arm64.tar.gz"
+            "vibego_v${VERSION}_windows_amd64.tar.gz"
+            "vibego_v${VERSION}_windows_arm64.tar.gz"
           )
           for pattern in "${patterns[@]}"; do
-            gh release download "${TAG}" --repo "${GITHUB_REPOSITORY}" --pattern "${pattern}" --dir dist/npm
+            gh release download "${TAG}" --repo "${GITHUB_REPOSITORY}" --pattern "${pattern}" --dir dist/release
           done
+
+      - name: Stage npm tarballs
+        env:
+          TAG: ${{ needs.meta.outputs.tag }}
+        run: |
+          set -euo pipefail
+          uv run python scripts/stage_npm_packages.py --tag "${TAG}" --artifacts-dir dist/release --output-dir dist/npm
 
       - name: Publish to npm
         env:
