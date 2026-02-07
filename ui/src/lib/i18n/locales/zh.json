@@ -30,7 +30,26 @@
     "redo": "恢复",
     "find": "查找",
     "replace": "替换",
-    "delete": "删除"
+    "delete": "删除",
+    "refresh": "刷新",
+    "clear": "清除",
+    "edit": "编辑",
+    "view": "查看",
+    "new": "新建",
+    "backToList": "返回列表",
+    "yes": "是",
+    "selected": "已选择",
+    "connected": "已连接",
+    "openInNewTab": "在新标签页中打开",
+    "zoomIn": "放大",
+    "zoomOut": "缩小",
+    "reset": "重置",
+    "fullscreen": "全屏",
+    "exitFullscreen": "退出全屏",
+    "search": "搜索",
+    "copied": "已复制",
+    "pageNotFound": "页面不存在",
+    "saveFailed": "保存失败"
   },
   "dialog": {
     "ok": "确定",
@@ -51,7 +70,8 @@
     "symlink": "符号链接",
     "path": "路径",
     "copyPath": "复制路径",
-    "download": "下载"
+    "download": "下载",
+    "copied": "已复制"
   },
   "sidebar": {
     "project": "项目",
@@ -102,7 +122,39 @@
     "create": "创建",
     "ahead": "领先",
     "behind": "落后",
-    "refresh": "刷新"
+    "refresh": "刷新",
+    "noDiff": "无差异",
+    "binaryFile": "二进制文件",
+    "noHunks": "无代码块",
+    "selectFile": "选择文件",
+    "selectConflict": "选择冲突",
+    "modeWorking": "工作区",
+    "modeStaged": "暂存区",
+    "lines": "行",
+    "hunks": "区块",
+    "operationFailed": "操作失败",
+    "ours": "我们的",
+    "theirs": "他们的",
+    "base": "基线",
+    "manual": "手动",
+    "statusModified": "已修改",
+    "statusAdded": "已添加",
+    "statusDeleted": "已删除",
+    "statusRenamed": "已重命名",
+    "statusCopied": "已复制",
+    "statusUntracked": "未跟踪",
+    "statusUnmerged": "未合并",
+    "commitShortcut": "Ctrl+Enter",
+    "clearSelection": "清除选择",
+    "working": "工作区",
+    "staged": "已暂存",
+    "commitsCount": "{count} 次提交",
+    "searchFiles": "搜索文件...",
+    "commits": "次提交",
+    "now": "刚刚",
+    "dayShort": "天",
+    "hourShort": "小时",
+    "minuteShort": "分钟"
   },
   "terminal": {
     "noActiveSession": "无活动终端会话",
@@ -125,7 +177,10 @@
     "selected": "已选择",
     "deleteHistoryTitle": "删除终端历史",
     "deleteHistoryConfirm": "确定要删除 {count} 条终端历史记录吗？此操作无法撤销。",
-    "readOnly": "只读"
+    "readOnly": "只读",
+    "new": "新建终端",
+    "list": "终端列表",
+    "backToTerminal": "返回终端"
   },
   "fileTree": {
     "projectRoot": "项目根目录"
@@ -133,7 +188,21 @@
   "preview": {
     "notAvailable": "此文件类型暂不支持预览",
     "openAsText": "以文本打开",
-    "download": "下载"
+    "download": "下载",
+    "selectFile": "选择一个文件进行预览",
+    "fileTooLargeToPreview": "文件过大，无法预览",
+    "fileTooLargeToOpen": "文件过大，无法打开",
+    "loadFailed": "加载文件失败",
+    "saveFailed": "保存文件失败",
+    "unsavedChanges": "有未保存的更改",
+    "videoUnsupported": "当前浏览器不支持视频播放。",
+    "audioUnsupported": "当前浏览器不支持音频播放。",
+    "videoPlaybackUnsupported": "当前浏览器不支持视频播放。",
+    "audioPlaybackUnsupported": "当前浏览器不支持音频播放。",
+    "openInNewTab": "在新标签页打开",
+    "zoomOut": "缩小",
+    "zoomIn": "放大",
+    "reset": "重置"
   },
   "settings": {
     "category": {
@@ -144,15 +213,23 @@
     },
     "theme": {
       "label": "主题",
-      "description": "选择颜色主题"
+      "description": "选择颜色主题",
+      "optionLight": "浅色",
+      "optionDark": "深色",
+      "optionHacker": "黑客",
+      "optionTerminal": "终端"
     },
     "locale": {
       "label": "语言",
-      "description": "选择显示语言"
+      "description": "选择显示语言",
+      "optionEnglish": "英文",
+      "optionChinese": "中文"
     },
     "fontFamily": {
       "label": "字体",
-      "description": "选择编辑器和界面字体"
+      "description": "选择编辑器和界面字体",
+      "optionDefault": "默认",
+      "optionJetBrainsMono": "JetBrains Mono"
     },
     "showHiddenFiles": {
       "label": "显示隐藏文件",
@@ -160,7 +237,9 @@
     },
     "defaultViewMode": {
       "label": "默认视图",
-      "description": "文件管理器默认视图模式"
+      "description": "文件管理器默认视图模式",
+      "optionList": "列表",
+      "optionGrid": "网格"
     },
     "editorFontSize": {
       "label": "字体大小",
@@ -187,18 +266,42 @@
       "description": "提交时使用客户端当前时间，还是基于上一个提交时间递增",
       "optionClient": "客户端时间",
       "optionIncrement": "上次提交递增"
+    },
+    "option": {
+      "light": "浅色",
+      "dark": "深色",
+      "hacker": "黑客",
+      "terminal": "终端",
+      "english": "英文",
+      "chinese": "中文",
+      "default": "默认",
+      "list": "列表",
+      "grid": "网格"
     }
   },
   "menu": {
     "builtIn": "内置",
     "context": "操作",
-    "editor": "编辑器"
+    "editor": "编辑器",
+    "connected": "已连接"
   },
   "fileManager": {
     "newFile": "新建文件",
     "newFolder": "新建文件夹",
     "enterName": "输入名称...",
-    "emptyFolder": "空文件夹"
+    "emptyFolder": "空文件夹",
+    "searchFiles": "搜索文件...",
+    "sortName": "名称",
+    "sortSize": "大小",
+    "sortDate": "日期",
+    "sortType": "类型",
+    "loadFailed": "加载文件失败",
+    "createFileFailed": "创建文件失败",
+    "createFolderFailed": "创建文件夹失败",
+    "renameFailed": "重命名失败",
+    "deleteFailed": "删除失败",
+    "searchPlaceholder": "搜索文件...",
+    "selectedCount": "已选择 {count} 项"
   },
   "contextMenu": {
     "closeGroup": "关闭分组"
@@ -207,6 +310,12 @@
     "welcome": "选择一个文件夹开始",
     "openDirectory": "打开目录",
     "enterPath": "输入服务器路径..."
+  },
+  "newGroup": {
+    "openFolderDescription": "浏览并打开文件夹",
+    "closeCurrentGroup": "关闭当前分组",
+    "title": "新建组",
+    "browseAndOpenFolder": "浏览并打开文件夹"
   },
   "session": {
     "sessions": "会话列表",
@@ -270,7 +379,13 @@
       "sigkill": "SIGKILL (9) - 强制终止",
       "sighup": "SIGHUP (1) - 挂起",
       "killing": "终止中...",
-      "openMonitor": "打开监视器"
+      "openMonitor": "打开监视器",
+      "used": "已用",
+      "available": "可用",
+      "statusRunning": "运行中",
+      "statusSleeping": "休眠中",
+      "statusZombie": "僵尸",
+      "statusUnknown": "未知"
     }
   },
   "newPage": {
@@ -280,5 +395,14 @@
     "title": "选择目录",
     "enterPath": "输入路径...",
     "noSubdirectories": "无子目录"
+  },
+  "time": {
+    "now": "刚刚",
+    "minutesAgoShort": "{count} 分钟前",
+    "hoursAgoShort": "{count} 小时前",
+    "daysAgoShort": "{count} 天前",
+    "minutesShort": "{count} 分钟",
+    "hoursMinutesShort": "{hours} 小时 {minutes} 分钟",
+    "daysHoursShort": "{days} 天 {hours} 小时"
   }
 }

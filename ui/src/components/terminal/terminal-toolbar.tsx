@@ -1,5 +1,7 @@
 import { LayoutList, Plus, Trash2 } from "lucide-react";
 import React from "react";
+import { useTranslation } from "@/lib/i18n";
+import { useAppStore } from "@/stores";
 import type { TerminalSession } from "@/stores/terminal-store";
 import TerminalTabs from "./terminal-tabs";
 
@@ -24,6 +26,9 @@ const TerminalToolbar: React.FC<TerminalToolbarProps> = ({
   isListMode,
   onClearAll,
 }) => {
+  const locale = useAppStore((s) => s.locale);
+  const t = useTranslation(locale);
+
   return (
     <div className="flex flex-col bg-ide-panel border-b border-ide-border">
       <div className="flex items-center gap-1 h-10 px-2">
@@ -36,7 +41,7 @@ const TerminalToolbar: React.FC<TerminalToolbarProps> = ({
               onTabClose={onTabClose}
             />
           ) : (
-            <span className="text-sm font-medium text-ide-text ml-2">Terminals</span>
+            <span className="text-sm font-medium text-ide-text ml-2">{t("terminal.list")}</span>
           )}
         </div>
 
@@ -44,7 +49,7 @@ const TerminalToolbar: React.FC<TerminalToolbarProps> = ({
           <button
             onClick={onToggleListMode}
             className={`p-2 rounded-md hover:bg-ide-bg ${isListMode ? "text-ide-mute" : "text-ide-accent"}`}
-            title={isListMode ? "Back to Terminal" : "Terminal List"}
+            title={isListMode ? t("terminal.backToTerminal") : t("terminal.list")}
           >
             {isListMode ? <LayoutList size={18} className="rotate-180" /> : <LayoutList size={18} />}
           </button>
@@ -52,7 +57,7 @@ const TerminalToolbar: React.FC<TerminalToolbarProps> = ({
           <button
             onClick={onNewTerminal}
             className="p-2 rounded-md text-ide-mute hover:bg-ide-bg hover:text-ide-text"
-            title="New Terminal"
+            title={t("terminal.new")}
           >
             <Plus size={18} />
           </button>
@@ -61,7 +66,7 @@ const TerminalToolbar: React.FC<TerminalToolbarProps> = ({
             <button
               onClick={onClearAll}
               className="p-2 rounded-md text-ide-mute hover:bg-red-500/10 hover:text-red-500"
-              title="Clear All"
+              title={t("terminal.clearAll")}
             >
               <Trash2 size={18} />
             </button>

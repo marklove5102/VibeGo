@@ -1,10 +1,12 @@
 import { Box, FolderOpen, X } from "lucide-react";
 import React from "react";
+import { type Locale, useTranslation } from "@/lib/i18n";
 import { useFrameStore } from "@/stores/frame-store";
 
 interface NewGroupMenuProps {
   isOpen: boolean;
   onClose: () => void;
+  locale: Locale;
   onOpenDirectory: () => void;
   onNewTool: (pageId: string) => void;
   availableTools?: { id: string; name: string; icon?: React.ReactNode }[];
@@ -13,10 +15,12 @@ interface NewGroupMenuProps {
 const NewGroupMenu: React.FC<NewGroupMenuProps> = ({
   isOpen,
   onClose,
+  locale,
   onOpenDirectory,
   onNewTool,
   availableTools = [],
 }) => {
+  const t = useTranslation(locale);
   const groups = useFrameStore((s) => s.groups);
   const activeGroupId = useFrameStore((s) => s.activeGroupId);
   const removeGroup = useFrameStore((s) => s.removeGroup);
@@ -28,7 +32,7 @@ const NewGroupMenu: React.FC<NewGroupMenuProps> = ({
       <div className="fixed inset-0 bg-black/50 z-40" onClick={onClose} />
       <div className="fixed bottom-0 left-0 right-0 z-50 bg-ide-panel border-t border-ide-border rounded-t-2xl shadow-lg animate-in slide-in-from-bottom duration-200">
         <div className="flex items-center justify-between px-4 py-3 border-b border-ide-border">
-          <span className="text-sm font-bold text-ide-text">New Group</span>
+          <span className="text-sm font-bold text-ide-text">{t("common.newGroup")}</span>
           <button onClick={onClose} className="p-1.5 rounded-md text-ide-mute hover:text-ide-text hover:bg-ide-bg">
             <X size={18} />
           </button>
@@ -45,8 +49,8 @@ const NewGroupMenu: React.FC<NewGroupMenuProps> = ({
               <FolderOpen size={20} className="text-ide-accent" />
             </div>
             <div className="text-left">
-              <div className="text-sm font-medium text-ide-text">Open Directory</div>
-              <div className="text-xs text-ide-mute">Browse and open a folder</div>
+              <div className="text-sm font-medium text-ide-text">{t("common.openFolder")}</div>
+              <div className="text-xs text-ide-mute">{t("newGroup.openFolderDescription")}</div>
             </div>
           </button>
           <button
@@ -63,15 +67,15 @@ const NewGroupMenu: React.FC<NewGroupMenuProps> = ({
               <X size={20} className="text-red-500" />
             </div>
             <div className="text-left">
-              <div className="text-sm font-medium text-red-500">Close Group</div>
-              <div className="text-xs text-ide-mute">{activeGroup?.name || "Close current group"}</div>
+              <div className="text-sm font-medium text-red-500">{t("contextMenu.closeGroup")}</div>
+              <div className="text-xs text-ide-mute">{activeGroup?.name || t("newGroup.closeCurrentGroup")}</div>
             </div>
           </button>
           {availableTools.length > 0 && (
             <>
               <div className="h-px bg-ide-border my-2" />
               <div className="px-4 py-2">
-                <span className="text-xs font-bold text-ide-mute uppercase">Plugins</span>
+                <span className="text-xs font-bold text-ide-mute uppercase">{t("newPage.plugins")}</span>
               </div>
               {availableTools.map((tool) => (
                 <button

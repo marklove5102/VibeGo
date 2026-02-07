@@ -1,7 +1,7 @@
 import { Check, ChevronRight, Clock, Edit2, Layers, Trash2, X } from "lucide-react";
 import React from "react";
 import { useDialog } from "@/components/common";
-import { type Locale, useTranslation } from "@/lib/i18n";
+import { getIntlLocale, type Locale, useTranslation } from "@/lib/i18n";
 import { useSessionStore } from "@/stores/session-store";
 
 interface RecentSessionListProps {
@@ -78,13 +78,13 @@ const RecentSessionList: React.FC<RecentSessionListProps> = ({ onSwitchSession, 
       const hours = Math.floor(diff / (1000 * 60 * 60));
       if (hours === 0) {
         const minutes = Math.floor(diff / (1000 * 60));
-        return `${minutes}m`;
+        if (minutes <= 0) return t("time.now");
+        return t("time.minutesAgoShort").replace("{count}", String(minutes));
       }
-      return `${hours}h`;
+      return t("time.hoursAgoShort").replace("{count}", String(hours));
     }
-    if (days === 1) return "1d";
-    if (days < 7) return `${days}d`;
-    return date.toLocaleDateString();
+    if (days < 7) return t("time.daysAgoShort").replace("{count}", String(days));
+    return date.toLocaleDateString(getIntlLocale(locale));
   };
 
   if (loading && sessions.length === 0) {

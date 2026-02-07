@@ -30,7 +30,26 @@
     "redo": "Redo",
     "find": "Find",
     "replace": "Replace",
-    "delete": "Delete"
+    "delete": "Delete",
+    "new": "New",
+    "edit": "Edit",
+    "view": "View",
+    "refresh": "Refresh",
+    "clear": "Clear",
+    "search": "Search",
+    "backToList": "Back to List",
+    "fullscreen": "Fullscreen",
+    "exitFullscreen": "Exit Fullscreen",
+    "openInNewTab": "Open in New Tab",
+    "zoomIn": "Zoom In",
+    "zoomOut": "Zoom Out",
+    "reset": "Reset",
+    "copied": "Copied",
+    "yes": "Yes",
+    "connected": "CONNECTED",
+    "pageNotFound": "Page not found",
+    "saveFailed": "Failed to save",
+    "selected": "selected"
   },
   "dialog": {
     "ok": "OK",
@@ -51,7 +70,8 @@
     "symlink": "Symlink",
     "path": "Path",
     "copyPath": "Copy Path",
-    "download": "Download"
+    "download": "Download",
+    "copied": "Copied"
   },
   "sidebar": {
     "project": "Project",
@@ -102,7 +122,29 @@
     "create": "Create",
     "ahead": "ahead",
     "behind": "behind",
-    "refresh": "Refresh"
+    "refresh": "Refresh",
+    "noDiff": "No diff",
+    "binaryFile": "Binary file",
+    "noHunks": "No hunks",
+    "selectFile": "Select file",
+    "selectConflict": "Select conflict",
+    "clearSelection": "Clear",
+    "operationFailed": "Operation failed",
+    "working": "Working tree",
+    "staged": "Staged",
+    "lines": "lines",
+    "hunks": "hunks",
+    "commitsCount": "{count} commits",
+    "ours": "Ours",
+    "base": "Base",
+    "theirs": "Theirs",
+    "manual": "Manual",
+    "searchFiles": "Search files...",
+    "commits": "commits",
+    "now": "now",
+    "dayShort": "d",
+    "hourShort": "h",
+    "minuteShort": "m"
   },
   "terminal": {
     "noActiveSession": "No terminal session active",
@@ -125,7 +167,10 @@
     "selected": "selected",
     "deleteHistoryTitle": "Delete Terminal History",
     "deleteHistoryConfirm": "Are you sure you want to delete {count} terminal history records? This action cannot be undone.",
-    "readOnly": "Read Only"
+    "readOnly": "Read Only",
+    "new": "New Terminal",
+    "list": "Terminal List",
+    "backToTerminal": "Back to Terminal"
   },
   "fileTree": {
     "projectRoot": "Project Root"
@@ -133,7 +178,21 @@
   "preview": {
     "notAvailable": "Preview not available for this file type",
     "openAsText": "Open as Text",
-    "download": "Download"
+    "download": "Download",
+    "selectFile": "Select a file to preview",
+    "unsavedChanges": "Unsaved changes",
+    "loadFailed": "Failed to load file",
+    "saveFailed": "Failed to save file",
+    "fileTooLargeToPreview": "File too large to preview",
+    "fileTooLargeToOpen": "File too large to open",
+    "videoPlaybackUnsupported": "Your browser does not support video playback.",
+    "audioPlaybackUnsupported": "Your browser does not support audio playback.",
+    "openInNewTab": "Open in new tab",
+    "zoomOut": "Zoom Out",
+    "zoomIn": "Zoom In",
+    "reset": "Reset",
+    "videoUnsupported": "Your browser does not support video playback.",
+    "audioUnsupported": "Your browser does not support audio playback."
   },
   "settings": {
     "category": {
@@ -144,15 +203,23 @@
     },
     "theme": {
       "label": "Theme",
-      "description": "Select color theme"
+      "description": "Select color theme",
+      "optionLight": "Light",
+      "optionDark": "Dark",
+      "optionHacker": "Hacker",
+      "optionTerminal": "Terminal"
     },
     "locale": {
       "label": "Language",
-      "description": "Select display language"
+      "description": "Select display language",
+      "optionEnglish": "English",
+      "optionChinese": "Chinese"
     },
     "fontFamily": {
       "label": "Font Family",
-      "description": "Select editor and UI font"
+      "description": "Select editor and UI font",
+      "optionDefault": "Default",
+      "optionJetBrainsMono": "JetBrains Mono"
     },
     "showHiddenFiles": {
       "label": "Show Hidden Files",
@@ -160,7 +227,9 @@
     },
     "defaultViewMode": {
       "label": "Default View",
-      "description": "File manager default view mode"
+      "description": "File manager default view mode",
+      "optionList": "List",
+      "optionGrid": "Grid"
     },
     "editorFontSize": {
       "label": "Font Size",
@@ -187,18 +256,42 @@
       "description": "Use client current time or increment from previous commit time",
       "optionClient": "Client Time",
       "optionIncrement": "Increment from Last"
+    },
+    "option": {
+      "light": "Light",
+      "dark": "Dark",
+      "hacker": "Hacker",
+      "terminal": "Terminal",
+      "english": "English",
+      "chinese": "中文",
+      "default": "Default",
+      "list": "List",
+      "grid": "Grid"
     }
   },
   "menu": {
     "builtIn": "System",
     "context": "Actions",
-    "editor": "Editor"
+    "editor": "Editor",
+    "connected": "Connected"
   },
   "fileManager": {
     "newFile": "New File",
     "newFolder": "New Folder",
     "enterName": "Enter name...",
-    "emptyFolder": "Empty folder"
+    "emptyFolder": "Empty folder",
+    "searchPlaceholder": "Search files...",
+    "sortName": "Name",
+    "sortSize": "Size",
+    "sortDate": "Date",
+    "sortType": "Type",
+    "selectedCount": "{count} selected",
+    "loadFailed": "Failed to load files",
+    "createFileFailed": "Failed to create file",
+    "createFolderFailed": "Failed to create folder",
+    "renameFailed": "Failed to rename",
+    "deleteFailed": "Failed to delete",
+    "searchFiles": "Search files..."
   },
   "contextMenu": {
     "closeGroup": "Close Group"
@@ -270,7 +363,13 @@
       "sigkill": "SIGKILL (9) - Force",
       "sighup": "SIGHUP (1) - Hangup",
       "killing": "Killing...",
-      "openMonitor": "Open Monitor"
+      "openMonitor": "Open Monitor",
+      "used": "Used",
+      "available": "Available",
+      "statusRunning": "Running",
+      "statusSleeping": "Sleeping",
+      "statusZombie": "Zombie",
+      "statusUnknown": "Unknown"
     }
   },
   "newPage": {
@@ -280,5 +379,20 @@
     "title": "Select Directory",
     "enterPath": "Enter path...",
     "noSubdirectories": "No subdirectories"
+  },
+  "time": {
+    "now": "just now",
+    "minutesAgoShort": "{count}m ago",
+    "hoursAgoShort": "{count}h ago",
+    "daysAgoShort": "{count}d ago",
+    "minutesShort": "{count}m",
+    "hoursMinutesShort": "{hours}h {minutes}m",
+    "daysHoursShort": "{days}d {hours}h"
+  },
+  "newGroup": {
+    "openFolderDescription": "Browse and open a folder",
+    "closeCurrentGroup": "Close current group",
+    "title": "New Group",
+    "browseAndOpenFolder": "Browse and open a folder"
   }
 }

@@ -1,9 +1,13 @@
 import { Download, ExternalLink } from "lucide-react";
 import React from "react";
 import { fileApi } from "@/api/file";
+import { useTranslation } from "@/lib/i18n";
+import { useAppStore } from "@/stores";
 import { usePreviewStore } from "@/stores/preview-store";
 
 const PDFPreview: React.FC = () => {
+  const locale = useAppStore((s) => s.locale);
+  const t = useTranslation(locale);
   const { file } = usePreviewStore();
 
   if (!file) return null;
@@ -18,7 +22,7 @@ const PDFPreview: React.FC = () => {
           href={pdfUrl}
           download={file.name}
           className="p-1.5 rounded hover:bg-ide-bg text-ide-mute hover:text-ide-text"
-          title="Download"
+          title={t("preview.download")}
         >
           <Download size={18} />
         </a>
@@ -27,7 +31,7 @@ const PDFPreview: React.FC = () => {
           target="_blank"
           rel="noopener noreferrer"
           className="p-1.5 rounded hover:bg-ide-bg text-ide-mute hover:text-ide-text"
-          title="Open in new tab"
+          title={t("preview.openInNewTab")}
         >
           <ExternalLink size={18} />
         </a>

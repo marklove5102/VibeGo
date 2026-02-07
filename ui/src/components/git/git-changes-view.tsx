@@ -89,7 +89,7 @@ const GitChangesView: React.FC<GitChangesViewProps> = ({
   onStashPop,
   onStashDrop,
 }) => {
-  const t = (key: string) => getTranslation(locale, key);
+  const t = useCallback((key: string) => getTranslation(locale, key), [locale]);
   const {
     summary,
     description,
@@ -363,7 +363,7 @@ const GitChangesView: React.FC<GitChangesViewProps> = ({
           disabled={!canCommit || isLoading}
           onClick={handleCommit}
           className="w-full bg-ide-accent text-ide-bg font-bold py-2 text-sm flex items-center justify-center gap-2 rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-ide-accent/80 transition-colors"
-          title="Ctrl+Enter"
+          title={t("git.commitShortcut")}
         >
           <Check size={14} />
           {t("git.commitTo")} {currentBranch}

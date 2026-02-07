@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import { fileApi } from "@/api/file";
 import { DirectoryPicker, NewPageMenu, ProjectMenu, useDialog } from "@/components/common";
 import { AppFrame, NewGroupMenu } from "@/components/frame";
+import { useTranslation } from "@/lib/i18n";
 import { useSettingsStore } from "@/lib/settings";
 import { pageRegistry } from "@/pages/registry";
 import { initTerminalCleanup } from "@/services/terminal-cleanup-service";
@@ -20,6 +21,7 @@ import "@/pages";
 const App: React.FC = () => {
   const { theme, locale, isMenuOpen, setMenuOpen, setTheme, setLocale } = useAppStore();
   const dialog = useDialog();
+  const t = useTranslation(locale);
 
   const resetPreview = usePreviewStore((s) => s.reset);
   const { currentPath } = useFileManagerStore();
@@ -137,7 +139,7 @@ const App: React.FC = () => {
               useFileManagerStore.getState().setLoading(false);
             }
           } else {
-            const newPath = await dialog.prompt("New file name:", { placeholder: "Enter file name..." });
+            const newPath = await dialog.prompt(t("dialog.newFileName"), { placeholder: t("dialog.enterFileName") });
             if (newPath) {
               await fileApi.create({
                 path: `${currentPath}/${newPath}`,
@@ -152,13 +154,15 @@ const App: React.FC = () => {
           break;
       }
     } else if (activeGroup.type === "tool") {
+      const page = pageRegistry.get(activeGroup.pageId);
+      const title = page?.nameKey ? t(page.nameKey) : page?.name || activeGroup.name;
       addCurrentTab({
         id: `tool-tab-${Date.now()}`,
-        title: `${activeGroup.name} ${tabs.length + 1}`,
+        title: `${title} ${tabs.length + 1}`,
         data: { type: "page", pageId: activeGroup.pageId },
       });
     }
-  }, [activeGroup, currentPage, currentPath, addCurrentTab, tabs.length, activeTabId]);
+  }, [activeGroup, currentPage, currentPath, addCurrentTab, tabs.length, activeTabId, dialog, t]);
 
   const handleOpenDirectory = useCallback(() => {
     setDirectoryPickerOpen(true);
@@ -185,7 +189,9 @@ const App: React.FC = () => {
     const page = pageRegistry.get(group.pageId);
     if (!page) {
       return (
-        <div className="h-full flex items-center justify-center text-ide-mute">Page not found: {group.pageId}</div>
+        <div className="h-full flex items-center justify-center text-ide-mute">
+          {t("common.pageNotFound")}: {group.pageId}
+        </div>
       );
     }
     const View = page.View;
@@ -198,7 +204,9 @@ const App: React.FC = () => {
     const page = pageRegistry.get(currentPage.type);
     if (!page) {
       return (
-        <div className="h-full flex items-center justify-center text-ide-mute">Page not found: {currentPage.type}</div>
+        <div className="h-full flex items-center justify-center text-ide-mute">
+          {t("common.pageNotFound")}: {currentPage.type}
+        </div>
       );
     }
     const View = page.View;
@@ -258,6 +266,7 @@ const App: React.FC = () => {
       <NewGroupMenu
         isOpen={isNewGroupMenuOpen}
         onClose={() => setNewGroupMenuOpen(false)}
+        locale={locale}
         onOpenDirectory={handleOpenDirectory}
         onNewTool={handleNewTool}
         availableTools={[

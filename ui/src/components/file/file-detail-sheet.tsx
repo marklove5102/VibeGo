@@ -2,7 +2,7 @@ import { Calendar, Copy, Download, Edit3, File, Folder, HardDrive, Link2, Shield
 import React, { useEffect, useRef, useState } from "react";
 import { fileApi } from "@/api/file";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
-import { type Locale, useTranslation } from "@/lib/i18n";
+import { getIntlLocale, type Locale, useTranslation } from "@/lib/i18n";
 import { useSettingsStore } from "@/lib/settings";
 import type { FileItem } from "@/stores/file-manager-store";
 
@@ -22,9 +22,9 @@ function formatFileSize(bytes: number): string {
   return parseFloat((bytes / k ** i).toFixed(2)) + " " + sizes[i];
 }
 
-function formatDate(dateStr: string): string {
+function formatDate(dateStr: string, locale: Locale): string {
   const date = new Date(dateStr);
-  return date.toLocaleString();
+  return date.toLocaleString(getIntlLocale(locale));
 }
 
 function formatPermissions(mode: string): string {
@@ -128,7 +128,7 @@ const FileDetailSheet: React.FC<FileDetailSheetProps> = ({ file, open, onClose, 
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between gap-2">
             <div className="text-[10px] text-ide-mute uppercase tracking-wider">{label}</div>
-            {copiedInfoLabel === label && <div className="text-[10px] text-ide-accent">已复制</div>}
+            {copiedInfoLabel === label && <div className="text-[10px] text-ide-accent">{t("common.copied")}</div>}
           </div>
           <div className="text-sm text-ide-text break-all select-text">{value}</div>
         </div>
@@ -186,14 +186,14 @@ const FileDetailSheet: React.FC<FileDetailSheetProps> = ({ file, open, onClose, 
             label={t("fileDetail.size")}
             value={file.isDir ? "--" : formatFileSize(file.size)}
           />
-          <InfoRow icon={Calendar} label={t("fileDetail.modified")} value={formatDate(file.modTime)} />
+          <InfoRow icon={Calendar} label={t("fileDetail.modified")} value={formatDate(file.modTime, locale)} />
           <InfoRow
             icon={Shield}
             label={t("fileDetail.permissions")}
             value={`${file.mode} (${formatPermissions(file.mode)})`}
           />
           {file.mimeType && <InfoRow icon={File} label={t("fileDetail.type")} value={file.mimeType} />}
-          {file.isSymlink && <InfoRow icon={Link2} label={t("fileDetail.symlink")} value="Yes" />}
+          {file.isSymlink && <InfoRow icon={Link2} label={t("fileDetail.symlink")} value={t("common.yes")} />}
           <InfoRow icon={Folder} label={t("fileDetail.path")} value={file.path} />
         </div>
 
@@ -202,7 +202,7 @@ const FileDetailSheet: React.FC<FileDetailSheetProps> = ({ file, open, onClose, 
             <ActionButton
               onClick={handleCopyPath}
               icon={<Copy size={20} className="text-ide-mute" />}
-              label={copySuccess ? "已复制" : t("fileDetail.copyPath")}
+              label={copySuccess ? t("common.copied") : t("fileDetail.copyPath")}
             />
             {onRename && (
               <ActionButton

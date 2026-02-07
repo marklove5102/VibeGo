@@ -18,7 +18,7 @@ import React, { useCallback, useEffect, useRef } from "react";
 import { fileApi } from "@/api/file";
 import { useDialog } from "@/components/common";
 import { useFrameController } from "@/framework/frame/controller";
-import { type Locale, useTranslation } from "@/lib/i18n";
+import { getIntlLocale, type Locale, useTranslation } from "@/lib/i18n";
 import { useSettingsStore } from "@/lib/settings";
 import { type FileItem, useFileManagerStore } from "@/stores/file-manager-store";
 import FileDetailSheet from "./file-detail-sheet";
@@ -33,17 +33,17 @@ function formatFileSize(bytes: number): string {
   return parseFloat((bytes / k ** i).toFixed(1)) + " " + sizes[i];
 }
 
-function formatDate(dateStr: string): string {
+function formatDate(dateStr: string, locale: Locale, t: (key: string) => string): string {
   const date = new Date(dateStr);
   const now = new Date();
   const diff = now.getTime() - date.getTime();
   const days = Math.floor(diff / (1000 * 60 * 60 * 24));
   if (days === 0) {
-    return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    return date.toLocaleTimeString(getIntlLocale(locale), { hour: "2-digit", minute: "2-digit" });
   } else if (days < 7) {
-    return `${days}d ago`;
+    return t("time.daysAgoShort").replace("{count}", String(days));
   }
-  return date.toLocaleDateString([], { month: "short", day: "numeric" });
+  return date.toLocaleDateString(getIntlLocale(locale), { month: "short", day: "numeric" });
 }
 
 function getFileIcon(file: FileItem) {
@@ -159,12 +159,12 @@ const FileManager: React.FC<FileManagerProps> = ({ initialPath = ".", onFileOpen
         }));
         setFiles(files);
       } catch (e) {
-        setError(e instanceof Error ? e.message : "Failed to load files");
+        setError(e instanceof Error ? e.message : t("fileManager.loadFailed"));
       } finally {
         setLoading(false);
       }
     },
-    [setFiles, setLoading, setError]
+    [setFiles, setLoading, setError, t]
   );
 
   useEffect(() => {
@@ -185,7 +185,7 @@ const FileManager: React.FC<FileManagerProps> = ({ initialPath = ".", onFileOpen
         await fileApi.create({ path: `${currentPath}/${name}`, isDir: false });
         loadFiles(currentPath);
       } catch (e) {
-        setError(e instanceof Error ? e.message : "Failed to create file");
+        setError(e instanceof Error ? e.message : t("fileManager.createFileFailed"));
       }
     }
   }, [dialog, t, currentPath, loadFiles, setError]);
@@ -197,7 +197,7 @@ const FileManager: React.FC<FileManagerProps> = ({ initialPath = ".", onFileOpen
         await fileApi.mkdir(`${currentPath}/${name}`);
         loadFiles(currentPath);
       } catch (e) {
-        setError(e instanceof Error ? e.message : "Failed to create folder");
+        setError(e instanceof Error ? e.message : t("fileManager.createFolderFailed"));
       }
     }
   }, [dialog, t, currentPath, loadFiles, setError]);
@@ -216,7 +216,7 @@ const FileManager: React.FC<FileManagerProps> = ({ initialPath = ".", onFileOpen
           setDetailFile(null);
           loadFiles(currentPath);
         } catch (e) {
-          setError(e instanceof Error ? e.message : "Failed to rename");
+          setError(e instanceof Error ? e.message : t("fileManager.renameFailed"));
         }
       }
     },
@@ -270,7 +270,7 @@ const FileManager: React.FC<FileManagerProps> = ({ initialPath = ".", onFileOpen
       setDetailFile(null);
       loadFiles(currentPath);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to delete");
+      setError(e instanceof Error ? e.message : t("fileManager.deleteFailed"));
     }
   };
 
@@ -287,7 +287,7 @@ const FileManager: React.FC<FileManagerProps> = ({ initialPath = ".", onFileOpen
       clearSelection();
       loadFiles(currentPath);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to delete");
+      setError(e instanceof Error ? e.message : t("fileManager.deleteFailed"));
     }
   };
 
@@ -353,6 +353,7 @@ const FileManager: React.FC<FileManagerProps> = ({ initialPath = ".", onFileOpen
               <FileListItem
                 key={file.path}
                 file={file}
+                dateText={formatDate(file.modTime, locale, t)}
                 selected={selectedFiles.has(file.path)}
                 focused={focusIndex === index}
                 selectionMode={selectionMode}
@@ -391,6 +392,7 @@ const FileManager: React.FC<FileManagerProps> = ({ initialPath = ".", onFileOpen
 
 interface FileItemProps {
   file: FileItem;
+  dateText?: string;
   selected: boolean;
   focused: boolean;
   selectionMode: boolean;
@@ -398,7 +400,15 @@ interface FileItemProps {
   onLongPress: () => void;
 }
 
-const FileListItem: React.FC<FileItemProps> = ({ file, selected, focused, selectionMode, onClick, onLongPress }) => {
+const FileListItem: React.FC<FileItemProps> = ({
+  file,
+  dateText,
+  selected,
+  focused,
+  selectionMode,
+  onClick,
+  onLongPress,
+}) => {
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleTouchStart = () => {
@@ -437,7 +447,7 @@ const FileListItem: React.FC<FileItemProps> = ({ file, selected, focused, select
         <div className={`text-sm truncate ${file.isHidden ? "text-ide-mute" : "text-ide-text"}`}>{file.name}</div>
       </div>
       <div className="text-[10px] text-ide-mute shrink-0">{file.isDir ? "--" : formatFileSize(file.size)}</div>
-      <div className="text-[10px] text-ide-mute shrink-0 w-12 text-right">{formatDate(file.modTime)}</div>
+      <div className="text-[10px] text-ide-mute shrink-0 w-12 text-right">{dateText}</div>
       {file.isDir && <ChevronRight size={18} className="text-ide-mute shrink-0" />}
     </div>
   );

@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { usePageTopBar } from "@/hooks/use-page-top-bar";
 import { useTerminalDeleteBatch, useTerminalList } from "@/hooks/use-terminal";
-import { useTranslation } from "@/lib/i18n";
+import { getIntlLocale, useTranslation } from "@/lib/i18n";
 import { useAppStore } from "@/stores";
 import TerminalInstance from "./terminal-instance";
 
@@ -84,7 +84,7 @@ const TerminalHistoryPage: React.FC<TerminalHistoryPageProps> = ({ onBack }) => 
   }, [deleteBatchMutation, selectedIds, refetch]);
 
   const formatDate = (timestamp: number) => {
-    return new Date(timestamp * 1000).toLocaleString();
+    return new Date(timestamp * 1000).toLocaleString(getIntlLocale(locale));
   };
 
   const exitSelectionMode = useCallback(() => {

@@ -179,7 +179,7 @@ const SettingsPage: React.FC = () => {
   if (loading) {
     return (
       <div className="h-full flex items-center justify-center">
-        <div className="text-ide-mute">Loading...</div>
+        <div className="text-ide-mute">{t("common.loading")}</div>
       </div>
     );
   }

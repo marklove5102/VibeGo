@@ -53,6 +53,7 @@ const FilesView: React.FC<PageViewProps> = ({ context }) => {
 registerPage({
   id: "files",
   name: "Files",
+  nameKey: "sidebar.files",
   icon: Files,
   category: "workspace",
   order: 10,

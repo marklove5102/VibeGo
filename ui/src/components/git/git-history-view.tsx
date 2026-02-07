@@ -1,7 +1,7 @@
 import { ChevronDown, ChevronRight, Clock, GitCommit as GitCommitIcon } from "lucide-react";
 import React, { useCallback, useState } from "react";
 import type { CommitFileInfo, GitCommit } from "@/api/git";
-import { getTranslation, type Locale } from "@/lib/i18n";
+import { getIntlLocale, getTranslation, type Locale } from "@/lib/i18n";
 
 interface GitHistoryViewProps {
   commits: GitCommit[];
@@ -13,7 +13,7 @@ interface GitHistoryViewProps {
   selectedCommitHash: string | null;
 }
 
-const formatRelativeTime = (dateStr: string): string => {
+const formatRelativeTime = (dateStr: string, locale: Locale, t: (key: string) => string): string => {
   const date = new Date(dateStr);
   const now = new Date();
   const diff = now.getTime() - date.getTime();
@@ -21,11 +21,11 @@ const formatRelativeTime = (dateStr: string): string => {
   const minutes = Math.floor(seconds / 60);
   const hours = Math.floor(minutes / 60);
   const days = Math.floor(hours / 24);
-  if (days > 30) return date.toLocaleDateString();
-  if (days > 0) return `${days}d ago`;
-  if (hours > 0) return `${hours}h ago`;
-  if (minutes > 0) return `${minutes}m ago`;
-  return "just now";
+  if (days > 30) return date.toLocaleDateString(getIntlLocale(locale));
+  if (days > 0) return t("time.daysAgoShort").replace("{count}", String(days));
+  if (hours > 0) return t("time.hoursAgoShort").replace("{count}", String(hours));
+  if (minutes > 0) return t("time.minutesAgoShort").replace("{count}", String(minutes));
+  return t("time.now");
 };
 
 const getStatusColor = (status: string) => {
@@ -76,7 +76,7 @@ const CommitItem: React.FC<CommitItemProps> = ({
   onFileClick,
   files,
 }) => {
-  const t = (key: string) => getTranslation(locale, key);
+  const t = useCallback((key: string) => getTranslation(locale, key), [locale]);
   const shortHash = commit.hash.substring(0, 7);
   const firstLine = commit.message.split("\n")[0];
 
@@ -97,7 +97,7 @@ const CommitItem: React.FC<CommitItemProps> = ({
             <span>{commit.author}</span>
             <span className="flex items-center gap-0.5">
               <Clock size={9} />
-              {formatRelativeTime(commit.date)}
+              {formatRelativeTime(commit.date, locale, t)}
             </span>
             <span className="flex items-center gap-0.5 font-mono">
               <GitCommitIcon size={9} />
@@ -149,7 +149,7 @@ const GitHistoryView: React.FC<GitHistoryViewProps> = ({
   selectedCommitFiles,
   selectedCommitHash,
 }) => {
-  const t = (key: string) => getTranslation(locale, key);
+  const t = useCallback((key: string) => getTranslation(locale, key), [locale]);
   const [expandedHash, setExpandedHash] = useState<string | null>(null);
 
   const handleToggle = useCallback(

@@ -89,11 +89,6 @@ const TerminalListManager: React.FC<TerminalListManagerProps> = ({
 
   return (
     <div className={`flex flex-col h-full bg-ide-panel ${embedded ? "border-t border-ide-border" : ""}`}>
-      {/* 
-        If NOT embedded, show header. 
-        If embedded, we rely on TopBar or generic container for header/controls.
-        Assuming 'embedded' means "inside TerminalPage container" where we hide the duplicate header.
-      */}
       {!embedded && (
         <div className="h-12 bg-ide-bg border-b border-ide-border flex items-center px-3 gap-2 shrink-0">
           <button
@@ -102,7 +97,7 @@ const TerminalListManager: React.FC<TerminalListManagerProps> = ({
           >
             <ArrowLeft size={18} />
           </button>
-          <span className="font-medium text-ide-text flex-1">{t("terminal.title")}</span>
+          <span className="font-medium text-ide-text flex-1">{t("terminal.list")}</span>
           {terminals.length > 0 && (
             <button
               onClick={handleClearAllClick}

@@ -116,7 +116,7 @@ const ProjectMenu: React.FC<ProjectMenuProps> = ({
       usePreviewStore.getState().setOriginalContent(content);
       usePreviewStore.getState().setIsDirty(false);
     } catch (e) {
-      usePreviewStore.getState().setError(e instanceof Error ? e.message : "Failed to save");
+      usePreviewStore.getState().setError(e instanceof Error ? e.message : t("common.saveFailed"));
     }
     onClose();
   };
@@ -128,7 +128,7 @@ const ProjectMenu: React.FC<ProjectMenuProps> = ({
       try {
         await fileApi.write(newPath, content);
       } catch (e) {
-        usePreviewStore.getState().setError(e instanceof Error ? e.message : "Failed to save");
+        usePreviewStore.getState().setError(e instanceof Error ? e.message : t("common.saveFailed"));
       }
     }
     onClose();
@@ -151,8 +151,8 @@ const ProjectMenu: React.FC<ProjectMenuProps> = ({
       <Terminal size={18} />
     );
 
+  const translateOptionLabel = (label: string) => (label.startsWith("settings.") ? t(label) : label);
   const themeLabel = themeSchema?.options?.find((opt) => opt.value === themeValue)?.label || themeValue;
-
   const localeLabel = localeSchema?.options?.find((opt) => opt.value === localeValue)?.label || localeValue;
 
   const builtInItems: Array<{
@@ -186,14 +186,14 @@ const ProjectMenu: React.FC<ProjectMenuProps> = ({
       icon: themeIcon,
       label: t("common.theme"),
       onClick: handleThemeToggle,
-      title: themeLabel,
+      title: translateOptionLabel(themeLabel),
     },
     {
       id: "language",
       icon: <Globe size={20} />,
       label: t("common.language"),
       onClick: handleLocaleToggle,
-      title: localeLabel,
+      title: translateOptionLabel(localeLabel),
     },
   ];
 
@@ -344,7 +344,7 @@ const ProjectMenu: React.FC<ProjectMenuProps> = ({
 
         <div className="mt-6 pt-4 border-t border-ide-border flex justify-between text-[10px] text-ide-mute">
           <span>VibeGo v0.9.0</span>
-          <span>CONNECTED</span>
+          <span>{t("common.connected")}</span>
         </div>
       </div>
     </>

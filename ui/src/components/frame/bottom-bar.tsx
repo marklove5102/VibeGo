@@ -12,7 +12,9 @@ import {
   Terminal,
 } from "lucide-react";
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import { useTranslation } from "@/lib/i18n";
 import { pageRegistry } from "@/pages/registry";
+import { useAppStore } from "@/stores/app-store";
 import {
   type BottomBarButton,
   type GenericGroup,
@@ -45,6 +47,8 @@ interface GroupButtonProps {
   isActive: boolean;
   isExpanded: boolean;
   hasMultipleGroups: boolean;
+  getTitle: (group: PageGroup) => string;
+  getPageTitle: (pageType: PageType) => string;
   onGroupClick: (groupId: string) => void;
   onPageClick: (groupId: string, pageId: string) => void;
 }
@@ -63,6 +67,8 @@ const GroupButton: React.FC<GroupButtonProps> = ({
   isActive,
   isExpanded,
   hasMultipleGroups,
+  getTitle,
+  getPageTitle,
   onGroupClick,
   onPageClick,
 }) => {
@@ -84,7 +90,7 @@ const GroupButton: React.FC<GroupButtonProps> = ({
                   ? "text-ide-accent"
                   : "text-ide-mute hover:text-ide-text"
               }`}
-              title={page.label}
+              title={getPageTitle(page.type)}
             >
               {PAGE_TYPE_ICONS[page.type] || <Box size={18} />}
             </button>
@@ -98,7 +104,7 @@ const GroupButton: React.FC<GroupButtonProps> = ({
         className={`px-3 h-full rounded flex items-center gap-2 transition-all ${
           isActive ? "bg-ide-panel text-ide-accent shadow-sm" : "text-ide-mute hover:text-ide-text"
         }`}
-        title={group.name}
+        title={getTitle(group)}
       >
         {GROUP_TYPE_ICONS.group}
       </button>
@@ -113,7 +119,7 @@ const GroupButton: React.FC<GroupButtonProps> = ({
         className={`px-3 h-full rounded flex items-center gap-2 transition-all ${
           isActive ? "bg-ide-panel text-ide-accent shadow-sm" : "text-ide-mute hover:text-ide-text"
         }`}
-        title={group.name}
+        title={getTitle(group)}
       >
         {getToolIcon(toolGroup.pageId)}
       </button>
@@ -126,7 +132,7 @@ const GroupButton: React.FC<GroupButtonProps> = ({
       className={`px-3 h-full rounded flex items-center gap-2 transition-all ${
         isActive ? "bg-ide-panel text-ide-accent shadow-sm" : "text-ide-mute hover:text-ide-text"
       }`}
-      title={group.name}
+      title={getTitle(group)}
     >
       {GROUP_TYPE_ICONS[group.type] || GROUP_TYPE_ICONS.tool}
     </button>
@@ -134,6 +140,8 @@ const GroupButton: React.FC<GroupButtonProps> = ({
 };
 
 const BottomBar: React.FC<BottomBarProps> = ({ onMenuClick, onNewPage }) => {
+  const locale = useAppStore((s) => s.locale);
+  const t = useTranslation(locale);
   const groups = useFrameStore((s) => s.groups);
   const activeGroupId = useFrameStore((s) => s.activeGroupId);
   const bottomBarConfig = useFrameStore((s) => s.bottomBarConfig);
@@ -200,11 +208,42 @@ const BottomBar: React.FC<BottomBarProps> = ({ onMenuClick, onNewPage }) => {
       : [
           {
             icon: isFullscreen ? <Minimize size={18} /> : <Maximize size={18} />,
-            label: isFullscreen ? "Exit Fullscreen" : "Fullscreen",
+            label: isFullscreen ? t("common.exitFullscreen") : t("common.fullscreen"),
             onClick: handleToggleFullscreen,
             active: isFullscreen,
           },
         ];
+
+  const getPageTitle = useCallback(
+    (pageType: PageType) => {
+      switch (pageType) {
+        case "files":
+          return t("sidebar.files");
+        case "git":
+          return t("sidebar.git");
+        case "terminal":
+          return t("sidebar.terminal");
+      }
+    },
+    [t]
+  );
+
+  const getGroupTitle = useCallback(
+    (group: PageGroup) => {
+      if (group.type === "home") return t("common.home");
+      if (group.type === "settings") return t("common.settings");
+      if (group.type === "tool") {
+        const page = pageRegistry.get(group.pageId);
+        if (page?.nameKey) {
+          const translated = t(page.nameKey);
+          if (translated !== page.nameKey) return translated;
+        }
+        return page?.name || group.name;
+      }
+      return group.name;
+    },
+    [t]
+  );
 
   if (!bottomBarConfig.show) {
     return null;
@@ -236,6 +275,8 @@ const BottomBar: React.FC<BottomBarProps> = ({ onMenuClick, onNewPage }) => {
                 isActive={activeGroupId === group.id}
                 isExpanded={shouldExpand(group)}
                 hasMultipleGroups={hasMultipleGroups}
+                getTitle={getGroupTitle}
+                getPageTitle={getPageTitle}
                 onGroupClick={handleGroupClick}
                 onPageClick={handlePageClick}
               />
@@ -274,7 +315,7 @@ const BottomBar: React.FC<BottomBarProps> = ({ onMenuClick, onNewPage }) => {
             <button
               onClick={onNewPage}
               className="px-3 h-full rounded flex items-center gap-2 transition-all text-ide-mute hover:text-ide-accent"
-              title="New Page"
+              title={t("common.newPage")}
             >
               <Plus size={18} />
             </button>

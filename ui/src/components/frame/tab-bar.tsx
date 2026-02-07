@@ -1,5 +1,7 @@
 import { Box, Edit, Eye, FileDiff, FileText, FolderOpen, GitGraph, Plus, RefreshCw, Terminal, X } from "lucide-react";
 import React, { useCallback, useEffect, useRef } from "react";
+import { useTranslation } from "@/lib/i18n";
+import { useAppStore } from "@/stores/app-store";
 import { type TabItem, useFrameStore, type ViewType } from "@/stores/frame-store";
 import { getPreviewType, usePreviewStore } from "@/stores/preview-store";
 
@@ -21,6 +23,8 @@ const TAB_ICONS: Record<string, React.ReactNode> = {
 };
 
 const TabBar: React.FC<TabBarProps> = ({ onAction, onBackToList }) => {
+  const locale = useAppStore((s) => s.locale);
+  const t = useTranslation(locale);
   const activeGroup = useFrameStore((s) => s.getActiveGroup());
   const tabs = useFrameStore((s) => s.getCurrentTabs());
   const activeTabId = useFrameStore((s) => s.getCurrentActiveTabId());
@@ -119,7 +123,7 @@ const TabBar: React.FC<TabBarProps> = ({ onAction, onBackToList }) => {
           <button
             onClick={handleBackClick}
             className={`${cornerButtonClass} ${activeTabId === null ? "bg-ide-accent text-ide-bg border-ide-accent" : ""}`}
-            title="Back to List"
+            title={t("common.backToList")}
           >
             {getViewIcon()}
           </button>
@@ -165,12 +169,16 @@ const TabBar: React.FC<TabBarProps> = ({ onAction, onBackToList }) => {
               <button
                 onClick={handleToggleEdit}
                 className={`${cornerButtonClass} ${editMode ? "bg-ide-accent text-ide-bg border-ide-accent" : ""}`}
-                title={editMode ? "View" : "Edit"}
+                title={editMode ? t("common.view") : t("common.edit")}
               >
                 {editMode ? <Eye size={18} /> : <Edit size={18} />}
               </button>
             ) : (
-              <button onClick={onAction} className={cornerButtonClass} title={showRefreshButton ? "Refresh" : "New"}>
+              <button
+                onClick={onAction}
+                className={cornerButtonClass}
+                title={showRefreshButton ? t("common.refresh") : t("common.new")}
+              >
                 {showRefreshButton ? <RefreshCw size={18} /> : <Plus size={18} />}
               </button>
             )}

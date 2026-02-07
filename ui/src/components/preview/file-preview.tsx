@@ -35,7 +35,7 @@ const FilePreview: React.FC<FilePreviewProps> = ({ file }) => {
 
     if (previewType === "code" || previewType === "markdown") {
       if (isFileTooLarge(file.size, "text")) {
-        setError(`File too large to preview (${formatFileSize(file.size)})`);
+        setError(`${t("preview.fileTooLargeToPreview")} (${formatFileSize(file.size)})`);
         return;
       }
 
@@ -49,7 +49,7 @@ const FilePreview: React.FC<FilePreviewProps> = ({ file }) => {
           setOriginalContent(res.content);
         })
         .catch((e) => {
-          setError(e instanceof Error ? e.message : "Failed to load file");
+          setError(e instanceof Error ? e.message : t("preview.loadFailed"));
         })
         .finally(() => {
           setLoading(false);
@@ -59,12 +59,12 @@ const FilePreview: React.FC<FilePreviewProps> = ({ file }) => {
     return () => {
       setEditMode(false);
     };
-  }, [file?.path]);
+  }, [file?.path, setContent, setEditMode, setError, setFile, setLoading, setOriginalContent, reset, t]);
 
   const loadFileAsCode = () => {
     if (!file) return;
     if (isFileTooLarge(file.size, "text")) {
-      setError(`File too large to open (${formatFileSize(file.size)})`);
+      setError(`${t("preview.fileTooLargeToOpen")} (${formatFileSize(file.size)})`);
       return;
     }
     setLoading(true);
@@ -77,7 +77,7 @@ const FilePreview: React.FC<FilePreviewProps> = ({ file }) => {
         setOpenAsCode(true);
       })
       .catch((e) => {
-        setError(e instanceof Error ? e.message : "Failed to load file");
+        setError(e instanceof Error ? e.message : t("preview.loadFailed"));
       })
       .finally(() => {
         setLoading(false);
@@ -88,7 +88,7 @@ const FilePreview: React.FC<FilePreviewProps> = ({ file }) => {
     return (
       <div className="h-full flex flex-col items-center justify-center text-ide-mute gap-4">
         <FileQuestion size={48} className="opacity-50" />
-        <p className="text-sm">Select a file to preview</p>
+        <p className="text-sm">{t("preview.selectFile")}</p>
       </div>
     );
   }

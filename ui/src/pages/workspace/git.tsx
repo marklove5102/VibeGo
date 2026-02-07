@@ -89,6 +89,7 @@ const GitViewPage: React.FC<PageViewProps> = ({ context }) => {
 registerPage({
   id: "git",
   name: "Git",
+  nameKey: "sidebar.git",
   icon: GitGraph,
   category: "workspace",
   order: 20,

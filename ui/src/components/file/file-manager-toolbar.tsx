@@ -14,6 +14,8 @@ import {
   X,
 } from "lucide-react";
 import React, { useState } from "react";
+import { useTranslation } from "@/lib/i18n";
+import { useAppStore } from "@/stores";
 import { type SortField, useFileManagerStore } from "@/stores/file-manager-store";
 
 interface FileManagerToolbarProps {
@@ -29,6 +31,8 @@ const FileManagerToolbar: React.FC<FileManagerToolbarProps> = ({
   onNewFolder,
   onDeleteSelected,
 }) => {
+  const locale = useAppStore((s) => s.locale);
+  const t = useTranslation(locale);
   const {
     searchQuery,
     searchActive,
@@ -50,10 +54,10 @@ const FileManagerToolbar: React.FC<FileManagerToolbarProps> = ({
   const [showSortMenu, setShowSortMenu] = useState(false);
 
   const sortOptions: { field: SortField; label: string }[] = [
-    { field: "name", label: "Name" },
-    { field: "size", label: "Size" },
-    { field: "modTime", label: "Date" },
-    { field: "type", label: "Type" },
+    { field: "name", label: t("fileManager.sortName") },
+    { field: "size", label: t("fileManager.sortSize") },
+    { field: "modTime", label: t("fileManager.sortDate") },
+    { field: "type", label: t("fileManager.sortType") },
   ];
 
   return (
@@ -64,7 +68,9 @@ const FileManagerToolbar: React.FC<FileManagerToolbarProps> = ({
             <button onClick={toggleSelectionMode} className="p-2 rounded-md text-ide-accent hover:bg-ide-bg">
               <X size={18} />
             </button>
-            <span className="text-xs text-ide-mute px-2">{selectedFiles.size} selected</span>
+            <span className="text-xs text-ide-mute px-2">
+              {t("fileManager.selectedCount").replace("{count}", String(selectedFiles.size))}
+            </span>
             <button onClick={selectAll} className="p-2 rounded-md text-ide-mute hover:bg-ide-bg hover:text-ide-text">
               <CheckSquare size={18} />
             </button>
@@ -90,7 +96,7 @@ const FileManagerToolbar: React.FC<FileManagerToolbarProps> = ({
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search files..."
+                  placeholder={t("fileManager.searchPlaceholder")}
                   className="flex-1 bg-transparent text-sm text-ide-text py-1.5 outline-none"
                   autoFocus
                 />

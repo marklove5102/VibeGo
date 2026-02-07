@@ -1,10 +1,14 @@
 import { Download, ExternalLink, RotateCcw, ZoomIn, ZoomOut } from "lucide-react";
 import React, { useCallback, useRef, useState } from "react";
 import { fileApi } from "@/api/file";
+import { useTranslation } from "@/lib/i18n";
+import { useAppStore } from "@/stores";
 import type { FileItem } from "@/stores/file-manager-store";
 import { usePreviewStore } from "@/stores/preview-store";
 
 const ImagePreviewContent: React.FC<{ file: FileItem }> = ({ file }) => {
+  const locale = useAppStore((s) => s.locale);
+  const t = useTranslation(locale);
   const [scale, setScale] = useState(1);
   const [initialScale, setInitialScale] = useState(1);
   const [position, setPosition] = useState({ x: 0, y: 0 });
@@ -68,7 +72,7 @@ const ImagePreviewContent: React.FC<{ file: FileItem }> = ({ file }) => {
         <button
           onClick={handleZoomOut}
           className="p-1.5 rounded hover:bg-ide-bg text-ide-mute hover:text-ide-text"
-          title="Zoom Out"
+          title={t("preview.zoomOut")}
         >
           <ZoomOut size={18} />
         </button>
@@ -76,14 +80,14 @@ const ImagePreviewContent: React.FC<{ file: FileItem }> = ({ file }) => {
         <button
           onClick={handleZoomIn}
           className="p-1.5 rounded hover:bg-ide-bg text-ide-mute hover:text-ide-text"
-          title="Zoom In"
+          title={t("preview.zoomIn")}
         >
           <ZoomIn size={18} />
         </button>
         <button
           onClick={handleReset}
           className="p-1.5 rounded hover:bg-ide-bg text-ide-mute hover:text-ide-text"
-          title="Reset"
+          title={t("preview.reset")}
         >
           <RotateCcw size={18} />
         </button>
@@ -92,14 +96,14 @@ const ImagePreviewContent: React.FC<{ file: FileItem }> = ({ file }) => {
           href={imageUrl}
           download={file.name}
           className="p-1.5 rounded hover:bg-ide-bg text-ide-mute hover:text-ide-text"
-          title="Download"
+          title={t("preview.download")}
         >
           <Download size={18} />
         </a>
         <button
           onClick={() => window.open(imageUrl, "_blank")}
           className="p-1.5 rounded hover:bg-ide-bg text-ide-mute hover:text-ide-text"
-          title="Open in new tab"
+          title={t("preview.openInNewTab")}
         >
           <ExternalLink size={18} />
         </button>

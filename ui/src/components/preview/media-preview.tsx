@@ -1,9 +1,13 @@
 import { Download, ExternalLink } from "lucide-react";
 import React from "react";
 import { fileApi } from "@/api/file";
+import { useTranslation } from "@/lib/i18n";
+import { useAppStore } from "@/stores";
 import { usePreviewStore } from "@/stores/preview-store";
 
 const MediaPreview: React.FC = () => {
+  const locale = useAppStore((s) => s.locale);
+  const t = useTranslation(locale);
   const { file } = usePreviewStore();
 
   if (!file) return null;
@@ -21,7 +25,7 @@ const MediaPreview: React.FC = () => {
           href={mediaUrl}
           download={file.name}
           className="p-1.5 rounded hover:bg-ide-bg text-ide-mute hover:text-ide-text"
-          title="Download"
+          title={t("preview.download")}
         >
           <Download size={18} />
         </a>
@@ -30,7 +34,7 @@ const MediaPreview: React.FC = () => {
           target="_blank"
           rel="noopener noreferrer"
           className="p-1.5 rounded hover:bg-ide-bg text-ide-mute hover:text-ide-text"
-          title="Open in new tab"
+          title={t("preview.openInNewTab")}
         >
           <ExternalLink size={18} />
         </a>
@@ -43,11 +47,11 @@ const MediaPreview: React.FC = () => {
             className="max-w-full max-h-full rounded"
             style={{ maxHeight: "calc(100vh - 200px)" }}
           >
-            Your browser does not support video playback.
+            {t("preview.videoUnsupported")}
           </video>
         ) : (
           <audio src={mediaUrl} controls className="w-full max-w-md">
-            Your browser does not support audio playback.
+            {t("preview.audioUnsupported")}
           </audio>
         )}
       </div>

@@ -37,7 +37,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useFrameController } from "@/framework/frame/controller";
 import { useCombinedStats, useProcessKill } from "@/hooks/use-process";
-import { useTranslation } from "@/lib/i18n";
+import { getIntlLocale, useTranslation } from "@/lib/i18n";
 import { useAppStore } from "@/stores/app-store";
 import { registerPage } from "../registry";
 import type { PageViewProps } from "../types";
@@ -67,18 +67,26 @@ function formatBytes(bytes: number): string {
   return `${Number.parseFloat((bytes / k ** i).toFixed(1))} ${sizes[i]}`;
 }
 
-function formatUptime(seconds: number): string {
+function formatUptime(seconds: number, t: (key: string) => string): string {
   const days = Math.floor(seconds / 86400);
   const hours = Math.floor((seconds % 86400) / 3600);
   const mins = Math.floor((seconds % 3600) / 60);
-  if (days > 0) return `${days}d ${hours}h`;
-  if (hours > 0) return `${hours}h ${mins}m`;
-  return `${mins}m`;
+  if (days > 0) return t("time.daysHoursShort").replace("{days}", String(days)).replace("{hours}", String(hours));
+  if (hours > 0)
+    return t("time.hoursMinutesShort").replace("{hours}", String(hours)).replace("{minutes}", String(mins));
+  return t("time.minutesShort").replace("{count}", String(mins));
 }
 
-function formatTime(timestamp: number): string {
+function formatTime(timestamp: number, locale: string): string {
   const date = new Date(timestamp);
-  return date.toLocaleString();
+  return date.toLocaleString(locale);
+}
+
+function getProcessStatusLabel(status: string, t: (key: string) => string): string {
+  if (status === "R" || status === "running") return t("plugin.processMonitor.statusRunning");
+  if (status === "S" || status === "sleeping") return t("plugin.processMonitor.statusSleeping");
+  if (status === "Z" || status === "zombie") return t("plugin.processMonitor.statusZombie");
+  return status || t("plugin.processMonitor.statusUnknown");
 }
 
 interface SortIconProps {
@@ -94,6 +102,7 @@ const SortIcon = memo(({ field, sortField, sortDirection }: SortIconProps) => {
 
 interface ProcessRowProps {
   proc: ProcessInfo;
+  t: (key: string) => string;
   onSelect: (proc: ProcessInfo) => void;
   onKill: (proc: ProcessInfo) => void;
   isTreeView?: boolean;
@@ -104,7 +113,7 @@ interface ProcessRowProps {
 }
 
 const ProcessRow = memo(
-  ({ proc, onSelect, onKill, isTreeView, level = 0, isExpanded, hasChildren, onToggle }: ProcessRowProps) => {
+  ({ proc, t, onSelect, onKill, isTreeView, level = 0, isExpanded, hasChildren, onToggle }: ProcessRowProps) => {
     const cpuColor = proc.cpuPercent > 80 ? "bg-red-500" : proc.cpuPercent > 50 ? "bg-yellow-500" : "bg-blue-500";
     const memColor = proc.memPercent > 80 ? "bg-red-500" : proc.memPercent > 50 ? "bg-yellow-500" : "bg-green-500";
 
@@ -171,7 +180,7 @@ const ProcessRow = memo(
                     : "bg-gray-500/20 text-gray-500"
             }`}
           >
-            {proc.status}
+            {getProcessStatusLabel(proc.status, t)}
           </span>
         </div>
         <div className="w-8 flex-shrink-0">
@@ -197,10 +206,11 @@ interface ProcessDetailSheetProps {
   open: boolean;
   onClose: () => void;
   onKill: (proc: ProcessInfo) => void;
+  locale: string;
   t: (key: string) => string;
 }
 
-const ProcessDetailSheet = memo(({ process, open, onClose, onKill, t }: ProcessDetailSheetProps) => {
+const ProcessDetailSheet = memo(({ process, open, onClose, onKill, locale, t }: ProcessDetailSheetProps) => {
   if (!process) return null;
 
   return (
@@ -255,12 +265,12 @@ const ProcessDetailSheet = memo(({ process, open, onClose, onKill, t }: ProcessD
                         : "bg-gray-500/20 text-gray-500"
                 }`}
               >
-                {process.status}
+                {getProcessStatusLabel(process.status, t)}
               </span>
             </div>
             <div className="bg-ide-panel p-3 rounded-lg col-span-2">
               <div className="text-ide-mute text-xs mb-1">{t("plugin.processMonitor.started")}</div>
-              <div className="font-medium text-xs">{formatTime(process.createTime)}</div>
+              <div className="font-medium text-xs">{formatTime(process.createTime, locale)}</div>
             </div>
           </div>
           {process.cmdline && (
@@ -318,6 +328,7 @@ const ProcessMonitorView: React.FC<PageViewProps> = ({ context }) => {
   const { setPageMenuItems } = useFrameController();
   const locale = useAppStore((s) => s.locale);
   const t = useTranslation(locale);
+  const intlLocale = getIntlLocale(locale);
   const refreshOptions = useMemo(() => getRefreshOptions(t), [t]);
   const [refreshInterval, setRefreshInterval] = useState<number>(2000);
   const [searchTerm, setSearchTerm] = useState("");
@@ -343,13 +354,13 @@ const ProcessMonitorView: React.FC<PageViewProps> = ({ context }) => {
   useEffect(() => {
     if (systemStats?.cpu) {
       const newEntry = {
-        time: new Date().toLocaleTimeString("en-US", { hour12: false, minute: "2-digit", second: "2-digit" }),
+        time: new Date().toLocaleTimeString(intlLocale, { hour12: false, minute: "2-digit", second: "2-digit" }),
         value: Math.round(systemStats.cpu.usagePercent * 10) / 10,
       };
       cpuHistoryRef.current = [...cpuHistoryRef.current, newEntry].slice(-CPU_HISTORY_SIZE);
       forceUpdate({});
     }
-  }, [systemStats?.cpu?.usagePercent]);
+  }, [intlLocale, systemStats?.cpu?.usagePercent]);
 
   const handleRefresh = useCallback(() => {
     refetch();
@@ -453,8 +464,12 @@ const ProcessMonitorView: React.FC<PageViewProps> = ({ context }) => {
 
   const memoryChartData = systemStats
     ? [
-        { name: "Used", value: systemStats.memory.used, color: "var(--color-primary)" },
-        { name: "Available", value: systemStats.memory.available, color: "var(--color-muted)" },
+        { name: t("plugin.processMonitor.used"), value: systemStats.memory.used, color: "var(--color-primary)" },
+        {
+          name: t("plugin.processMonitor.available"),
+          value: systemStats.memory.available,
+          color: "var(--color-muted)",
+        },
       ]
     : [];
 
@@ -688,7 +703,7 @@ const ProcessMonitorView: React.FC<PageViewProps> = ({ context }) => {
                 <div className="space-y-1 sm:space-y-2 text-[10px] sm:text-xs">
                   <div className="flex justify-between gap-1">
                     <span className="text-ide-mute">{t("plugin.processMonitor.uptime")}</span>
-                    <span className="text-ide-text font-medium">{formatUptime(systemStats?.uptime || 0)}</span>
+                    <span className="text-ide-text font-medium">{formatUptime(systemStats?.uptime || 0, t)}</span>
                   </div>
                   <div className="flex justify-between gap-1">
                     <span className="text-ide-mute">{t("plugin.processMonitor.processes")}</span>
@@ -796,6 +811,7 @@ const ProcessMonitorView: React.FC<PageViewProps> = ({ context }) => {
                 >
                   <ProcessRow
                     proc={node}
+                    t={t}
                     onSelect={handleSelectProcess}
                     onKill={handleKillClick}
                     isTreeView={viewMode === "tree"}
@@ -816,6 +832,7 @@ const ProcessMonitorView: React.FC<PageViewProps> = ({ context }) => {
         open={detailSheetOpen}
         onClose={() => setDetailSheetOpen(false)}
         onKill={handleKillClick}
+        locale={intlLocale}
         t={t}
       />
 

@@ -11,9 +11,9 @@ const TerminalWorkspaceView: React.FC<PageViewProps> = ({ context }) => {
 registerPage({
   id: "terminal",
   name: "Terminal",
-  nameKey: "plugin.terminal.name",
+  nameKey: "sidebar.terminal",
   icon: Terminal,
-  category: "tool",
+  category: "workspace",
   order: 1,
   View: TerminalWorkspaceView,
 });

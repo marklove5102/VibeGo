@@ -27,10 +27,10 @@ export const SETTINGS_SCHEMA: SettingSchema[] = [
     descriptionKey: "settings.theme.description",
     defaultValue: "light",
     options: [
-      { value: "light", label: "Light" },
-      { value: "dark", label: "Dark" },
-      { value: "hacker", label: "Hacker" },
-      { value: "terminal", label: "Terminal" },
+      { value: "light", label: "settings.theme.optionLight" },
+      { value: "dark", label: "settings.theme.optionDark" },
+      { value: "hacker", label: "settings.theme.optionHacker" },
+      { value: "terminal", label: "settings.theme.optionTerminal" },
     ],
   },
   {
@@ -41,8 +41,8 @@ export const SETTINGS_SCHEMA: SettingSchema[] = [
     descriptionKey: "settings.locale.description",
     defaultValue: "zh",
     options: [
-      { value: "en", label: "English" },
-      { value: "zh", label: "中文" },
+      { value: "en", label: "settings.locale.optionEnglish" },
+      { value: "zh", label: "settings.locale.optionChinese" },
     ],
   },
   {
@@ -53,7 +53,7 @@ export const SETTINGS_SCHEMA: SettingSchema[] = [
     descriptionKey: "settings.fontFamily.description",
     defaultValue: "jetbrains-mono",
     options: [
-      { value: "default", label: "Default" },
+      { value: "default", label: "settings.fontFamily.optionDefault" },
       { value: "jetbrains-mono", label: "JetBrains Mono" },
     ],
   },
@@ -73,8 +73,8 @@ export const SETTINGS_SCHEMA: SettingSchema[] = [
     descriptionKey: "settings.defaultViewMode.description",
     defaultValue: "list",
     options: [
-      { value: "list", label: "List" },
-      { value: "grid", label: "Grid" },
+      { value: "list", label: "settings.defaultViewMode.optionList" },
+      { value: "grid", label: "settings.defaultViewMode.optionGrid" },
     ],
   },
   {

@@ -29,7 +29,7 @@ const BranchSelector: React.FC<BranchSelectorProps> = ({
   onCreate,
   onDelete,
 }) => {
-  const t = (key: string) => getTranslation(locale, key);
+  const t = useCallback((key: string) => getTranslation(locale, key), [locale]);
   const [search, setSearch] = useState("");
   const [isCreating, setIsCreating] = useState(false);
   const [newBranchName, setNewBranchName] = useState("");
