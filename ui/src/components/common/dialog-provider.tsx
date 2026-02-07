@@ -1,4 +1,4 @@
-import React, { createContext, useCallback, useContext, useState } from "react";
+import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -44,6 +44,7 @@ export const useDialog = () => {
 export const DialogProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [dialog, setDialog] = useState<DialogState | null>(null);
   const [inputValue, setInputValue] = useState("");
+  const [viewportInset, setViewportInset] = useState(0);
   const locale = (useSettingsStore((s) => s.settings.locale) || "zh") as Locale;
   const t = useTranslation(locale);
 
@@ -127,6 +128,34 @@ export const DialogProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     [dialog, handleConfirm, handleClose]
   );
 
+  useEffect(() => {
+    if (!dialog) {
+      setViewportInset(0);
+      return;
+    }
+
+    const updateInset = () => {
+      const vv = window.visualViewport;
+      if (!vv) {
+        setViewportInset(0);
+        return;
+      }
+      const inset = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+      setViewportInset(inset);
+    };
+
+    updateInset();
+    window.visualViewport?.addEventListener("resize", updateInset);
+    window.visualViewport?.addEventListener("scroll", updateInset);
+    window.addEventListener("orientationchange", updateInset);
+
+    return () => {
+      window.visualViewport?.removeEventListener("resize", updateInset);
+      window.visualViewport?.removeEventListener("scroll", updateInset);
+      window.removeEventListener("orientationchange", updateInset);
+    };
+  }, [dialog]);
+
   return (
     <DialogContext.Provider value={{ alert, confirm, prompt }}>
       {children}
@@ -135,7 +164,8 @@ export const DialogProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           <DialogContent
             showCloseButton={false}
             onKeyDown={handleKeyDown}
-            className="inset-x-0 top-auto bottom-0 translate-x-0 translate-y-0 w-full max-w-2xl rounded-t-2xl rounded-b-none border-t border-x-0 border-b-0 p-4 pb-5"
+            style={{ bottom: viewportInset ? `${viewportInset}px` : undefined }}
+            className="inset-x-0 top-auto bottom-0 translate-x-0 translate-y-0 w-full max-w-2xl max-h-[calc(100dvh-0.75rem)] overflow-y-auto rounded-t-2xl rounded-b-none border-t border-x-0 border-b-0 p-4 pb-5"
           >
             <div className="bg-muted mx-auto h-1.5 w-10 rounded-full" />
             <DialogHeader>

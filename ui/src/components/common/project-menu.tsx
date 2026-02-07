@@ -361,9 +361,9 @@ const MenuItem: React.FC<{
   <button
     onClick={onClick}
     title={title || label}
-    className="flex flex-col items-center gap-1.5 p-2 rounded-lg hover:bg-ide-bg hover:text-ide-accent transition-all text-ide-text group"
+    className="flex flex-col items-center gap-1.5 p-2 rounded-md hover:bg-ide-bg hover:text-ide-accent transition-all text-ide-text group"
   >
-    <div className="relative p-2 bg-ide-bg rounded-xl border border-ide-border group-hover:border-ide-accent group-hover:shadow-glow transition-all">
+    <div className="relative p-2 bg-ide-bg rounded-md border border-ide-border group-hover:border-ide-accent group-hover:shadow-glow transition-all">
       {icon}
       {badge && (
         <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] rounded-full px-1 min-w-[16px] h-4 flex items-center justify-center">

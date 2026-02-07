@@ -1,7 +1,7 @@
 import { Calendar, Copy, Download, Edit3, File, Folder, HardDrive, Link2, Shield, Trash2 } from "lucide-react";
-import React from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { fileApi } from "@/api/file";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { type Locale, useTranslation } from "@/lib/i18n";
 import { useSettingsStore } from "@/lib/settings";
 import type { FileItem } from "@/stores/file-manager-store";
@@ -11,7 +11,7 @@ interface FileDetailSheetProps {
   open: boolean;
   onClose: () => void;
   onDelete?: (file: FileItem) => void;
-  onRename?: (file: FileItem) => void;
+  onRename?: (file: FileItem) => void | Promise<void>;
 }
 
 function formatFileSize(bytes: number): string {
@@ -39,6 +39,19 @@ function formatPermissions(mode: string): string {
 const FileDetailSheet: React.FC<FileDetailSheetProps> = ({ file, open, onClose, onDelete, onRename }) => {
   const locale = (useSettingsStore((s) => s.settings.locale) || "zh") as Locale;
   const t = useTranslation(locale);
+  const renamingRef = useRef(false);
+  const suppressCloseUntilRef = useRef(0);
+  const copyFeedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const infoCopyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [copySuccess, setCopySuccess] = useState(false);
+  const [copiedInfoLabel, setCopiedInfoLabel] = useState<string | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (copyFeedbackTimerRef.current) clearTimeout(copyFeedbackTimerRef.current);
+      if (infoCopyTimerRef.current) clearTimeout(infoCopyTimerRef.current);
+    };
+  }, []);
 
   if (!file) return null;
 
@@ -48,33 +61,133 @@ const FileDetailSheet: React.FC<FileDetailSheetProps> = ({ file, open, onClose, 
     }
   };
 
-  const handleCopyPath = async () => {
-    await navigator.clipboard.writeText(file.path);
+  const copyText = async (text: string) => {
+    await navigator.clipboard.writeText(text);
   };
 
-  const InfoRow = ({ icon: Icon, label, value }: { icon: React.ElementType; label: string; value: string }) => (
-    <div className="flex items-start gap-3 py-2">
-      <Icon size={18} className="text-ide-mute mt-0.5 shrink-0" />
-      <div className="flex-1 min-w-0">
-        <div className="text-[10px] text-ide-mute uppercase tracking-wider">{label}</div>
-        <div className="text-sm text-ide-text break-all">{value}</div>
+  const handleCopyPath = async () => {
+    await copyText(file.path);
+    setCopySuccess(true);
+    if (copyFeedbackTimerRef.current) clearTimeout(copyFeedbackTimerRef.current);
+    copyFeedbackTimerRef.current = setTimeout(() => {
+      setCopySuccess(false);
+      copyFeedbackTimerRef.current = null;
+    }, 1400);
+  };
+
+  const handleRename = async () => {
+    if (!onRename || renamingRef.current) return;
+    renamingRef.current = true;
+    suppressCloseUntilRef.current = Date.now() + 800;
+    try {
+      await onRename(file);
+    } finally {
+      renamingRef.current = false;
+      suppressCloseUntilRef.current = Date.now() + 300;
+    }
+  };
+
+  const InfoRow = ({ icon: Icon, label, value }: { icon: React.ElementType; label: string; value: string }) => {
+    const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    const clearLongPress = () => {
+      if (longPressTimerRef.current) {
+        clearTimeout(longPressTimerRef.current);
+        longPressTimerRef.current = null;
+      }
+    };
+
+    const markInfoCopied = async () => {
+      await copyText(value);
+      setCopiedInfoLabel(label);
+      if (infoCopyTimerRef.current) clearTimeout(infoCopyTimerRef.current);
+      infoCopyTimerRef.current = setTimeout(() => {
+        setCopiedInfoLabel(null);
+        infoCopyTimerRef.current = null;
+      }, 1200);
+    };
+
+    return (
+      <div
+        className="flex items-start gap-3 py-2"
+        onContextMenu={(e) => {
+          e.preventDefault();
+          markInfoCopied();
+        }}
+        onTouchStart={() => {
+          longPressTimerRef.current = setTimeout(() => {
+            markInfoCopied();
+            longPressTimerRef.current = null;
+          }, 500);
+        }}
+        onTouchEnd={clearLongPress}
+        onTouchMove={clearLongPress}
+        onTouchCancel={clearLongPress}
+      >
+        <Icon size={18} className="text-ide-mute mt-0.5 shrink-0" />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center justify-between gap-2">
+            <div className="text-[10px] text-ide-mute uppercase tracking-wider">{label}</div>
+            {copiedInfoLabel === label && <div className="text-[10px] text-ide-accent">已复制</div>}
+          </div>
+          <div className="text-sm text-ide-text break-all select-text">{value}</div>
+        </div>
       </div>
-    </div>
+    );
+  };
+
+  const ActionButton = ({
+    onClick,
+    icon,
+    label,
+    destructive = false,
+  }: {
+    onClick: () => void;
+    icon: React.ReactNode;
+    label: string;
+    destructive?: boolean;
+  }) => (
+    <button
+      onClick={onClick}
+      className={`flex flex-col items-center gap-1.5 p-2 rounded-md transition-all group ${
+        destructive ? "text-red-500 hover:bg-red-500/10" : "text-ide-text hover:bg-ide-bg hover:text-ide-accent"
+      }`}
+    >
+      <div
+        className={`relative p-2 rounded-md border transition-all ${
+          destructive
+            ? "bg-red-500/10 border-red-500/40 group-hover:border-red-500"
+            : "bg-ide-bg border-ide-border group-hover:border-ide-accent group-hover:shadow-glow"
+        }`}
+      >
+        {icon}
+      </div>
+      <span className={`text-[11px] font-bold tracking-wide ${destructive ? "text-red-500" : ""}`}>{label}</span>
+    </button>
   );
 
   return (
-    <Sheet open={open} onOpenChange={(o) => !o && onClose()}>
-      <SheetContent side="bottom" className="bg-ide-panel border-t border-ide-border rounded-t-xl max-h-[70vh]">
-        <SheetHeader className="pb-2 border-b border-ide-border">
+    <Dialog
+      open={open}
+      onOpenChange={(o) => {
+        if (!o && !renamingRef.current && Date.now() > suppressCloseUntilRef.current) onClose();
+      }}
+    >
+      <DialogContent
+        showCloseButton={false}
+        className="inset-x-0 top-auto bottom-0 translate-x-0 translate-y-0 w-full max-w-2xl rounded-t-2xl rounded-b-none border-t border-x-0 border-b-0 bg-ide-panel p-4 pb-5"
+      >
+        <div className="bg-muted mx-auto h-1.5 w-10 rounded-full" />
+        <DialogHeader className="pb-2 border-b border-ide-border">
           <div className="flex items-center gap-3">
             {file.isDir ? (
               <Folder size={24} className="text-ide-accent" />
             ) : (
               <File size={24} className="text-ide-accent" />
             )}
-            <SheetTitle className="text-ide-text text-left flex-1 truncate">{file.name}</SheetTitle>
+            <DialogTitle className="text-ide-text text-left flex-1 truncate">{file.name}</DialogTitle>
           </div>
-        </SheetHeader>
+        </DialogHeader>
 
         <div className="px-4 py-3 space-y-1 overflow-y-auto max-h-[40vh]">
           <InfoRow
@@ -95,44 +208,37 @@ const FileDetailSheet: React.FC<FileDetailSheetProps> = ({ file, open, onClose, 
 
         <div className="px-4 pt-3 border-t border-ide-border">
           <div className="grid grid-cols-4 gap-2">
-            <button
+            <ActionButton
               onClick={handleCopyPath}
-              className="flex flex-col items-center gap-1 p-3 rounded-lg hover:bg-ide-bg transition-colors"
-            >
-              <Copy size={20} className="text-ide-mute" />
-              <span className="text-[10px] text-ide-mute">{t("fileDetail.copyPath")}</span>
-            </button>
+              icon={<Copy size={20} className="text-ide-mute" />}
+              label={copySuccess ? "已复制" : t("fileDetail.copyPath")}
+            />
             {onRename && (
-              <button
-                onClick={() => onRename(file)}
-                className="flex flex-col items-center gap-1 p-3 rounded-lg hover:bg-ide-bg transition-colors"
-              >
-                <Edit3 size={20} className="text-ide-mute" />
-                <span className="text-[10px] text-ide-mute">{t("common.rename")}</span>
-              </button>
+              <ActionButton
+                onClick={handleRename}
+                icon={<Edit3 size={20} className="text-ide-mute" />}
+                label={t("common.rename")}
+              />
             )}
             {!file.isDir && (
-              <button
+              <ActionButton
                 onClick={handleDownload}
-                className="flex flex-col items-center gap-1 p-3 rounded-lg hover:bg-ide-bg transition-colors"
-              >
-                <Download size={20} className="text-ide-mute" />
-                <span className="text-[10px] text-ide-mute">{t("fileDetail.download")}</span>
-              </button>
+                icon={<Download size={20} className="text-ide-mute" />}
+                label={t("fileDetail.download")}
+              />
             )}
             {onDelete && (
-              <button
+              <ActionButton
                 onClick={() => onDelete(file)}
-                className="flex flex-col items-center gap-1 p-3 rounded-lg hover:bg-ide-bg transition-colors"
-              >
-                <Trash2 size={20} className="text-red-500" />
-                <span className="text-[10px] text-red-500">{t("common.delete")}</span>
-              </button>
+                icon={<Trash2 size={20} className="text-red-500" />}
+                label={t("common.delete")}
+                destructive
+              />
             )}
           </div>
         </div>
-      </SheetContent>
-    </Sheet>
+      </DialogContent>
+    </Dialog>
   );
 };
 
