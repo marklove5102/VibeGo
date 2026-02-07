@@ -6,16 +6,16 @@ interface NewGroupMenuProps {
   isOpen: boolean;
   onClose: () => void;
   onOpenDirectory: () => void;
-  onNewPlugin: (pluginId: string) => void;
-  availablePlugins?: { id: string; name: string; icon?: React.ReactNode }[];
+  onNewTool: (pageId: string) => void;
+  availableTools?: { id: string; name: string; icon?: React.ReactNode }[];
 }
 
 const NewGroupMenu: React.FC<NewGroupMenuProps> = ({
   isOpen,
   onClose,
   onOpenDirectory,
-  onNewPlugin,
-  availablePlugins = [],
+  onNewTool,
+  availableTools = [],
 }) => {
   const groups = useFrameStore((s) => s.groups);
   const activeGroupId = useFrameStore((s) => s.activeGroupId);
@@ -67,26 +67,26 @@ const NewGroupMenu: React.FC<NewGroupMenuProps> = ({
               <div className="text-xs text-ide-mute">{activeGroup?.name || "Close current group"}</div>
             </div>
           </button>
-          {availablePlugins.length > 0 && (
+          {availableTools.length > 0 && (
             <>
               <div className="h-px bg-ide-border my-2" />
               <div className="px-4 py-2">
                 <span className="text-xs font-bold text-ide-mute uppercase">Plugins</span>
               </div>
-              {availablePlugins.map((plugin) => (
+              {availableTools.map((tool) => (
                 <button
-                  key={plugin.id}
+                  key={tool.id}
                   onClick={() => {
-                    onNewPlugin(plugin.id);
+                    onNewTool(tool.id);
                     onClose();
                   }}
                   className="w-full px-4 py-3 flex items-center gap-4 hover:bg-ide-bg rounded-lg transition-colors"
                 >
                   <div className="w-10 h-10 rounded-full bg-ide-accent/10 flex items-center justify-center">
-                    {plugin.icon || <Box size={20} className="text-ide-accent" />}
+                    {tool.icon || <Box size={20} className="text-ide-accent" />}
                   </div>
                   <div className="text-left">
-                    <div className="text-sm font-medium text-ide-text">{plugin.name}</div>
+                    <div className="text-sm font-medium text-ide-text">{tool.name}</div>
                   </div>
                 </button>
               ))}

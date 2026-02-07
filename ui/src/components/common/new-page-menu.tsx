@@ -1,28 +1,28 @@
 import { FolderOpen, X } from "lucide-react";
 import React from "react";
 import { type Locale, useTranslation } from "@/lib/i18n";
-import { pluginRegistry } from "@/plugins/registry";
+import { pageRegistry } from "@/pages/registry";
 
 interface NewPageMenuProps {
   isOpen: boolean;
   onClose: () => void;
   locale: Locale;
   onOpenDirectory: () => void;
-  onNewPlugin: (pluginId: string) => void;
+  onNewTool: (pageId: string) => void;
 }
 
-const NewPageMenu: React.FC<NewPageMenuProps> = ({ isOpen, onClose, locale, onOpenDirectory, onNewPlugin }) => {
+const NewPageMenu: React.FC<NewPageMenuProps> = ({ isOpen, onClose, locale, onOpenDirectory, onNewTool }) => {
   const t = useTranslation(locale);
-  const plugins = pluginRegistry.getAll();
+  const tools = pageRegistry.getAll().filter((p) => p.category === "tool");
 
   if (!isOpen) return null;
 
-  const getPluginName = (plugin: { name: string; nameKey?: string }) => {
-    if (plugin.nameKey) {
-      const translated = t(plugin.nameKey);
-      if (translated !== plugin.nameKey) return translated;
+  const getToolName = (tool: { name: string; nameKey?: string }) => {
+    if (tool.nameKey) {
+      const translated = t(tool.nameKey);
+      if (translated !== tool.nameKey) return translated;
     }
-    return plugin.name;
+    return tool.name;
   };
 
   return (
@@ -50,19 +50,19 @@ const NewPageMenu: React.FC<NewPageMenuProps> = ({ isOpen, onClose, locale, onOp
               <div className="text-sm font-medium text-ide-text">{t("common.openFolder")}</div>
             </div>
           </button>
-          {plugins.length > 0 && (
+          {tools.length > 0 && (
             <>
               <div className="h-px bg-ide-border my-2" />
               <div className="px-4 py-2">
                 <span className="text-xs font-bold text-ide-mute uppercase">{t("newPage.plugins")}</span>
               </div>
-              {plugins.map((plugin) => {
-                const IconComponent = plugin.icon;
+              {tools.map((tool) => {
+                const IconComponent = tool.icon;
                 return (
                   <button
-                    key={plugin.id}
+                    key={tool.id}
                     onClick={() => {
-                      onNewPlugin(plugin.id);
+                      onNewTool(tool.id);
                       onClose();
                     }}
                     className="w-full px-4 py-3 flex items-center gap-4 hover:bg-ide-bg rounded-lg transition-colors"
@@ -71,7 +71,7 @@ const NewPageMenu: React.FC<NewPageMenuProps> = ({ isOpen, onClose, locale, onOp
                       <IconComponent size={20} className="text-ide-accent" />
                     </div>
                     <div className="text-left">
-                      <div className="text-sm font-medium text-ide-text">{getPluginName(plugin)}</div>
+                      <div className="text-sm font-medium text-ide-text">{getToolName(tool)}</div>
                     </div>
                   </button>
                 );

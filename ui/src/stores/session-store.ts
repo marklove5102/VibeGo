@@ -2,7 +2,7 @@ import { create } from "zustand";
 import { type SessionInfo, sessionApi } from "../api/session";
 import { cleanupAllTerminals } from "../services/terminal-cleanup-service";
 import { useFileManagerStore } from "./file-manager-store";
-import { type GenericGroup, type GroupPage, type PluginGroup, useFrameStore } from "./frame-store";
+import { type GenericGroup, type GroupPage, type ToolGroup, useFrameStore } from "./frame-store";
 import { type TerminalSession, useTerminalStore } from "./terminal-store";
 
 const CURRENT_SESSION_KEY = "current_session_id";
@@ -17,9 +17,9 @@ export interface SessionState {
     pages: GroupPage[];
     activePageId: string | null;
   }>;
-  openPlugins: Array<{
+  openTools: Array<{
     id: string;
-    pluginId: string;
+    pageId: string;
     name: string;
   }>;
   terminalsByGroup: Record<string, TerminalSession[]>;
@@ -73,7 +73,7 @@ function setStoredSessionId(id: string | null): void {
 function createEmptySessionState(): SessionState {
   return {
     openGroups: [],
-    openPlugins: [],
+    openTools: [],
     terminalsByGroup: {},
     activeTerminalByGroup: {},
     listManagerOpenByGroup: {},
@@ -115,7 +115,7 @@ function buildSessionState(): SessionState {
   const fileManagerState = useFileManagerStore.getState();
   const terminalState = useTerminalStore.getState();
   const genericGroups = frameState.groups.filter((g): g is GenericGroup => g.type === "group");
-  const pluginGroups = frameState.groups.filter((g): g is PluginGroup => g.type === "plugin");
+  const toolGroups = frameState.groups.filter((g): g is ToolGroup => g.type === "tool");
   const settingsGroup = frameState.groups.find((g) => g.type === "settings");
   const fileManagerByGroup: SessionState["fileManagerByGroup"] = {};
 
@@ -155,9 +155,9 @@ function buildSessionState(): SessionState {
       pages: g.pages,
       activePageId: g.activePageId,
     })),
-    openPlugins: pluginGroups.map((g) => ({
+    openTools: toolGroups.map((g) => ({
       id: g.id,
-      pluginId: g.pluginId,
+      pageId: g.pageId,
       name: g.name,
     })),
     terminalsByGroup: terminalState.terminalsByGroup,
@@ -176,7 +176,7 @@ function parseSessionState(rawState: string): SessionState {
   const parsed = JSON.parse(rawState) as Partial<SessionState>;
   return {
     openGroups: Array.isArray(parsed.openGroups) ? parsed.openGroups : [],
-    openPlugins: Array.isArray(parsed.openPlugins) ? parsed.openPlugins : [],
+    openTools: Array.isArray(parsed.openTools) ? parsed.openTools : [],
     terminalsByGroup:
       parsed.terminalsByGroup && typeof parsed.terminalsByGroup === "object" ? parsed.terminalsByGroup : {},
     activeTerminalByGroup:
@@ -214,8 +214,8 @@ function restoreSessionState(state: SessionState): void {
     });
   });
 
-  state.openPlugins.forEach((plugin) => {
-    frameStore.addPluginGroup(plugin.pluginId, plugin.name, plugin.id);
+  state.openTools.forEach((tool) => {
+    frameStore.addToolGroup(tool.pageId, tool.name, tool.id);
   });
 
   if (state.settingsOpen || state.activeGroupId === "settings") {
@@ -232,6 +232,7 @@ function restoreSessionState(state: SessionState): void {
   const fallbackActiveGroupId =
     state.openGroups.find((group) => currentGroups.some((currentGroup) => currentGroup.id === group.id))?.id ||
     (state.settingsOpen && currentGroups.some((group) => group.id === "settings") ? "settings" : null) ||
+    state.openTools.find((tool) => currentGroups.some((group) => group.id === tool.id))?.id ||
     currentGroups[0]?.id ||
     null;
   const activeGroupId =
@@ -360,7 +361,7 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
             activePageId: `${groupId}-files`,
           },
         ],
-        openPlugins: [],
+        openTools: [],
         terminalsByGroup: {},
         activeTerminalByGroup: {},
         listManagerOpenByGroup: {},

@@ -1,4 +1,4 @@
-export { AppView, type Locale, type Theme, useAppStore } from "./app-store";
+export { type Locale, type Theme, useAppStore } from "./app-store";
 export { type EditorTab, useEditorStore } from "./editor-store";
 export {
   type FileItem,
@@ -15,10 +15,10 @@ export {
   type HomeGroup,
   type PageGroup,
   type PageType,
-  type PluginGroup,
+  type ToolGroup,
+  type PageMenuItem,
   type SettingsGroup,
   type TabItem,
-  type TerminalGroup,
   useFrameStore,
   type ViewType,
 } from "./frame-store";

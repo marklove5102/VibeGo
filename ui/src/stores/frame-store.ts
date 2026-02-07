@@ -1,9 +1,17 @@
 import type { ReactNode } from "react";
 import { create } from "zustand";
 
-export type GroupType = "home" | "group" | "terminal" | "plugin" | "settings";
+export type GroupType = "home" | "group" | "tool" | "settings";
 
 export type PageType = "files" | "git" | "terminal";
+
+export interface PageMenuItem {
+  id: string;
+  icon: ReactNode;
+  label: string;
+  badge?: string | number;
+  onClick?: () => void;
+}
 
 export interface TopBarButton {
   icon: ReactNode;
@@ -43,12 +51,6 @@ export interface BottomBarConfig {
   show?: boolean;
 }
 
-export type {
-  PageFrameConfig,
-  PageMenuConfig,
-  PluginContext,
-} from "@/plugins/registry";
-
 export interface TabItem {
   id: string;
   title: string;
@@ -77,19 +79,11 @@ export interface GenericGroup {
   activePageId: string | null;
 }
 
-export interface TerminalGroup {
-  type: "terminal";
+export interface ToolGroup {
+  type: "tool";
   id: string;
   name: string;
-  tabs: TabItem[];
-  activeTabId: string | null;
-}
-
-export interface PluginGroup {
-  type: "plugin";
-  id: string;
-  name: string;
-  pluginId: string;
+  pageId: string;
   tabs: TabItem[];
   activeTabId: string | null;
 }
@@ -106,7 +100,7 @@ export interface HomeGroup {
   name: string;
 }
 
-export type PageGroup = HomeGroup | GenericGroup | TerminalGroup | PluginGroup | SettingsGroup;
+export type PageGroup = HomeGroup | GenericGroup | ToolGroup | SettingsGroup;
 
 export type ViewType = PageType;
 
@@ -115,11 +109,11 @@ interface FrameState {
   activeGroupId: string | null;
   topBarConfig: TopBarConfig;
   bottomBarConfig: BottomBarConfig;
-  pageMenuItems: import("@/plugins/registry").PageMenuConfig[];
+  pageMenuItems: PageMenuItem[];
 
   setTopBarConfig: (config: TopBarConfig) => void;
   setBottomBarConfig: (config: BottomBarConfig) => void;
-  setPageMenuItems: (items: import("@/plugins/registry").PageMenuConfig[]) => void;
+  setPageMenuItems: (items: PageMenuItem[]) => void;
   initDefaultGroups: () => void;
   showHomePage: () => void;
   addFolderGroup: (path: string, name?: string, id?: string) => string;
@@ -131,8 +125,7 @@ interface FrameState {
       activePageId: string | null;
     }
   ) => void;
-  addTerminalGroup: (name?: string) => void;
-  addPluginGroup: (pluginId: string, name?: string, id?: string) => void;
+  addToolGroup: (pageId: string, name?: string, id?: string) => void;
   addSettingsGroup: () => void;
   removeGroup: (id: string) => void;
   setActiveGroup: (id: string) => void;
@@ -179,19 +172,11 @@ const createFolderGroup = (path: string, name?: string): GenericGroup => {
   };
 };
 
-const createTerminalGroup = (name?: string): TerminalGroup => ({
-  type: "terminal",
-  id: `terminal-${Date.now()}`,
-  name: name || "Terminal",
-  tabs: [],
-  activeTabId: null,
-});
-
-const createPluginGroup = (pluginId: string, name?: string, id?: string): PluginGroup => ({
-  type: "plugin",
-  id: id || `plugin-${Date.now()}`,
-  name: name || pluginId,
-  pluginId,
+const createToolGroup = (pageId: string, name?: string, id?: string): ToolGroup => ({
+  type: "tool",
+  id: id || `tool-${Date.now()}`,
+  name: name || pageId,
+  pageId,
   tabs: [],
   activeTabId: null,
 });
@@ -303,13 +288,8 @@ export const useFrameStore = create<FrameState>((set, get) => ({
       }),
     })),
 
-  addTerminalGroup: (name) => {
-    const group = createTerminalGroup(name);
-    set((s) => ({ groups: [...s.groups, group], activeGroupId: group.id }));
-  },
-
-  addPluginGroup: (pluginId, name, id) => {
-    const group = createPluginGroup(pluginId, name, id);
+  addToolGroup: (pageId, name, id) => {
+    const group = createToolGroup(pageId, name, id);
     set((s) => ({ groups: [...s.groups, group], activeGroupId: group.id }));
   },
 
@@ -367,7 +347,6 @@ export const useFrameStore = create<FrameState>((set, get) => ({
       const page = getActivePage(group);
       return page?.type || null;
     }
-    if (group.type === "terminal") return "terminal";
     return null;
   },
 
@@ -412,7 +391,6 @@ export const useFrameStore = create<FrameState>((set, get) => ({
       const page = getActivePage(group);
       return page?.type || null;
     }
-    if (group.type === "terminal") return "terminal";
     return null;
   },
 

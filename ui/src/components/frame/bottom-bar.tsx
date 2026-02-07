@@ -12,13 +12,13 @@ import {
   Terminal,
 } from "lucide-react";
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { pluginRegistry } from "@/plugins/registry";
+import { pageRegistry } from "@/pages/registry";
 import {
   type BottomBarButton,
   type GenericGroup,
   type PageGroup,
   type PageType,
-  type PluginGroup,
+  type ToolGroup,
   useFrameStore,
 } from "@/stores/frame-store";
 
@@ -36,8 +36,7 @@ const PAGE_TYPE_ICONS: Record<PageType, React.ReactNode> = {
 const GROUP_TYPE_ICONS = {
   home: <Home size={18} />,
   group: <FolderOpen size={18} />,
-  terminal: <Terminal size={18} />,
-  plugin: <Box size={18} />,
+  tool: <Box size={18} />,
   settings: <Settings size={18} />,
 };
 
@@ -50,10 +49,10 @@ interface GroupButtonProps {
   onPageClick: (groupId: string, pageId: string) => void;
 }
 
-const getPluginIcon = (pluginId: string): React.ReactNode => {
-  const plugin = pluginRegistry.get(pluginId);
-  if (plugin) {
-    const IconComponent = plugin.icon;
+const getToolIcon = (pageId: string): React.ReactNode => {
+  const page = pageRegistry.get(pageId);
+  if (page) {
+    const IconComponent = page.icon;
     return <IconComponent size={18} />;
   }
   return <Box size={18} />;
@@ -106,8 +105,8 @@ const GroupButton: React.FC<GroupButtonProps> = ({
     );
   }
 
-  if (group.type === "plugin") {
-    const pluginGroup = group as PluginGroup;
+  if (group.type === "tool") {
+    const toolGroup = group as ToolGroup;
     return (
       <button
         onClick={() => onGroupClick(group.id)}
@@ -116,7 +115,7 @@ const GroupButton: React.FC<GroupButtonProps> = ({
         }`}
         title={group.name}
       >
-        {getPluginIcon(pluginGroup.pluginId)}
+        {getToolIcon(toolGroup.pageId)}
       </button>
     );
   }
@@ -129,7 +128,7 @@ const GroupButton: React.FC<GroupButtonProps> = ({
       }`}
       title={group.name}
     >
-      {GROUP_TYPE_ICONS[group.type] || GROUP_TYPE_ICONS.plugin}
+      {GROUP_TYPE_ICONS[group.type] || GROUP_TYPE_ICONS.tool}
     </button>
   );
 };

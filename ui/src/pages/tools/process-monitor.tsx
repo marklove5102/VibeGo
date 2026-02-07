@@ -38,8 +38,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useCombinedStats, useProcessKill } from "@/hooks/use-process";
 import { useTranslation } from "@/lib/i18n";
 import { useAppStore } from "@/stores/app-store";
-import { useFrameStore } from "@/stores/frame-store";
-import { type PluginViewProps, registerPlugin } from "../registry";
+import { useFrameController } from "@/framework/frame/controller";
+import { registerPage } from "../registry";
+import type { PageViewProps } from "../types";
 
 type SortField = "pid" | "name" | "cpuPercent" | "memPercent" | "status" | "numThreads" | "createTime";
 type SortDirection = "asc" | "desc";
@@ -312,8 +313,9 @@ function flattenTree(nodes: TreeNode[], expandedPids: Set<number>, level = 0): {
   return result;
 }
 
-const ProcessMonitorView: React.FC<PluginViewProps> = ({ isActive }) => {
-  const setPageMenuItems = useFrameStore((s) => s.setPageMenuItems);
+const ProcessMonitorView: React.FC<PageViewProps> = ({ context }) => {
+  const isActive = context.isActive;
+  const { setPageMenuItems } = useFrameController();
   const locale = useAppStore((s) => s.locale);
   const t = useTranslation(locale);
   const refreshOptions = useMemo(() => getRefreshOptions(t), [t]);
@@ -860,13 +862,14 @@ const ProcessMonitorView: React.FC<PluginViewProps> = ({ isActive }) => {
   );
 };
 
-registerPlugin({
+registerPage({
   id: "process-monitor",
   name: "Process Monitor",
   nameKey: "plugin.processMonitor.name",
   icon: Activity,
   order: 10,
-  view: ProcessMonitorView,
+  category: "tool",
+  View: ProcessMonitorView,
 });
 
 export default ProcessMonitorView;

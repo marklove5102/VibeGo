@@ -92,8 +92,7 @@ const TabBar: React.FC<TabBarProps> = ({ onAction, onBackToList }) => {
     if (activeGroup.type === "group" && currentView) {
       return VIEW_ICONS[currentView];
     }
-    if (activeGroup.type === "terminal") return <Terminal size={18} />;
-    if (activeGroup.type === "plugin") return <Box size={18} />;
+    if (activeGroup.type === "tool") return <Box size={18} />;
     return <FolderOpen size={18} />;
   };
 

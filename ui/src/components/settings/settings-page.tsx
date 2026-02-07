@@ -2,6 +2,7 @@ import { AlignLeft, Clock, Eye, EyeOff, Grid, List, Mail, Settings, User, WrapTe
 import React, { useEffect, useState } from "react";
 import { type Locale, useTranslation } from "@/lib/i18n";
 import { getSettingsByCategory, SETTING_CATEGORIES, type SettingSchema, useSettingsStore } from "@/lib/settings";
+import { useFrameController } from "@/framework/frame/controller";
 import { useFrameStore } from "@/stores/frame-store";
 
 const SettingItem: React.FC<{
@@ -135,7 +136,7 @@ const SettingsPage: React.FC = () => {
   const { settings, init, set, loading } = useSettingsStore();
   const locale = (settings.locale || "zh") as Locale;
   const t = useTranslation(locale);
-  const setTopBarConfig = useFrameStore((s) => s.setTopBarConfig);
+  const { setTopBarConfig } = useFrameController();
   const removeGroup = useFrameStore((s) => s.removeGroup);
   const hiddenKeys = new Set(["theme", "locale"]);
   const [activeTab, setActiveTab] = useState(SETTING_CATEGORIES[0].key);

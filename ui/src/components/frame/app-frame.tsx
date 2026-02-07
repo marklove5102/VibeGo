@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React from "react";
 import { useFrameStore } from "@/stores/frame-store";
 import BottomBar from "./bottom-bar";
 import TabBar from "./tab-bar";
@@ -13,12 +13,7 @@ interface AppFrameProps {
 }
 
 const AppFrame: React.FC<AppFrameProps> = ({ children, onMenuOpen, onTabAction, onBackToList, onNewPage }) => {
-  const initDefaultGroups = useFrameStore((s) => s.initDefaultGroups);
   const topBarConfig = useFrameStore((s) => s.topBarConfig);
-
-  useEffect(() => {
-    initDefaultGroups();
-  }, [initDefaultGroups]);
 
   return (
     <div className="h-dvh min-h-dvh flex flex-col bg-ide-bg text-ide-text overflow-hidden font-mono transition-colors duration-300">

@@ -20,7 +20,7 @@ import { useDialog } from "@/components/common";
 import { type Locale, useTranslation } from "@/lib/i18n";
 import { useSettingsStore } from "@/lib/settings";
 import { type FileItem, useFileManagerStore } from "@/stores/file-manager-store";
-import { useFrameStore } from "@/stores/frame-store";
+import { useFrameController } from "@/framework/frame/controller";
 import FileDetailSheet from "./file-detail-sheet";
 import FileManagerBreadcrumb from "./file-manager-breadcrumb";
 import FileManagerToolbar from "./file-manager-toolbar";
@@ -123,7 +123,7 @@ const FileManager: React.FC<FileManagerProps> = ({ initialPath = ".", onFileOpen
     viewMode,
   } = useFileManagerStore();
 
-  const setPageMenuItems = useFrameStore((s) => s.setPageMenuItems);
+  const { setPageMenuItems } = useFrameController();
   const locale = (useSettingsStore((s) => s.settings.locale) || "zh") as Locale;
   const t = useTranslation(locale);
   const dialog = useDialog();
