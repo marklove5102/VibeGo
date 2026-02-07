@@ -7,18 +7,6 @@ definitions:
     required:
     - id
     type: object
-  handler.CreateBranchRequest:
-    properties:
-      branch:
-        type: string
-      from:
-        type: string
-      path:
-        type: string
-    required:
-    - branch
-    - path
-    type: object
   handler.DeleteBatchRequest:
     properties:
       ids:
@@ -27,16 +15,6 @@ definitions:
         type: array
     required:
     - ids
-    type: object
-  handler.DeleteBranchRequest:
-    properties:
-      branch:
-        type: string
-      path:
-        type: string
-    required:
-    - branch
-    - path
     type: object
   handler.DeleteTerminalRequest:
     properties:
@@ -523,15 +501,6 @@ definitions:
     required:
     - path
     type: object
-  handler.GitStashRequest:
-    properties:
-      message:
-        type: string
-      path:
-        type: string
-    required:
-    - path
-    type: object
   handler.LoginRequest:
     properties:
       password:
@@ -585,16 +554,6 @@ definitions:
         type: string
       username:
         type: string
-    type: object
-  handler.SwitchBranchRequest:
-    properties:
-      branch:
-        type: string
-      path:
-        type: string
-    required:
-    - branch
-    - path
     type: object
   handler.TerminalInfo:
     properties:
@@ -1387,41 +1346,6 @@ paths:
       summary: Apply patch to staging
       tags:
       - Git
-  /api/git/branches:
-    post:
-      consumes:
-      - application/json
-      description: Get list of local branches and current branch
-      parameters:
-      - description: Path request
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/handler.GitPathRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-      summary: List branches
-      tags:
-      - Git
   /api/git/checkout:
     post:
       consumes:
@@ -1632,77 +1556,6 @@ paths:
               type: string
             type: object
       summary: List conflict files
-      tags:
-      - Git
-  /api/git/create-branch:
-    post:
-      consumes:
-      - application/json
-      description: Create a new branch from HEAD or specified source
-      parameters:
-      - description: Create branch request
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/handler.CreateBranchRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-      summary: Create branch
-      tags:
-      - Git
-  /api/git/delete-branch:
-    post:
-      consumes:
-      - application/json
-      description: Delete a local branch (cannot delete current branch)
-      parameters:
-      - description: Delete branch request
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/handler.DeleteBranchRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties:
-              type: boolean
-            type: object
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-      summary: Delete branch
       tags:
       - Git
   /api/git/diff:
@@ -2069,42 +1922,6 @@ paths:
       summary: Show file at ref
       tags:
       - Git
-  /api/git/stash:
-    post:
-      consumes:
-      - application/json
-      description: Stash current working directory changes (uses git CLI as go-git
-        lacks native stash support)
-      parameters:
-      - description: Stash request
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/handler.GitStashRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-      summary: Stash changes
-      tags:
-      - Git
   /api/git/stash-drop:
     post:
       consumes:
@@ -2248,41 +2065,6 @@ paths:
               type: string
             type: object
       summary: Get git status
-      tags:
-      - Git
-  /api/git/switch-branch:
-    post:
-      consumes:
-      - application/json
-      description: Checkout to a different branch
-      parameters:
-      - description: Switch branch request
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/handler.SwitchBranchRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-      summary: Switch branch
       tags:
       - Git
   /api/git/undo:

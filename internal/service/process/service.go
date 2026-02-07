@@ -16,10 +16,10 @@ import (
 )
 
 type CPUStats struct {
-	UsagePercent  float64   `json:"usagePercent"`
-	Cores         int       `json:"cores"`
-	ModelName     string    `json:"modelName"`
-	PerCoreUsage  []float64 `json:"perCoreUsage,omitempty"`
+	UsagePercent float64   `json:"usagePercent"`
+	Cores        int       `json:"cores"`
+	ModelName    string    `json:"modelName"`
+	PerCoreUsage []float64 `json:"perCoreUsage,omitempty"`
 }
 
 type MemoryStats struct {

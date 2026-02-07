@@ -1185,59 +1185,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/api/git/branches": {
-            "post": {
-                "description": "Get list of local branches and current branch",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Git"
-                ],
-                "summary": "List branches",
-                "parameters": [
-                    {
-                        "description": "Path request",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/handler.GitPathRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                }
-            }
-        },
         "/api/git/checkout": {
             "post": {
                 "description": "Discard changes in working directory",
@@ -1537,114 +1484,6 @@ const docTemplate = `{
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/api/git/create-branch": {
-            "post": {
-                "description": "Create a new branch from HEAD or specified source",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Git"
-                ],
-                "summary": "Create branch",
-                "parameters": [
-                    {
-                        "description": "Create branch request",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/handler.CreateBranchRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/api/git/delete-branch": {
-            "post": {
-                "description": "Delete a local branch (cannot delete current branch)",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Git"
-                ],
-                "summary": "Delete branch",
-                "parameters": [
-                    {
-                        "description": "Delete branch request",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/handler.DeleteBranchRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "boolean"
-                            }
                         }
                     },
                     "400": {
@@ -2221,59 +2060,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/api/git/stash": {
-            "post": {
-                "description": "Stash current working directory changes (uses git CLI as go-git lacks native stash support)",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Git"
-                ],
-                "summary": "Stash changes",
-                "parameters": [
-                    {
-                        "description": "Stash request",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/handler.GitStashRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                }
-            }
-        },
         "/api/git/stash-drop": {
             "post": {
                 "description": "Remove a stash entry without applying (uses git CLI as go-git lacks native stash support)",
@@ -2458,59 +2244,6 @@ const docTemplate = `{
                         "required": true,
                         "schema": {
                             "$ref": "#/definitions/handler.GitPathRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/api/git/switch-branch": {
-            "post": {
-                "description": "Checkout to a different branch",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Git"
-                ],
-                "summary": "Switch branch",
-                "parameters": [
-                    {
-                        "description": "Switch branch request",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/handler.SwitchBranchRequest"
                         }
                     }
                 ],
@@ -3079,24 +2812,6 @@ const docTemplate = `{
                 }
             }
         },
-        "handler.CreateBranchRequest": {
-            "type": "object",
-            "required": [
-                "branch",
-                "path"
-            ],
-            "properties": {
-                "branch": {
-                    "type": "string"
-                },
-                "from": {
-                    "type": "string"
-                },
-                "path": {
-                    "type": "string"
-                }
-            }
-        },
         "handler.DeleteBatchRequest": {
             "type": "object",
             "required": [
@@ -3108,21 +2823,6 @@ const docTemplate = `{
                     "items": {
                         "type": "string"
                     }
-                }
-            }
-        },
-        "handler.DeleteBranchRequest": {
-            "type": "object",
-            "required": [
-                "branch",
-                "path"
-            ],
-            "properties": {
-                "branch": {
-                    "type": "string"
-                },
-                "path": {
-                    "type": "string"
                 }
             }
         },
@@ -3859,20 +3559,6 @@ const docTemplate = `{
                 }
             }
         },
-        "handler.GitStashRequest": {
-            "type": "object",
-            "required": [
-                "path"
-            ],
-            "properties": {
-                "message": {
-                    "type": "string"
-                },
-                "path": {
-                    "type": "string"
-                }
-            }
-        },
         "handler.LoginRequest": {
             "type": "object",
             "properties": {
@@ -3952,21 +3638,6 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "username": {
-                    "type": "string"
-                }
-            }
-        },
-        "handler.SwitchBranchRequest": {
-            "type": "object",
-            "required": [
-                "branch",
-                "path"
-            ],
-            "properties": {
-                "branch": {
-                    "type": "string"
-                },
-                "path": {
                     "type": "string"
                 }
             }
