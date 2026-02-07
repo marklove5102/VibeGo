@@ -43,6 +43,7 @@
     "enterFileName": "输入文件名..."
   },
   "fileDetail": {
+    "name": "名称",
     "size": "大小",
     "modified": "修改时间",
     "permissions": "权限",

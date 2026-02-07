@@ -43,6 +43,7 @@
     "enterFileName": "Enter file name..."
   },
   "fileDetail": {
+    "name": "Name",
     "size": "Size",
     "modified": "Modified",
     "permissions": "Permissions",

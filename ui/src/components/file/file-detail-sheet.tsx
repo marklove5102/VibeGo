@@ -1,7 +1,7 @@
 import { Calendar, Copy, Download, Edit3, File, Folder, HardDrive, Link2, Shield, Trash2 } from "lucide-react";
 import React, { useEffect, useRef, useState } from "react";
 import { fileApi } from "@/api/file";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { type Locale, useTranslation } from "@/lib/i18n";
 import { useSettingsStore } from "@/lib/settings";
 import type { FileItem } from "@/stores/file-manager-store";
@@ -178,18 +178,9 @@ const FileDetailSheet: React.FC<FileDetailSheetProps> = ({ file, open, onClose, 
         className="inset-x-0 top-auto bottom-0 translate-x-0 translate-y-0 w-full max-w-2xl rounded-t-2xl rounded-b-none border-t border-x-0 border-b-0 bg-ide-panel p-4 pb-5"
       >
         <div className="bg-muted mx-auto h-1.5 w-10 rounded-full" />
-        <DialogHeader className="pb-2 border-b border-ide-border">
-          <div className="flex items-center gap-3">
-            {file.isDir ? (
-              <Folder size={24} className="text-ide-accent" />
-            ) : (
-              <File size={24} className="text-ide-accent" />
-            )}
-            <DialogTitle className="text-ide-text text-left flex-1 truncate">{file.name}</DialogTitle>
-          </div>
-        </DialogHeader>
 
         <div className="px-4 py-3 space-y-1 overflow-y-auto max-h-[40vh]">
+          <InfoRow icon={File} label={t("fileDetail.name")} value={file.name} />
           <InfoRow
             icon={HardDrive}
             label={t("fileDetail.size")}
