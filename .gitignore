@@ -4,3 +4,4 @@ ui/dist/index.html
 /temp
 ui/CLAUDE.md
 /ui/.vite
+/dist
