@@ -138,7 +138,7 @@ jobs:
           for platform in "${platforms[@]}"; do
             publish_one "dist/npm/vibego-npm-${platform}-${VERSION}.tgz" "public"
           done
-          publish_one "dist/npm/vibego-npm-${VERSION}.tgz" ""
+          publish_one "dist/npm/vibego-npm-${VERSION}.tgz" "public"
 
   smoke-test:
     if: ${{ needs.meta.outputs.should_publish_npm == 'true' }}
