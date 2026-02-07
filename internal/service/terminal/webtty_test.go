@@ -16,17 +16,18 @@ type mockMaster struct {
 	mu        sync.Mutex
 }
 
-func (m *mockMaster) Read(p []byte) (int, error) {
+func (m *mockMaster) ReadMessage() ([]byte, error) {
 	if m.readErr != nil {
-		return 0, m.readErr
+		return nil, m.readErr
 	}
 	if len(m.readData) == 0 {
 		time.Sleep(10 * time.Millisecond)
-		return 0, ErrMasterClosed
+		return nil, ErrMasterClosed
 	}
-	n := copy(p, m.readData)
-	m.readData = m.readData[n:]
-	return n, nil
+	data := make([]byte, len(m.readData))
+	copy(data, m.readData)
+	m.readData = nil
+	return data, nil
 }
 
 func (m *mockMaster) Write(p []byte) (int, error) {
@@ -36,6 +37,14 @@ func (m *mockMaster) Write(p []byte) (int, error) {
 	copy(data, p)
 	m.writeData = append(m.writeData, data)
 	return len(p), nil
+}
+
+func (m *mockMaster) Ping() error {
+	return nil
+}
+
+func (m *mockMaster) Close() error {
+	return nil
 }
 
 type mockSlave struct {
@@ -101,7 +110,7 @@ func TestWebTTY_SlaveToMaster(t *testing.T) {
 		if err := json.Unmarshal(msg, &wsMsg); err != nil {
 			continue
 		}
-		if wsMsg.Type == MsgTypeCmd {
+		if wsMsg.Type == MsgTypeOutput {
 			decoded, err := base64.StdEncoding.DecodeString(wsMsg.Data)
 			if err != nil {
 				continue
@@ -120,7 +129,7 @@ func TestWebTTY_SlaveToMaster(t *testing.T) {
 
 func TestWebTTY_MasterToSlave_Input(t *testing.T) {
 	encoded := base64.StdEncoding.EncodeToString([]byte("test input"))
-	inputMsg := WSMessage{Type: MsgTypeCmd, Data: encoded}
+	inputMsg := WSMessage{Type: MsgTypeInput, Data: encoded}
 	inputData, _ := json.Marshal(inputMsg)
 
 	master := &mockMaster{
@@ -145,43 +154,6 @@ func TestWebTTY_MasterToSlave_Input(t *testing.T) {
 
 	if string(slave.writeData[0]) != "test input" {
 		t.Errorf("expected 'test input', got %s", string(slave.writeData[0]))
-	}
-}
-
-func TestWebTTY_Heartbeat(t *testing.T) {
-	heartbeatMsg := WSMessage{Type: MsgTypeHeartbeat, Timestamp: time.Now().Unix()}
-	heartbeatData, _ := json.Marshal(heartbeatMsg)
-
-	master := &mockMaster{
-		readData: heartbeatData,
-	}
-	slave := &mockSlave{}
-
-	wt := newWebTTY(master, slave)
-
-	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
-	defer cancel()
-
-	go wt.Run(ctx)
-	time.Sleep(100 * time.Millisecond)
-
-	master.mu.Lock()
-	defer master.mu.Unlock()
-
-	found := false
-	for _, msg := range master.writeData {
-		var wsMsg WSMessage
-		if err := json.Unmarshal(msg, &wsMsg); err != nil {
-			continue
-		}
-		if wsMsg.Type == MsgTypeHeartbeat {
-			found = true
-			break
-		}
-	}
-
-	if !found {
-		t.Error("expected to find heartbeat response")
 	}
 }
 

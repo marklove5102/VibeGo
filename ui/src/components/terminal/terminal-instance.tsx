@@ -113,13 +113,14 @@ const TerminalInstance: React.FC<TerminalInstanceProps> = ({ terminalId, isActiv
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reconnectAttemptsRef = useRef(0);
-  const heartbeatTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const lastHeartbeatAckRef = useRef<number>(0);
   const wasOpenRef = useRef(false);
   const initializedRef = useRef(false);
   const isUnmountingRef = useRef(false);
   const lastCursorRef = useRef(0);
-  const isReplayingRef = useRef(false);
+  const lastAckCursorRef = useRef(0);
+  const replayServerDoneRef = useRef(false);
+  const pendingReplayWritesRef = useRef(0);
+  const inputReadyRef = useRef(false);
   const callbacksRef = useRef<CallbackRefs>({ isExited, onExited, t: (key: string) => key });
 
   const theme = useAppStore((s) => s.theme);
@@ -133,17 +134,9 @@ const TerminalInstance: React.FC<TerminalInstanceProps> = ({ terminalId, isActiv
     }
   };
 
-  const clearHeartbeat = () => {
-    if (heartbeatTimerRef.current) {
-      clearInterval(heartbeatTimerRef.current);
-      heartbeatTimerRef.current = null;
-    }
-  };
-
   const connectWebSocket = useCallback(
     (terminal: Terminal) => {
       clearReconnectTimer();
-      clearHeartbeat();
 
       if (wsRef.current) {
         const prev = wsRef.current;
@@ -157,58 +150,57 @@ const TerminalInstance: React.FC<TerminalInstanceProps> = ({ terminalId, isActiv
         } catch {}
       }
 
-      isReplayingRef.current = true;
+      replayServerDoneRef.current = false;
+      pendingReplayWritesRef.current = 0;
+      inputReadyRef.current = false;
+      terminal.options.cursorBlink = false;
+      terminal.options.disableStdin = true;
 
-      const cursor = lastCursorRef.current > 0 ? lastCursorRef.current : undefined;
+      const cursor = lastAckCursorRef.current > 0 ? lastAckCursorRef.current : undefined;
       const wsUrl = terminalApi.wsUrl(terminalId, cursor);
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
 
       let decoder = new TextDecoder("utf-8", { fatal: false });
 
+      const sendAck = (cursorValue: number) => {
+        if (!Number.isFinite(cursorValue) || cursorValue <= lastAckCursorRef.current) {
+          return;
+        }
+        lastAckCursorRef.current = cursorValue;
+        if (wsRef.current === ws && ws.readyState === WebSocket.OPEN) {
+          try {
+            ws.send(JSON.stringify({ type: "ack", cursor: cursorValue }));
+          } catch {}
+        }
+      };
+
+      const tryEnableInput = () => {
+        if (!replayServerDoneRef.current) return;
+        if (pendingReplayWritesRef.current > 0) return;
+        if (callbacksRef.current.isExited) return;
+        inputReadyRef.current = true;
+        terminal.options.cursorBlink = true;
+        terminal.options.disableStdin = false;
+        terminal.focus();
+      };
+
       ws.onopen = () => {
         if (wsRef.current !== ws) return;
         wasOpenRef.current = true;
         reconnectAttemptsRef.current = 0;
-        lastHeartbeatAckRef.current = Date.now();
-
-        if (!callbacksRef.current.isExited) {
-          terminal.options.cursorBlink = true;
-          terminal.options.disableStdin = false;
-        }
-
-        terminal.focus();
         if (terminalRef.current && fitAddonRef.current) {
           fitAddonRef.current.fit();
           const { cols, rows } = terminalRef.current;
           ws.send(JSON.stringify({ type: "resize", cols, rows }));
         }
-
-        heartbeatTimerRef.current = setInterval(() => {
-          if (isUnmountingRef.current) return;
-          if (wsRef.current !== ws) return;
-          if (callbacksRef.current.isExited) return;
-          if (ws.readyState !== WebSocket.OPEN) return;
-
-          const now = Date.now();
-          if (lastHeartbeatAckRef.current > 0 && now-lastHeartbeatAckRef.current > 30_000) {
-            try {
-              ws.close();
-            } catch {}
-            return;
-          }
-
-          try {
-            ws.send(JSON.stringify({ type: "heartbeat", timestamp: now }));
-          } catch {}
-        }, 10_000);
       };
 
       ws.onmessage = (event) => {
         if (wsRef.current !== ws) return;
         try {
           const msg = JSON.parse(event.data);
-          if (msg.type === "cmd") {
+          if (msg.type === "replay" || msg.type === "output") {
             const hasCursor = typeof msg.cursor === "number" && Number.isFinite(msg.cursor);
             const cursorValue = hasCursor ? msg.cursor : undefined;
             if (cursorValue !== undefined && !msg.reset && cursorValue <= lastCursorRef.current) {
@@ -217,7 +209,10 @@ const TerminalInstance: React.FC<TerminalInstanceProps> = ({ terminalId, isActiv
             if (msg.reset) {
               terminal.reset();
               decoder = new TextDecoder("utf-8", { fatal: false });
+              pendingReplayWritesRef.current = 0;
             }
+
+            let hasOutput = false;
             try {
               if (typeof msg.data === "string" && msg.data.length > 0) {
                 const binaryString = atob(msg.data);
@@ -226,31 +221,53 @@ const TerminalInstance: React.FC<TerminalInstanceProps> = ({ terminalId, isActiv
                   bytes[i] = binaryString.charCodeAt(i);
                 }
                 const decoded = decoder.decode(bytes, { stream: true });
-                terminal.write(decoded);
+                hasOutput = decoded.length > 0;
+                if (hasOutput && msg.type === "replay") {
+                  pendingReplayWritesRef.current += 1;
+                }
+                terminal.write(decoded, () => {
+                  if (cursorValue !== undefined) {
+                    lastCursorRef.current = cursorValue;
+                    sendAck(cursorValue);
+                  }
+                  if (hasOutput && msg.type === "replay") {
+                    pendingReplayWritesRef.current = Math.max(0, pendingReplayWritesRef.current - 1);
+                  }
+                  tryEnableInput();
+                });
               }
             } catch (e) {
               console.warn("Failed to decode base64:", e);
             }
-            if (cursorValue !== undefined) {
+            if (!hasOutput && cursorValue !== undefined) {
               lastCursorRef.current = cursorValue;
+              sendAck(cursorValue);
             }
           } else if (msg.type === "replay_done") {
-            isReplayingRef.current = false;
+            replayServerDoneRef.current = true;
+            tryEnableInput();
+          } else if (msg.type === "state") {
+            if (typeof msg.cursor === "number" && Number.isFinite(msg.cursor) && msg.cursor > lastCursorRef.current) {
+              lastCursorRef.current = msg.cursor;
+            }
+            if (typeof msg.status === "string" && msg.status !== "running") {
+              terminal.options.cursorBlink = false;
+              terminal.options.disableStdin = true;
+              callbacksRef.current.isExited = true;
+              inputReadyRef.current = false;
+            }
           } else if (msg.type === "pty_exited") {
             const { t: translate, onExited: exitCallback } = callbacksRef.current;
             terminal.write(`\r\n[${translate("terminal.processExited")}]\r\n`);
             terminal.options.cursorBlink = false;
             terminal.options.disableStdin = true;
             callbacksRef.current.isExited = true;
-            isReplayingRef.current = false;
+            inputReadyRef.current = false;
             clearReconnectTimer();
-            clearHeartbeat();
             try {
               ws.close();
             } catch {}
             exitCallback?.();
-          } else if (msg.type === "heartbeat") {
-            lastHeartbeatAckRef.current = Date.now();
           }
         } catch (e) {
           console.warn("Failed to parse WebSocket message:", e);
@@ -260,8 +277,7 @@ const TerminalInstance: React.FC<TerminalInstanceProps> = ({ terminalId, isActiv
       ws.onclose = () => {
         if (wsRef.current !== ws) return;
         wsRef.current = null;
-        isReplayingRef.current = false;
-        clearHeartbeat();
+        inputReadyRef.current = false;
         if (isUnmountingRef.current) return;
         if (callbacksRef.current.isExited) return;
 
@@ -305,9 +321,8 @@ const TerminalInstance: React.FC<TerminalInstanceProps> = ({ terminalId, isActiv
       terminalRef.current.options.disableStdin = true;
     }
     if (isExited) {
-      isReplayingRef.current = false;
+      inputReadyRef.current = false;
       clearReconnectTimer();
-      clearHeartbeat();
       if (wsRef.current) {
         const ws = wsRef.current;
         wsRef.current = null;
@@ -334,7 +349,10 @@ const TerminalInstance: React.FC<TerminalInstanceProps> = ({ terminalId, isActiv
     initializedRef.current = true;
     isUnmountingRef.current = false;
     lastCursorRef.current = 0;
-    isReplayingRef.current = false;
+    lastAckCursorRef.current = 0;
+    replayServerDoneRef.current = false;
+    pendingReplayWritesRef.current = 0;
+    inputReadyRef.current = false;
 
     const terminal = new Terminal({
       cursorBlink: true,
@@ -358,10 +376,10 @@ const TerminalInstance: React.FC<TerminalInstanceProps> = ({ terminalId, isActiv
 
     terminal.onData((data) => {
       if (callbacksRef.current.isExited) return;
-      if (isReplayingRef.current) return;
+      if (!inputReadyRef.current) return;
       if (wsRef.current?.readyState === WebSocket.OPEN) {
         const msg = {
-          type: "cmd",
+          type: "input",
           data: encodeUtf8Base64(data),
         };
         wsRef.current.send(JSON.stringify(msg));
@@ -372,9 +390,8 @@ const TerminalInstance: React.FC<TerminalInstanceProps> = ({ terminalId, isActiv
 
     return () => {
       isUnmountingRef.current = true;
-      isReplayingRef.current = false;
+      inputReadyRef.current = false;
       clearReconnectTimer();
-      clearHeartbeat();
       if (wsRef.current) {
         const ws = wsRef.current;
         wsRef.current = null;

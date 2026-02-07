@@ -16,19 +16,19 @@ import (
 	"gorm.io/gorm"
 )
 
-type webTTYInstance struct {
-	ID     string
-	WebTTY *webTTY
-	Master master
-	Ctx    context.Context
-	Cancel context.CancelFunc
+type terminalConnection struct {
+	ID        string
+	Master    master
+	Ctx       context.Context
+	Cancel    context.CancelFunc
+	AckCursor atomic.Uint64
 }
 
 type activeTerminal struct {
 	ID            string
 	PTY           slave
 	Session       *model.TerminalSession
-	WebTTYs       sync.Map
+	Connections   sync.Map
 	Done          chan struct{}
 	historyBuffer *historyBuffer
 	historyMu     sync.RWMutex
@@ -49,6 +49,9 @@ type Manager struct {
 	historyFlushInterval time.Duration
 	historyMaxRecords    int
 	historyMaxAge        time.Duration
+	wsPingInterval       time.Duration
+	wsReadTimeout        time.Duration
+	wsWriteTimeout       time.Duration
 }
 
 type replaySnapshot struct {
@@ -72,6 +75,9 @@ func NewManager(db *gorm.DB, cfg *ManagerConfig) *Manager {
 		historyFlushInterval: cfg.HistoryFlushInterval,
 		historyMaxRecords:    cfg.HistoryMaxRecords,
 		historyMaxAge:        cfg.HistoryMaxAge,
+		wsPingInterval:       cfg.WSPingInterval,
+		wsReadTimeout:        cfg.WSReadTimeout,
+		wsWriteTimeout:       cfg.WSWriteTimeout,
 	}
 }
 
@@ -188,10 +194,14 @@ func (m *Manager) Resize(id string, cols, rows int) error {
 		return err
 	}
 
+	at.Session.Cols = cols
+	at.Session.Rows = rows
+	at.Session.UpdatedAt = time.Now().Unix()
+
 	m.db.Model(&model.TerminalSession{}).Where("id = ?", id).Updates(map[string]any{
 		"cols":       cols,
 		"rows":       rows,
-		"updated_at": time.Now().Unix(),
+		"updated_at": at.Session.UpdatedAt,
 	})
 
 	return nil
@@ -204,9 +214,9 @@ func (m *Manager) Close(id string) error {
 	}
 	at := val.(*activeTerminal)
 
-	at.WebTTYs.Range(func(key, value any) bool {
-		instance := value.(*webTTYInstance)
-		instance.Cancel()
+	at.Connections.Range(func(key, value any) bool {
+		conn := value.(*terminalConnection)
+		conn.Cancel()
 		return true
 	})
 
@@ -219,9 +229,13 @@ func (m *Manager) Close(id string) error {
 	at.PTY.Close()
 	close(at.Done)
 
+	now := time.Now().Unix()
+	at.status.Store(model.StatusClosed)
+	at.Session.Status = model.StatusClosed
+	at.Session.UpdatedAt = now
 	m.db.Model(&model.TerminalSession{}).Where("id = ?", id).Updates(map[string]any{
 		"status":     model.StatusClosed,
-		"updated_at": time.Now().Unix(),
+		"updated_at": now,
 	})
 
 	return nil
@@ -250,44 +264,45 @@ func (m *Manager) ptyReadLoop(at *activeTerminal) {
 			return
 		}
 
-		if n > 0 {
-			at.historyMu.Lock()
-			at.historyBuffer.Write(buf[:n])
-			_, endCursor := at.historyBuffer.CursorRange()
-			at.historyMu.Unlock()
-
-			msg := WSMessage{
-				Type:   MsgTypeCmd,
-				Data:   at.encoder.EncodeToString(buf[:n]),
-				Cursor: endCursor,
-			}
-			msgData, _ := json.Marshal(msg)
-
-			at.WebTTYs.Range(func(key, value any) bool {
-				instance := value.(*webTTYInstance)
-				instance.Master.Write(msgData)
-				return true
-			})
+		if n == 0 {
+			continue
 		}
+
+		at.historyMu.Lock()
+		at.historyBuffer.Write(buf[:n])
+		_, endCursor := at.historyBuffer.CursorRange()
+		at.historyMu.Unlock()
+
+		msg := WSMessage{
+			Type:   MsgTypeOutput,
+			Data:   at.encoder.EncodeToString(buf[:n]),
+			Cursor: endCursor,
+		}
+		m.broadcast(at, msg)
 	}
 }
 
 func (m *Manager) monitorPTY(at *activeTerminal, pty *localCommand) {
 	<-pty.ptyClosed
 
+	exitCode := pty.ExitCode()
+	now := time.Now().Unix()
+
 	at.status.Store(model.StatusExited)
+	at.Session.Status = model.StatusExited
+	at.Session.ExitCode = exitCode
+	at.Session.UpdatedAt = now
 
 	m.db.Model(&model.TerminalSession{}).Where("id = ?", at.ID).Updates(map[string]any{
 		"status":     model.StatusExited,
-		"exit_code":  pty.ExitCode(),
-		"updated_at": time.Now().Unix(),
+		"exit_code":  exitCode,
+		"updated_at": now,
 	})
 
-	exitMsg := WSMessage{Type: MsgTypePtyExited}
-	msgData, _ := json.Marshal(exitMsg)
-	at.WebTTYs.Range(func(key, value any) bool {
-		instance := value.(*webTTYInstance)
-		instance.Master.Write(msgData)
+	at.Connections.Range(func(key, value any) bool {
+		conn := value.(*terminalConnection)
+		m.sendTerminalState(at, conn.Master)
+		m.sendMessage(conn.Master, WSMessage{Type: MsgTypePtyExited})
 		return true
 	})
 
@@ -322,46 +337,66 @@ func (m *Manager) AttachWithOptions(id string, conn *websocket.Conn, opts Attach
 		return nil, ErrMaxConnectionsReached
 	}
 
-	clientID := uuid.New().String()
-	mst := newWSMaster(conn)
+	m.configureWSConn(conn)
 
+	clientID := uuid.New().String()
+	mst := newWSMaster(conn, m.wsWriteTimeout)
 	ctx, cancel := context.WithCancel(context.Background())
 	doneCh := make(chan struct{})
 
-	instance := &webTTYInstance{
+	tc := &terminalConnection{
 		ID:     clientID,
 		Master: mst,
 		Ctx:    ctx,
 		Cancel: cancel,
 	}
+	tc.AckCursor.Store(opts.Cursor)
 
-	wt := newWebTTY(
-		mst,
-		at.PTY,
-		withBufferSize(m.bufferSize),
-		withSkipSlaveReadLoop(true),
-		withOnReady(func() {
-			at.WebTTYs.Store(clientID, instance)
-			m.activeConns.Add(1)
-			m.replayHistory(at, mst, opts.Cursor)
-			m.sendReplayDone(mst)
-			if at.status.Load().(string) != model.StatusRunning {
-				m.sendMessage(mst, WSMessage{Type: MsgTypePtyExited})
-			}
-		}),
-		withOnClosed(func() {
-			at.WebTTYs.Delete(clientID)
+	at.Connections.Store(clientID, tc)
+	m.activeConns.Add(1)
+
+	cleanupOnce := sync.Once{}
+	cleanup := func() {
+		cleanupOnce.Do(func() {
+			at.Connections.Delete(clientID)
 			m.activeConns.Add(-1)
-			conn.Close()
+			cancel()
+			mst.Close()
 			close(doneCh)
-		}),
-	)
-	wt.permitWrite = at.status.Load().(string) == model.StatusRunning
+		})
+	}
 
-	instance.WebTTY = wt
+	if err := m.replayHistory(at, mst, opts.Cursor); err != nil {
+		cleanup()
+		return nil, err
+	}
+	if err := m.sendReplayDone(mst); err != nil {
+		cleanup()
+		return nil, err
+	}
+	if err := m.sendTerminalState(at, mst); err != nil {
+		cleanup()
+		return nil, err
+	}
+	if at.status.Load().(string) != model.StatusRunning {
+		if err := m.sendMessage(mst, WSMessage{Type: MsgTypePtyExited}); err != nil {
+			cleanup()
+			return nil, err
+		}
+	}
 
 	go func() {
-		if err := wt.Run(ctx); err != nil {
+		<-ctx.Done()
+		cleanup()
+	}()
+
+	go func() {
+		defer cleanup()
+		_ = m.readClientLoop(at, tc)
+	}()
+
+	go func() {
+		if err := m.pingLoop(ctx, tc); err != nil {
 			cancel()
 		}
 	}()
@@ -370,24 +405,41 @@ func (m *Manager) AttachWithOptions(id string, conn *websocket.Conn, opts Attach
 }
 
 func (m *Manager) sendHistoryOnly(id string, conn *websocket.Conn) (*Connection, error) {
+	var session model.TerminalSession
+	if err := m.db.Where("id = ?", id).First(&session).Error; err != nil {
+		return nil, ErrTerminalNotFound
+	}
+
 	historyData, err := m.loadHistoryFromDB(id)
 	if err != nil {
 		return nil, ErrTerminalNotFound
 	}
 
-	mst := newWSMaster(conn)
+	m.configureWSConn(conn)
+	mst := newWSMaster(conn, m.wsWriteTimeout)
+	cursor := uint64(len(historyData))
 
 	if len(historyData) > 0 {
 		m.sendMessage(mst, WSMessage{
-			Type:   MsgTypeCmd,
+			Type:   MsgTypeReplay,
 			Data:   base64.StdEncoding.EncodeToString(historyData),
-			Cursor: uint64(len(historyData)),
+			Cursor: cursor,
 			Reset:  true,
 		})
 	}
 	m.sendReplayDone(mst)
-	m.sendMessage(mst, WSMessage{Type: MsgTypePtyExited})
-	conn.Close()
+	m.sendMessage(mst, WSMessage{
+		Type:     MsgTypeState,
+		Status:   session.Status,
+		Cols:     session.Cols,
+		Rows:     session.Rows,
+		Cursor:   cursor,
+		ExitCode: session.ExitCode,
+	})
+	if session.Status != model.StatusRunning {
+		m.sendMessage(mst, WSMessage{Type: MsgTypePtyExited})
+	}
+	mst.Close()
 
 	doneCh := make(chan struct{})
 	close(doneCh)
@@ -400,7 +452,7 @@ func (m *Manager) replayHistory(at *activeTerminal, mst master, cursor uint64) e
 		return nil
 	}
 	msg := WSMessage{
-		Type:   MsgTypeCmd,
+		Type:   MsgTypeReplay,
 		Data:   base64.StdEncoding.EncodeToString(snapshot.data),
 		Cursor: snapshot.cursor,
 		Reset:  snapshot.reset,
@@ -434,13 +486,134 @@ func (m *Manager) sendReplayDone(mst master) error {
 	return m.sendMessage(mst, WSMessage{Type: MsgTypeReplayDone})
 }
 
+func (m *Manager) sendTerminalState(at *activeTerminal, mst master) error {
+	_, cursor := at.historyBuffer.CursorRange()
+	msg := WSMessage{
+		Type:     MsgTypeState,
+		Status:   at.status.Load().(string),
+		Cols:     at.Session.Cols,
+		Rows:     at.Session.Rows,
+		Cursor:   cursor,
+		ExitCode: at.Session.ExitCode,
+	}
+	return m.sendMessage(mst, msg)
+}
+
 func (m *Manager) sendMessage(mst master, msg WSMessage) error {
 	msgData, err := json.Marshal(msg)
 	if err != nil {
 		return err
 	}
 	_, err = mst.Write(msgData)
-	return nil
+	return err
+}
+
+func (m *Manager) broadcast(at *activeTerminal, msg WSMessage) {
+	msgData, err := json.Marshal(msg)
+	if err != nil {
+		return
+	}
+
+	at.Connections.Range(func(key, value any) bool {
+		conn := value.(*terminalConnection)
+		if _, writeErr := conn.Master.Write(msgData); writeErr != nil {
+			conn.Cancel()
+		}
+		return true
+	})
+}
+
+func (m *Manager) readClientLoop(at *activeTerminal, conn *terminalConnection) error {
+	for {
+		select {
+		case <-conn.Ctx.Done():
+			return conn.Ctx.Err()
+		default:
+		}
+
+		raw, err := conn.Master.ReadMessage()
+		if err != nil {
+			return err
+		}
+		if len(raw) == 0 {
+			continue
+		}
+
+		var msg WSMessage
+		if err := json.Unmarshal(raw, &msg); err != nil {
+			continue
+		}
+
+		switch msg.Type {
+		case MsgTypeInput:
+			if at.status.Load().(string) != model.StatusRunning {
+				continue
+			}
+			if msg.Data == "" {
+				continue
+			}
+			decoded, err := at.encoder.DecodeString(msg.Data)
+			if err != nil || len(decoded) == 0 {
+				continue
+			}
+			if _, err := at.PTY.Write(decoded); err != nil {
+				return err
+			}
+		case MsgTypeResize:
+			if msg.Cols <= 0 || msg.Rows <= 0 {
+				continue
+			}
+			if err := at.PTY.ResizeTerminal(msg.Cols, msg.Rows); err != nil {
+				continue
+			}
+			now := time.Now().Unix()
+			at.Session.Cols = msg.Cols
+			at.Session.Rows = msg.Rows
+			at.Session.UpdatedAt = now
+			m.db.Model(&model.TerminalSession{}).Where("id = ?", at.ID).Updates(map[string]any{
+				"cols":       msg.Cols,
+				"rows":       msg.Rows,
+				"updated_at": now,
+			})
+		case MsgTypeAck:
+			if msg.Cursor > conn.AckCursor.Load() {
+				conn.AckCursor.Store(msg.Cursor)
+			}
+		}
+	}
+}
+
+func (m *Manager) pingLoop(ctx context.Context, conn *terminalConnection) error {
+	if m.wsPingInterval <= 0 {
+		<-ctx.Done()
+		return nil
+	}
+
+	ticker := time.NewTicker(m.wsPingInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-ticker.C:
+			if err := conn.Master.Ping(); err != nil {
+				return err
+			}
+		}
+	}
+}
+
+func (m *Manager) configureWSConn(conn *websocket.Conn) {
+	if m.bufferSize > 0 {
+		conn.SetReadLimit(int64(m.bufferSize * 16))
+	}
+	if m.wsReadTimeout > 0 {
+		_ = conn.SetReadDeadline(time.Now().Add(m.wsReadTimeout))
+		conn.SetPongHandler(func(string) error {
+			return conn.SetReadDeadline(time.Now().Add(m.wsReadTimeout))
+		})
+	}
 }
 
 func (m *Manager) CleanupOnStart() {

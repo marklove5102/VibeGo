@@ -5,6 +5,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gorilla/websocket"
 )
@@ -19,7 +20,7 @@ func TestWSMaster_ReadWrite(t *testing.T) {
 		}
 		defer conn.Close()
 
-		master := newWSMaster(conn)
+		master := newWSMaster(conn, 5*time.Second)
 
 		n, err := master.Write([]byte("hello"))
 		if err != nil {
@@ -30,14 +31,13 @@ func TestWSMaster_ReadWrite(t *testing.T) {
 			t.Errorf("expected to write 5 bytes, wrote %d", n)
 		}
 
-		buf := make([]byte, 1024)
-		n, err = master.Read(buf)
+		data, err := master.ReadMessage()
 		if err != nil {
 			t.Errorf("Read failed: %v", err)
 			return
 		}
-		if string(buf[:n]) != "world" {
-			t.Errorf("expected 'world', got %s", string(buf[:n]))
+		if string(data) != "world" {
+			t.Errorf("expected 'world', got %s", string(data))
 		}
 	}))
 	defer server.Close()
@@ -72,7 +72,7 @@ func TestWSMaster_ConcurrentWrite(t *testing.T) {
 		}
 		defer conn.Close()
 
-		master := newWSMaster(conn)
+		master := newWSMaster(conn, 5*time.Second)
 
 		done := make(chan bool, 10)
 		for i := 0; i < 10; i++ {

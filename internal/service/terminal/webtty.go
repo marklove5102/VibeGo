@@ -39,7 +39,7 @@ func newWebTTY(master master, slave slave, options ...webTTYOption) *webTTY {
 
 func (wt *webTTY) sendOutput(data []byte) error {
 	msg := WSMessage{
-		Type: MsgTypeCmd,
+		Type: MsgTypeOutput,
 		Data: wt.encoder.EncodeToString(data),
 	}
 	return wt.sendJSON(msg)
@@ -112,15 +112,13 @@ func (wt *webTTY) slaveReadLoop() error {
 }
 
 func (wt *webTTY) masterReadLoop() error {
-	buf := make([]byte, wt.bufferSize)
-
 	for {
-		n, err := wt.master.Read(buf)
+		data, err := wt.master.ReadMessage()
 		if err != nil {
 			return ErrMasterClosed
 		}
 
-		if err := wt.handleMessage(buf[:n]); err != nil {
+		if err := wt.handleMessage(data); err != nil {
 			return err
 		}
 	}
@@ -137,7 +135,7 @@ func (wt *webTTY) handleMessage(data []byte) error {
 	}
 
 	switch msg.Type {
-	case MsgTypeCmd:
+	case MsgTypeInput:
 		if !wt.permitWrite {
 			return nil
 		}
@@ -148,13 +146,6 @@ func (wt *webTTY) handleMessage(data []byte) error {
 		if _, err := wt.slave.Write(decoded); err != nil {
 			return ErrSlaveClosed
 		}
-
-	case MsgTypeHeartbeat:
-		resp := WSMessage{
-			Type:      MsgTypeHeartbeat,
-			Timestamp: msg.Timestamp,
-		}
-		wt.sendJSON(resp)
 
 	case MsgTypeResize:
 		if msg.Cols > 0 && msg.Rows > 0 {

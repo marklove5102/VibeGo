@@ -43,6 +43,9 @@ type ManagerConfig struct {
 	HistoryFlushInterval time.Duration
 	HistoryMaxRecords    int
 	HistoryMaxAge        time.Duration
+	WSPingInterval       time.Duration
+	WSReadTimeout        time.Duration
+	WSWriteTimeout       time.Duration
 }
 
 func (c *ManagerConfig) applyDefaults() {
@@ -66,6 +69,15 @@ func (c *ManagerConfig) applyDefaults() {
 	}
 	if c.HistoryMaxAge <= 0 {
 		c.HistoryMaxAge = 7 * 24 * time.Hour
+	}
+	if c.WSPingInterval <= 0 {
+		c.WSPingInterval = 25 * time.Second
+	}
+	if c.WSReadTimeout <= 0 {
+		c.WSReadTimeout = 75 * time.Second
+	}
+	if c.WSWriteTimeout <= 0 {
+		c.WSWriteTimeout = 10 * time.Second
 	}
 }
 

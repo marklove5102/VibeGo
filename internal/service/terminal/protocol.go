@@ -1,21 +1,25 @@
 package terminal
 
 const (
-	MsgTypeCmd        = "cmd"
+	MsgTypeInput      = "input"
 	MsgTypeResize     = "resize"
-	MsgTypeHeartbeat  = "heartbeat"
-	MsgTypePtyExited  = "pty_exited"
+	MsgTypeAck        = "ack"
+	MsgTypeOutput     = "output"
+	MsgTypeReplay     = "replay"
 	MsgTypeReplayDone = "replay_done"
+	MsgTypeState      = "state"
+	MsgTypePtyExited  = "pty_exited"
 )
 
 type WSMessage struct {
-	Type      string `json:"type"`
-	Data      string `json:"data,omitempty"`
-	Cols      int    `json:"cols,omitempty"`
-	Rows      int    `json:"rows,omitempty"`
-	Timestamp int64  `json:"timestamp,omitempty"`
-	Cursor    uint64 `json:"cursor,omitempty"`
-	Reset     bool   `json:"reset,omitempty"`
+	Type     string `json:"type"`
+	Data     string `json:"data,omitempty"`
+	Cols     int    `json:"cols,omitempty"`
+	Rows     int    `json:"rows,omitempty"`
+	Cursor   uint64 `json:"cursor,omitempty"`
+	Reset    bool   `json:"reset,omitempty"`
+	Status   string `json:"status,omitempty"`
+	ExitCode int    `json:"exit_code,omitempty"`
 }
 
 type ResizeMessage struct {

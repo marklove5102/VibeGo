@@ -389,8 +389,9 @@ func TestManager_SendHistoryOnlyIncludesReplayDoneAndExited(t *testing.T) {
 	}
 	defer conn.Close()
 
-	var gotCmd bool
+	var gotReplay bool
 	var gotReplayDone bool
+	var gotState bool
 	var gotExited bool
 
 	for {
@@ -403,30 +404,35 @@ func TestManager_SendHistoryOnlyIncludesReplayDoneAndExited(t *testing.T) {
 			t.Fatalf("failed to decode ws message: %v", err)
 		}
 		switch msg.Type {
-		case MsgTypeCmd:
-			gotCmd = true
+		case MsgTypeReplay:
+			gotReplay = true
 			if !msg.Reset {
-				t.Fatalf("expected reset cmd")
+				t.Fatalf("expected reset replay")
 			}
 			decoded, err := base64.StdEncoding.DecodeString(msg.Data)
 			if err != nil {
-				t.Fatalf("failed to decode cmd data: %v", err)
+				t.Fatalf("failed to decode replay data: %v", err)
 			}
 			if string(decoded) != "history payload" {
 				t.Fatalf("expected history payload, got %q", string(decoded))
 			}
 		case MsgTypeReplayDone:
 			gotReplayDone = true
+		case MsgTypeState:
+			gotState = true
 		case MsgTypePtyExited:
 			gotExited = true
 		}
 	}
 
-	if !gotCmd {
-		t.Fatal("expected cmd history message")
+	if !gotReplay {
+		t.Fatal("expected replay history message")
 	}
 	if !gotReplayDone {
 		t.Fatal("expected replay_done message")
+	}
+	if !gotState {
+		t.Fatal("expected state message")
 	}
 	if !gotExited {
 		t.Fatal("expected pty_exited message")
