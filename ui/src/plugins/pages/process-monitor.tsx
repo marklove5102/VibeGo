@@ -17,7 +17,7 @@ import {
   X,
 } from "lucide-react";
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Area, AreaChart, Bar, BarChart, Cell, Pie, PieChart, Tooltip, XAxis, YAxis } from "recharts";
+import { Area, AreaChart, Cell, Pie, PieChart, Tooltip, XAxis, YAxis } from "recharts";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   AlertDialog,
@@ -161,27 +161,6 @@ const ProcessRow = memo(({ proc, onSelect, onKill, isTreeView, level = 0, isExpa
           <X size={12} />
         </Button>
       </div>
-    </div>
-  );
-});
-
-interface CPUCoresChartProps {
-  perCoreUsage: number[];
-}
-
-const CPUCoresChart = memo(({ perCoreUsage }: CPUCoresChartProps) => {
-  const data = perCoreUsage.map((usage, i) => ({ name: `${i}`, value: usage }));
-  return (
-    <div className="h-20">
-      <BarChart width={200} height={80} data={data} margin={{ top: 5, right: 5, left: 5, bottom: 5 }}>
-        <XAxis dataKey="name" tick={{ fontSize: 8 }} />
-        <YAxis domain={[0, 100]} hide />
-        <Tooltip
-          contentStyle={{ backgroundColor: "var(--ide-panel)", border: "1px solid var(--ide-border)", borderRadius: "6px", fontSize: "10px" }}
-          formatter={(value: number) => [`${value.toFixed(1)}%`, "Usage"]}
-        />
-        <Bar dataKey="value" fill="#3b82f6" radius={[2, 2, 0, 0]} />
-      </BarChart>
     </div>
   );
 });
@@ -501,7 +480,7 @@ const ProcessMonitorView: React.FC<PluginViewProps> = ({ isActive }) => {
                         <defs><linearGradient id="cpuGradient" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} /><stop offset="95%" stopColor="#3b82f6" stopOpacity={0} /></linearGradient></defs>
                         <XAxis dataKey="time" hide />
                         <YAxis domain={[0, 100]} hide />
-                        <Tooltip contentStyle={{ backgroundColor: "var(--ide-panel)", border: "1px solid var(--ide-border)", borderRadius: "6px", fontSize: "12px" }} labelStyle={{ color: "var(--ide-text)" }} formatter={(value: number) => [`${value}%`, t("plugin.processMonitor.cpu")]} />
+                        <Tooltip contentStyle={{ backgroundColor: "var(--ide-panel)", border: "1px solid var(--ide-border)", borderRadius: "6px", fontSize: "12px" }} labelStyle={{ color: "var(--ide-text)" }} formatter={(value) => [`${value !== undefined ? value : 0}%`, t("plugin.processMonitor.cpu")]} />
                         <Area type="monotone" dataKey="value" stroke="#3b82f6" strokeWidth={2} fill="url(#cpuGradient)" />
                       </AreaChart>
                     </>
