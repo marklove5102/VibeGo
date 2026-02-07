@@ -77,8 +77,6 @@
     "discardWarning": "此操作将永久丢弃您的更改，且无法撤销。",
     "cancel": "取消",
     "confirm": "放弃",
-    "add": "暂存",
-    "reset": "取消暂存",
     "stash": "贮藏",
     "stashAll": "贮藏所有更改",
     "stashFile": "贮藏此文件",
