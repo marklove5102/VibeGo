@@ -123,6 +123,14 @@ interface FrameState {
   initDefaultGroups: () => void;
   showHomePage: () => void;
   addFolderGroup: (path: string, name?: string, id?: string) => string;
+  replaceGroupState: (
+    groupId: string,
+    payload: {
+      name?: string;
+      pages: GroupPage[];
+      activePageId: string | null;
+    }
+  ) => void;
   addTerminalGroup: (name?: string) => void;
   addPluginGroup: (pluginId: string, name?: string, id?: string) => void;
   addSettingsGroup: () => void;
@@ -278,6 +286,22 @@ export const useFrameStore = create<FrameState>((set, get) => ({
     });
     return group.id;
   },
+
+  replaceGroupState: (groupId, payload) =>
+    set((s) => ({
+      groups: s.groups.map((g) => {
+        if (g.type !== "group" || g.id !== groupId) return g;
+        const pages = payload.pages || [];
+        const activePageExists = !!payload.activePageId && pages.some((p) => p.id === payload.activePageId);
+        const fallbackActivePageId = pages.find((p) => p.type === "files")?.id || pages[0]?.id || null;
+        return {
+          ...g,
+          name: payload.name || g.name,
+          pages,
+          activePageId: activePageExists ? payload.activePageId : fallbackActivePageId,
+        };
+      }),
+    })),
 
   addTerminalGroup: (name) => {
     const group = createTerminalGroup(name);

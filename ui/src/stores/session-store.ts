@@ -25,8 +25,17 @@ export interface SessionState {
   terminalsByGroup: Record<string, TerminalSession[]>;
   activeTerminalByGroup: Record<string, string | null>;
   listManagerOpenByGroup: Record<string, boolean>;
-  settingsOpen?: boolean;
+  settingsOpen: boolean;
   activeGroupId: string | null;
+  fileManagerByGroup: Record<
+    string,
+    {
+      currentPath: string;
+      rootPath: string;
+      pathHistory: string[];
+      historyIndex: number;
+    }
+  >;
 }
 
 interface SessionStoreState {
@@ -61,12 +70,83 @@ function setStoredSessionId(id: string | null): void {
   }
 }
 
+function createEmptySessionState(): SessionState {
+  return {
+    openGroups: [],
+    openPlugins: [],
+    terminalsByGroup: {},
+    activeTerminalByGroup: {},
+    listManagerOpenByGroup: {},
+    settingsOpen: false,
+    activeGroupId: null,
+    fileManagerByGroup: {},
+  };
+}
+
+function normalizeFileManagerSnapshot(
+  snapshot: Partial<SessionState["fileManagerByGroup"][string]> | undefined,
+  fallbackPath: string
+): SessionState["fileManagerByGroup"][string] {
+  const safePath = fallbackPath || ".";
+  const currentPath =
+    typeof snapshot?.currentPath === "string" && snapshot.currentPath.length > 0 ? snapshot.currentPath : safePath;
+  const rootPath =
+    typeof snapshot?.rootPath === "string" && snapshot.rootPath.length > 0 ? snapshot.rootPath : safePath;
+  const pathHistory =
+    Array.isArray(snapshot?.pathHistory) && snapshot.pathHistory.length > 0
+      ? snapshot.pathHistory.filter((path): path is string => typeof path === "string" && path.length > 0)
+      : [currentPath];
+  const historyLength = pathHistory.length;
+  const historyIndexRaw =
+    typeof snapshot?.historyIndex === "number" && Number.isFinite(snapshot.historyIndex)
+      ? snapshot.historyIndex
+      : historyLength - 1;
+  const historyIndex = Math.min(Math.max(Math.trunc(historyIndexRaw), 0), historyLength - 1);
+  return {
+    currentPath: pathHistory[historyIndex] || currentPath,
+    rootPath,
+    pathHistory,
+    historyIndex,
+  };
+}
+
 function buildSessionState(): SessionState {
   const frameState = useFrameStore.getState();
+  const fileManagerState = useFileManagerStore.getState();
   const terminalState = useTerminalStore.getState();
   const genericGroups = frameState.groups.filter((g): g is GenericGroup => g.type === "group");
   const pluginGroups = frameState.groups.filter((g): g is PluginGroup => g.type === "plugin");
   const settingsGroup = frameState.groups.find((g) => g.type === "settings");
+  const fileManagerByGroup: SessionState["fileManagerByGroup"] = {};
+
+  genericGroups.forEach((group) => {
+    const filesPagePath = group.pages.find((page) => page.type === "files")?.path || ".";
+    fileManagerByGroup[group.id] = normalizeFileManagerSnapshot(
+      {
+        currentPath: filesPagePath,
+        rootPath: filesPagePath,
+        pathHistory: [filesPagePath],
+        historyIndex: 0,
+      },
+      filesPagePath
+    );
+  });
+
+  const activeGroup = frameState.groups.find(
+    (group): group is GenericGroup => group.type === "group" && group.id === frameState.activeGroupId
+  );
+  if (activeGroup) {
+    const activeFilesPagePath = activeGroup.pages.find((page) => page.type === "files")?.path || ".";
+    fileManagerByGroup[activeGroup.id] = normalizeFileManagerSnapshot(
+      {
+        currentPath: fileManagerState.currentPath,
+        rootPath: fileManagerState.rootPath,
+        pathHistory: fileManagerState.pathHistory,
+        historyIndex: fileManagerState.historyIndex,
+      },
+      activeFilesPagePath
+    );
+  }
 
   return {
     openGroups: genericGroups.map((g) => ({
@@ -85,108 +165,53 @@ function buildSessionState(): SessionState {
     listManagerOpenByGroup: terminalState.listManagerOpenByGroup,
     settingsOpen: !!settingsGroup,
     activeGroupId: frameState.activeGroupId,
+    fileManagerByGroup,
   };
 }
 
-interface LegacySessionState {
-  openFolders?: Array<{
-    id: string;
-    path: string;
-    name: string;
-    views: {
-      files: { tabs: unknown[]; activeTabId: string | null };
-      git: { tabs: unknown[]; activeTabId: string | null };
-      terminal: { tabs: unknown[]; activeTabId: string | null };
-    };
-  }>;
-  openGroups?: SessionState["openGroups"];
-  openPlugins?: SessionState["openPlugins"];
-  terminalsByGroup?: Record<string, TerminalSession[]>;
-  activeTerminalByGroup?: Record<string, string | null>;
-  listManagerOpenByGroup?: Record<string, boolean>;
-  settingsOpen?: boolean;
-  activeGroupId?: string | null;
-}
-
-function migrateFromLegacy(legacy: LegacySessionState): SessionState {
-  if (legacy.openGroups) {
-    return {
-      openGroups: legacy.openGroups,
-      openPlugins: legacy.openPlugins || [],
-      terminalsByGroup: legacy.terminalsByGroup || {},
-      activeTerminalByGroup: legacy.activeTerminalByGroup || {},
-      listManagerOpenByGroup: legacy.listManagerOpenByGroup || {},
-      settingsOpen: legacy.settingsOpen,
-      activeGroupId: legacy.activeGroupId || null,
-    };
+function parseSessionState(rawState: string): SessionState {
+  if (!rawState || rawState === "{}") {
+    return createEmptySessionState();
   }
-
-  const openGroups: SessionState["openGroups"] = (legacy.openFolders || []).map((folder) => {
-    const groupId = folder.id.replace("folder-", "group-");
-    return {
-      id: groupId,
-      name: folder.name,
-      pages: [
-        {
-          id: `${groupId}-files`,
-          type: "files" as const,
-          label: "Files",
-          path: folder.path,
-          tabs: (folder.views?.files?.tabs || []) as GroupPage["tabs"],
-          activeTabId: folder.views?.files?.activeTabId || null,
-        },
-        {
-          id: `${groupId}-git`,
-          type: "git" as const,
-          label: "Git",
-          path: folder.path,
-          tabs: (folder.views?.git?.tabs || []) as GroupPage["tabs"],
-          activeTabId: folder.views?.git?.activeTabId || null,
-        },
-        {
-          id: `${groupId}-terminal`,
-          type: "terminal" as const,
-          label: "Terminal",
-          path: folder.path,
-          tabs: (folder.views?.terminal?.tabs || []) as GroupPage["tabs"],
-          activeTabId: folder.views?.terminal?.activeTabId || null,
-        },
-      ],
-      activePageId: `${groupId}-files`,
-    };
-  });
-
-  let activeGroupId = legacy.activeGroupId || null;
-  if (activeGroupId?.startsWith("folder-")) {
-    activeGroupId = activeGroupId.replace("folder-", "group-");
-  }
-
+  const parsed = JSON.parse(rawState) as Partial<SessionState>;
   return {
-    openGroups,
-    openPlugins: legacy.openPlugins || [],
-    terminalsByGroup: legacy.terminalsByGroup || {},
-    activeTerminalByGroup: legacy.activeTerminalByGroup || {},
-    listManagerOpenByGroup: legacy.listManagerOpenByGroup || {},
-    settingsOpen: legacy.settingsOpen,
-    activeGroupId,
+    openGroups: Array.isArray(parsed.openGroups) ? parsed.openGroups : [],
+    openPlugins: Array.isArray(parsed.openPlugins) ? parsed.openPlugins : [],
+    terminalsByGroup:
+      parsed.terminalsByGroup && typeof parsed.terminalsByGroup === "object" ? parsed.terminalsByGroup : {},
+    activeTerminalByGroup:
+      parsed.activeTerminalByGroup && typeof parsed.activeTerminalByGroup === "object"
+        ? parsed.activeTerminalByGroup
+        : {},
+    listManagerOpenByGroup:
+      parsed.listManagerOpenByGroup && typeof parsed.listManagerOpenByGroup === "object"
+        ? parsed.listManagerOpenByGroup
+        : {},
+    settingsOpen: !!parsed.settingsOpen,
+    activeGroupId: typeof parsed.activeGroupId === "string" ? parsed.activeGroupId : null,
+    fileManagerByGroup:
+      parsed.fileManagerByGroup && typeof parsed.fileManagerByGroup === "object" ? parsed.fileManagerByGroup : {},
   };
 }
 
 function restoreSessionState(state: SessionState): void {
   const frameStore = useFrameStore.getState();
-  const fileManagerStore = useFileManagerStore.getState();
-  const terminalStore = useTerminalStore.getState();
-
   frameStore.initDefaultGroups();
-  fileManagerStore.reset();
-  terminalStore.reset();
-
-  let lastAddedGroupId: string | null = null;
+  useFileManagerStore.getState().reset();
+  useTerminalStore.getState().reset();
 
   state.openGroups.forEach((group) => {
     const firstFilesPage = group.pages.find((p) => p.type === "files");
-    const path = firstFilesPage?.path || "";
-    lastAddedGroupId = frameStore.addFolderGroup(path, group.name, group.id);
+    const path = firstFilesPage?.path || ".";
+    frameStore.addFolderGroup(path, group.name, group.id);
+  });
+
+  state.openGroups.forEach((group) => {
+    frameStore.replaceGroupState(group.id, {
+      name: group.name,
+      pages: group.pages,
+      activePageId: group.activePageId,
+    });
   });
 
   state.openPlugins.forEach((plugin) => {
@@ -197,38 +222,49 @@ function restoreSessionState(state: SessionState): void {
     frameStore.addSettingsGroup();
   }
 
-  if (state.terminalsByGroup) {
-    Object.entries(state.terminalsByGroup).forEach(([groupId, terminals]) => {
-      terminals.forEach((terminal) => {
-        terminalStore.addTerminal(groupId, terminal);
-      });
-    });
-  }
-
-  if (state.activeTerminalByGroup) {
-    Object.entries(state.activeTerminalByGroup).forEach(([groupId, activeId]) => {
-      if (activeId) {
-        terminalStore.setActiveId(groupId, activeId);
-      }
-    });
-  }
-
-  if (state.listManagerOpenByGroup) {
-    Object.entries(state.listManagerOpenByGroup).forEach(([groupId, open]) => {
-      terminalStore.setListManagerOpen(groupId, open);
-    });
-  }
+  useTerminalStore.setState({
+    terminalsByGroup: state.terminalsByGroup || {},
+    activeIdByGroup: state.activeTerminalByGroup || {},
+    listManagerOpenByGroup: state.listManagerOpenByGroup || {},
+  });
 
   const currentGroups = useFrameStore.getState().groups;
+  const fallbackActiveGroupId =
+    state.openGroups.find((group) => currentGroups.some((currentGroup) => currentGroup.id === group.id))?.id ||
+    (state.settingsOpen && currentGroups.some((group) => group.id === "settings") ? "settings" : null) ||
+    currentGroups[0]?.id ||
+    null;
+  const activeGroupId =
+    state.activeGroupId && currentGroups.some((group) => group.id === state.activeGroupId)
+      ? state.activeGroupId
+      : fallbackActiveGroupId;
 
-  if (state.activeGroupId && state.activeGroupId !== "home") {
-    if (currentGroups.some((g) => g.id === state.activeGroupId)) {
-      frameStore.setActiveGroup(state.activeGroupId);
-    } else if (lastAddedGroupId) {
-      frameStore.setActiveGroup(lastAddedGroupId);
-    }
-  } else if (lastAddedGroupId) {
-    frameStore.setActiveGroup(lastAddedGroupId);
+  if (activeGroupId) {
+    frameStore.setActiveGroup(activeGroupId);
+  }
+
+  const activeGroup = useFrameStore.getState().groups.find((group) => group.id === activeGroupId);
+  if (activeGroup?.type === "group") {
+    const filesPagePath = activeGroup.pages.find((page) => page.type === "files")?.path || ".";
+    const restoredFileManagerState = normalizeFileManagerSnapshot(
+      state.fileManagerByGroup?.[activeGroup.id],
+      filesPagePath
+    );
+    useFileManagerStore.setState({
+      currentPath: restoredFileManagerState.currentPath,
+      rootPath: restoredFileManagerState.rootPath,
+      pathHistory: restoredFileManagerState.pathHistory,
+      historyIndex: restoredFileManagerState.historyIndex,
+      initialized: false,
+      files: [],
+      selectedFiles: new Set(),
+      focusIndex: 0,
+      searchQuery: "",
+      searchActive: false,
+      loading: false,
+      error: null,
+      detailFile: null,
+    });
   }
 }
 
@@ -328,7 +364,16 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
         terminalsByGroup: {},
         activeTerminalByGroup: {},
         listManagerOpenByGroup: {},
+        settingsOpen: false,
         activeGroupId: groupId,
+        fileManagerByGroup: {
+          [groupId]: {
+            currentPath: folderPath,
+            rootPath: folderPath,
+            pathHistory: [folderPath],
+            historyIndex: 0,
+          },
+        },
       };
 
       await sessionApi.update(res.id, { state: JSON.stringify(state) });
@@ -348,28 +393,13 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
       await cleanupAllTerminals();
 
       const detail = await sessionApi.get(id);
-      let state: SessionState = {
-        openGroups: [],
-        openPlugins: [],
-        terminalsByGroup: {},
-        activeTerminalByGroup: {},
-        listManagerOpenByGroup: {},
-        activeGroupId: null,
-      };
+      let state = createEmptySessionState();
 
       if (detail.state && detail.state !== "{}") {
         try {
-          const parsed = JSON.parse(detail.state);
-          state = migrateFromLegacy(parsed);
+          state = parseSessionState(detail.state);
         } catch {
-          state = {
-            openGroups: [],
-            openPlugins: [],
-            terminalsByGroup: {},
-            activeTerminalByGroup: {},
-            listManagerOpenByGroup: {},
-            activeGroupId: null,
-          };
+          state = createEmptySessionState();
         }
       }
 
