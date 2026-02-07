@@ -26,15 +26,15 @@ jobs:
         with:
           version: 10
 
-      - name: Go tests
-        run: go test ./...
-
       - name: Frontend checks
         run: |
           cd ui
           pnpm install --frozen-lockfile
           pnpm run lint
           pnpm run build
+
+      - name: Go tests
+        run: go test ./...
 
   build:
     needs: verify
