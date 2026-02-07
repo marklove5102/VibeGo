@@ -1,11 +1,17 @@
 import React from "react";
+import { useDefaultPageCloseButton } from "@/hooks/use-default-page-close-button";
 import { type TopBarButton, useFrameStore } from "@/stores/frame-store";
 
 const ButtonComponent: React.FC<{ button: TopBarButton }> = ({ button }) => {
+  const title = button.title || button.label;
+
   return (
     <button
+      type="button"
       onClick={button.onClick}
       disabled={button.disabled}
+      title={title}
+      aria-label={title}
       className={`shrink-0 h-8 ${button.label ? "px-3" : "w-8"} flex items-center justify-center gap-1.5 rounded-md border transition-all text-xs ${
         button.active
           ? "bg-ide-accent text-ide-on-accent border-ide-border shadow-sm"
@@ -20,12 +26,18 @@ const ButtonComponent: React.FC<{ button: TopBarButton }> = ({ button }) => {
 
 const TopBar: React.FC = () => {
   const topBarConfig = useFrameStore((s) => s.topBarConfig);
+  const defaultCloseButton = useDefaultPageCloseButton();
 
   if (!topBarConfig.show) {
     return null;
   }
 
-  const hasLeftButtons = topBarConfig.leftButtons && topBarConfig.leftButtons.length > 0;
+  const leftButtons = topBarConfig.leftButtons?.length
+    ? topBarConfig.leftButtons
+    : defaultCloseButton
+      ? [defaultCloseButton]
+      : [];
+  const hasLeftButtons = leftButtons.length > 0;
   const hasRightButtons = topBarConfig.rightButtons && topBarConfig.rightButtons.length > 0;
   const hasCenter = topBarConfig.centerContent;
 
@@ -33,7 +45,7 @@ const TopBar: React.FC = () => {
     <div className="h-12 bg-ide-bg border-b border-ide-border flex items-center px-2 gap-2 shrink-0 transition-colors duration-300 overflow-hidden">
       {hasLeftButtons && (
         <div className="flex items-center gap-2 shrink-0">
-          {topBarConfig.leftButtons!.map((button, index) => (
+          {leftButtons.map((button, index) => (
             <ButtonComponent key={index} button={button} />
           ))}
         </div>

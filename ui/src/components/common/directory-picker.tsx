@@ -28,6 +28,8 @@ const DirectoryPicker: React.FC<DirectoryPickerProps> = ({ isOpen, onClose, onSe
       rootPath: initialPath,
       pathHistory: [initialPath],
       historyIndex: 0,
+      sortField: "modTime",
+      sortOrder: "desc",
     });
   }, [initialPath, isOpen, pickerStore]);
 

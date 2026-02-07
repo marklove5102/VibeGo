@@ -16,6 +16,7 @@ export interface PageMenuItem {
 export interface TopBarButton {
   icon: ReactNode;
   label?: string;
+  title?: string;
   onClick?: () => void;
   active?: boolean;
   disabled?: boolean;

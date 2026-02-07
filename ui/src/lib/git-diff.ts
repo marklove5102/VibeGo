@@ -76,19 +76,31 @@ const createRowId = (
 ) => `${hunkIndex}:${rowIndex}:${type}:${oldLineNumber ?? "n"}:${newLineNumber ?? "n"}`;
 
 const getChangeRanges = (oldLines: string[], newLines: string[]): ChangeRange[] => {
-  const result = diffComputer.computeDiff(oldLines, newLines, {
-    ignoreTrimWhitespace: false,
-    maxComputationTimeMs: 0,
-    computeMoves: false,
-    extendToSubwords: false,
-  });
+  if (oldLines.length === 0) {
+    return newLines.length === 0 ? [] : [{ oldStart: 0, oldEnd: 0, newStart: 0, newEnd: newLines.length }];
+  }
 
-  return result.changes.map((change: any) => ({
-    oldStart: change.original.startLineNumber - 1,
-    oldEnd: change.original.endLineNumberExclusive - 1,
-    newStart: change.modified.startLineNumber - 1,
-    newEnd: change.modified.endLineNumberExclusive - 1,
-  }));
+  if (newLines.length === 0) {
+    return [{ oldStart: 0, oldEnd: oldLines.length, newStart: 0, newEnd: 0 }];
+  }
+
+  try {
+    const result = diffComputer.computeDiff(oldLines, newLines, {
+      ignoreTrimWhitespace: false,
+      maxComputationTimeMs: 0,
+      computeMoves: false,
+      extendToSubwords: false,
+    });
+
+    return result.changes.map((change: any) => ({
+      oldStart: change.original.startLineNumber - 1,
+      oldEnd: change.original.endLineNumberExclusive - 1,
+      newStart: change.modified.startLineNumber - 1,
+      newEnd: change.modified.endLineNumberExclusive - 1,
+    }));
+  } catch {
+    return [{ oldStart: 0, oldEnd: oldLines.length, newStart: 0, newEnd: newLines.length }];
+  }
 };
 
 const groupChanges = (changes: ChangeRange[]) => {

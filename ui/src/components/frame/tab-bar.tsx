@@ -1,5 +1,6 @@
 import { Box, Edit, Eye, FileDiff, FileText, FolderOpen, GitGraph, Plus, RefreshCw, Terminal, X } from "lucide-react";
 import React, { useCallback, useEffect, useRef } from "react";
+import { useDefaultPageCloseButton } from "@/hooks/use-default-page-close-button";
 import { useTranslation } from "@/lib/i18n";
 import { useAppStore } from "@/stores/app-store";
 import { type TabItem, useFrameStore, type ViewType } from "@/stores/frame-store";
@@ -32,6 +33,7 @@ const TabBar: React.FC<TabBarProps> = ({ onAction, onBackToList }) => {
   const removeCurrentTab = useFrameStore((s) => s.removeCurrentTab);
   const pinTab = useFrameStore((s) => s.pinTab);
   const currentView = useFrameStore((s) => s.getCurrentView());
+  const defaultCloseButton = useDefaultPageCloseButton();
 
   const editMode = usePreviewStore((s) => s.editMode);
   const setEditMode = usePreviewStore((s) => s.setEditMode);
@@ -104,6 +106,7 @@ const TabBar: React.FC<TabBarProps> = ({ onAction, onBackToList }) => {
   const isGitView = activeGroup?.type === "group" && currentView === "git";
   const showRefreshButton = isFilesView || isGitView;
   const showBackButton = activeGroup?.type === "group" || tabs.length > 0;
+  const showDefaultCloseButton = !showBackButton && Boolean(defaultCloseButton);
   const showActionButton = activeGroup?.type !== "home" && activeGroup?.type !== "settings";
 
   const activeTab = tabs.find((t) => t.id === activeTabId);
@@ -118,15 +121,29 @@ const TabBar: React.FC<TabBarProps> = ({ onAction, onBackToList }) => {
 
   return (
     <div className="h-12 bg-ide-bg border-b border-ide-border flex items-center px-2 gap-2 shrink-0 transition-colors duration-300 overflow-hidden">
-      {showBackButton && (
+      {(showBackButton || showDefaultCloseButton) && (
         <div className="flex items-center gap-2 shrink-0">
-          <button
-            onClick={handleBackClick}
-            className={`${cornerButtonClass} ${activeTabId === null ? "bg-ide-accent text-ide-bg border-ide-accent" : ""}`}
-            title={t("common.backToList")}
-          >
-            {getViewIcon()}
-          </button>
+          {showBackButton ? (
+            <button
+              type="button"
+              onClick={handleBackClick}
+              className={`${cornerButtonClass} ${activeTabId === null ? "bg-ide-accent text-ide-bg border-ide-accent" : ""}`}
+              title={t("common.backToList")}
+            >
+              {getViewIcon()}
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={defaultCloseButton?.onClick}
+              disabled={defaultCloseButton?.disabled}
+              className={cornerButtonClass}
+              title={defaultCloseButton?.title || defaultCloseButton?.label}
+              aria-label={defaultCloseButton?.title || defaultCloseButton?.label}
+            >
+              {defaultCloseButton?.icon}
+            </button>
+          )}
           {tabs.length > 0 && <div className="w-px h-5 bg-ide-border mx-1 shrink-0" />}
         </div>
       )}
