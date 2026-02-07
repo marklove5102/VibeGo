@@ -298,10 +298,18 @@ export const gitApi = {
     let ws: WebSocket | null = null;
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
     let closed = false;
+    let attempt = 0;
 
     const connect = () => {
       if (closed) return;
+      if (reconnectTimer) {
+        clearTimeout(reconnectTimer);
+        reconnectTimer = null;
+      }
       ws = new WebSocket(url);
+      ws.onopen = () => {
+        attempt = 0;
+      };
       ws.onmessage = (e) => {
         try {
           const event = JSON.parse(e.data) as GitWSEvent;
@@ -310,7 +318,11 @@ export const gitApi = {
       };
       ws.onclose = () => {
         if (!closed) {
-          reconnectTimer = setTimeout(connect, 3000);
+          const baseDelay = 400;
+          const maxDelay = 10_000;
+          const delay = Math.min(maxDelay, baseDelay * Math.pow(2, attempt)) + Math.floor(Math.random() * 250);
+          attempt++;
+          reconnectTimer = setTimeout(connect, delay);
         }
       };
       ws.onerror = () => ws?.close();

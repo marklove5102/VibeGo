@@ -330,6 +330,11 @@ func (m *Manager) Attach(id string, conn *websocket.Conn) (*Connection, error) {
 		withSkipSlaveReadLoop(true),
 		withOnReady(func() {
 			m.replayHistory(at, mst)
+			if at.status.Load().(string) != model.StatusRunning {
+				exitMsg := WSMessage{Type: MsgTypePtyExited}
+				msgData, _ := json.Marshal(exitMsg)
+				mst.Write(msgData)
+			}
 			at.WebTTYs.Store(clientID, instance)
 			m.activeConns.Add(1)
 		}),
@@ -340,6 +345,7 @@ func (m *Manager) Attach(id string, conn *websocket.Conn) (*Connection, error) {
 			close(doneCh)
 		}),
 	)
+	wt.permitWrite = at.status.Load().(string) == model.StatusRunning
 
 	instance.WebTTY = wt
 
