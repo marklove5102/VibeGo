@@ -11,6 +11,8 @@ import tarfile
 import tempfile
 from pathlib import Path
 
+REPOSITORY_URL = "https://github.com/xxnuo/VibeGo"
+
 PLATFORMS = {
     ("linux", "amd64"): {
         "node_os": "linux",
@@ -126,6 +128,10 @@ def stage_platform_package(
             "os": [platform["node_os"]],
             "cpu": [platform["node_cpu"]],
             "files": ["vendor"],
+            "repository": {
+                "type": "git",
+                "url": REPOSITORY_URL,
+            },
         }
         (root / "package.json").write_text(json.dumps(package_json, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         extract_binary(archive, platform["binary_name"], root / "vendor" / platform["binary_name"])
@@ -162,6 +168,10 @@ def stage_main_package(version: str, output_dir: Path, launcher: Path, platform_
                 "node": ">=16"
             },
             "optionalDependencies": optional_dependencies,
+            "repository": {
+                "type": "git",
+                "url": REPOSITORY_URL,
+            },
         }
         (root / "package.json").write_text(json.dumps(package_json, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
