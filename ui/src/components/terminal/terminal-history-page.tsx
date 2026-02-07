@@ -137,14 +137,6 @@ const TerminalHistoryPage: React.FC<TerminalHistoryPageProps> = ({ onBack }) => 
           </div>
         ),
         rightButtons: [
-          {
-            icon: <CheckSquare size={18} />,
-            onClick: selectAll,
-          },
-          {
-            icon: <Square size={18} />,
-            onClick: clearSelection,
-          },
           ...(selectedIds.size > 0
             ? [
                 {
@@ -153,6 +145,14 @@ const TerminalHistoryPage: React.FC<TerminalHistoryPageProps> = ({ onBack }) => 
                 },
               ]
             : []),
+          {
+            icon: <CheckSquare size={18} />,
+            onClick: selectAll,
+          },
+          {
+            icon: <Square size={18} />,
+            onClick: clearSelection,
+          },
         ],
       };
     }
@@ -256,7 +256,7 @@ const TerminalHistoryPage: React.FC<TerminalHistoryPageProps> = ({ onBack }) => 
                     <div className="flex items-center gap-2">
                       <span className="font-medium truncate text-sm text-ide-text">{terminal.name}</span>
                     </div>
-                    <div className="text-xs text-ide-mute mt-0.5">
+                    <div className="text-xs text-ide-mute mt-0.5 break-all">
                       {formatDate(terminal.created_at)} - {terminal.cwd}
                     </div>
                   </div>
