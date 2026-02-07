@@ -207,6 +207,27 @@ func (m *Manager) Resize(id string, cols, rows int) error {
 	return nil
 }
 
+func (m *Manager) Rename(id, name string) error {
+	now := time.Now().Unix()
+	result := m.db.Model(&model.TerminalSession{}).Where("id = ?", id).Updates(map[string]any{
+		"name":       name,
+		"updated_at": now,
+	})
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return ErrTerminalNotFound
+	}
+
+	if at, ok := m.getActive(id); ok {
+		at.Session.Name = name
+		at.Session.UpdatedAt = now
+	}
+
+	return nil
+}
+
 func (m *Manager) Close(id string) error {
 	val, ok := m.terminals.LoadAndDelete(id)
 	if !ok {

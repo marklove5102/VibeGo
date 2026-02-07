@@ -3,6 +3,7 @@ package handler
 import (
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
@@ -34,6 +35,7 @@ func (h *TerminalHandler) Register(r *gin.RouterGroup) {
 	g := r.Group("/terminal")
 	g.GET("", h.List)
 	g.POST("", h.New)
+	g.POST("/rename", h.Rename)
 	g.POST("/close", h.Close)
 	g.POST("/delete", h.Delete)
 	g.POST("/delete-batch", h.DeleteBatch)
@@ -121,6 +123,33 @@ func (h *TerminalHandler) New(c *gin.Context) {
 
 type CloseTerminalRequest struct {
 	ID string `json:"id" binding:"required"`
+}
+
+type RenameTerminalRequest struct {
+	ID   string `json:"id" binding:"required"`
+	Name string `json:"name" binding:"required"`
+}
+
+func (h *TerminalHandler) Rename(c *gin.Context) {
+	var req RenameTerminalRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	req.Name = strings.TrimSpace(req.Name)
+	if req.Name == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "name is required"})
+		return
+	}
+	if err := h.manager.Rename(req.ID, req.Name); err != nil {
+		status := http.StatusInternalServerError
+		if err == terminal.ErrTerminalNotFound {
+			status = http.StatusNotFound
+		}
+		c.JSON(status, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 
 // Close godoc

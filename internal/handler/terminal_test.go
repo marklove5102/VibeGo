@@ -150,6 +150,45 @@ func TestTerminalHandlerClose(t *testing.T) {
 	}
 }
 
+func TestTerminalHandlerRename(t *testing.T) {
+	handler, cleanup := setupTestHandler(t)
+	defer cleanup()
+
+	info, _ := handler.manager.Create(terminal.CreateOptions{Name: "test", Cols: 80, Rows: 24})
+
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	handler.Register(router.Group("/api"))
+
+	reqBody := RenameTerminalRequest{ID: info.ID, Name: "renamed"}
+	body, _ := json.Marshal(reqBody)
+
+	req := httptest.NewRequest("POST", "/api/terminal/rename", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected status 200, got %d", w.Code)
+	}
+
+	sessions, _ := handler.manager.List()
+	found := false
+	for _, session := range sessions {
+		if session.ID == info.ID {
+			found = true
+			if session.Name != "renamed" {
+				t.Errorf("expected renamed terminal, got %s", session.Name)
+			}
+		}
+	}
+
+	if !found {
+		t.Fatal("renamed session not found")
+	}
+}
+
 func TestTerminalHandlerWebSocket(t *testing.T) {
 	handler, cleanup := setupTestHandler(t)
 	defer cleanup()

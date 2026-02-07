@@ -52,6 +52,19 @@ export function useTerminalClose(groupId: string) {
   });
 }
 
+export function useTerminalRename(groupId: string) {
+  const queryClient = useQueryClient();
+  const renameTerminal = useTerminalStore((s) => s.renameTerminal);
+
+  return useMutation({
+    mutationFn: ({ id, name }: { id: string; name: string }) => terminalApi.rename(id, name),
+    onSuccess: (_, { id, name }) => {
+      renameTerminal(groupId, id, name);
+      queryClient.invalidateQueries({ queryKey: terminalKeys.list() });
+    },
+  });
+}
+
 export function useTerminalDelete(groupId: string) {
   const queryClient = useQueryClient();
   const removeTerminal = useTerminalStore((s) => s.removeTerminal);

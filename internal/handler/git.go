@@ -254,6 +254,7 @@ type CommitInfo struct {
 	Hash        string `json:"hash"`
 	Message     string `json:"message"`
 	Author      string `json:"author"`
+	AuthorEmail string `json:"authorEmail"`
 	Date        string `json:"date"`
 	ParentCount int    `json:"parentCount"`
 }
@@ -309,6 +310,7 @@ func (h *GitHandler) Log(c *gin.Context) {
 			Hash:        commit.Hash.String(),
 			Message:     commit.Message,
 			Author:      commit.Author.Name,
+			AuthorEmail: commit.Author.Email,
 			Date:        commit.Author.When.Format(time.RFC3339),
 			ParentCount: commit.NumParents(),
 		})

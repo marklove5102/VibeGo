@@ -89,6 +89,7 @@ func collectCommitLog(repo *git.Repository, limit int) []CommitInfo {
 			Hash:        c.Hash.String(),
 			Message:     c.Message,
 			Author:      c.Author.Name,
+			AuthorEmail: c.Author.Email,
 			Date:        c.Author.When.Format(time.RFC3339),
 			ParentCount: c.NumParents(),
 		})

@@ -1,7 +1,11 @@
-import { Plus, Terminal, X } from "lucide-react";
+import { Edit2, Plus, Terminal, X } from "lucide-react";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useDialog } from "@/components/common";
 import { usePageTopBar } from "@/hooks/use-page-top-bar";
-import { useTerminalClose, useTerminalCreate, useTerminalDelete } from "@/hooks/use-terminal";
+import { useTerminalClose, useTerminalCreate, useTerminalDelete, useTerminalRename } from "@/hooks/use-terminal";
+import { useTranslation } from "@/lib/i18n";
+import { useAppStore } from "@/stores";
+import { useFrameStore } from "@/stores/frame-store";
 import { type TerminalSession, useTerminalStore } from "@/stores/terminal-store";
 import TerminalHistoryPage from "./terminal-history-page";
 import TerminalInstance from "./terminal-instance";
@@ -15,20 +19,24 @@ interface TerminalPageProps {
 const EMPTY_TERMINALS: TerminalSession[] = [];
 
 const TerminalPage: React.FC<TerminalPageProps> = ({ groupId, cwd }) => {
+  const dialog = useDialog();
+  const locale = useAppStore((s) => s.locale);
+  const t = useTranslation(locale);
   const terminals = useTerminalStore((s) => s.terminalsByGroup[groupId] || EMPTY_TERMINALS);
   const activeTerminalId = useTerminalStore((s) => s.activeIdByGroup[groupId] ?? null);
   const listManagerOpen = useTerminalStore((s) => s.listManagerOpenByGroup[groupId] ?? true);
   const [showHistory, setShowHistory] = useState(false);
 
+  const setPageMenuItems = useFrameStore((s) => s.setPageMenuItems);
   const setActiveId = useTerminalStore((s) => s.setActiveId);
   const setListManagerOpen = useTerminalStore((s) => s.setListManagerOpen);
-  const renameTerminal = useTerminalStore((s) => s.renameTerminal);
   const setTerminalStatus = useTerminalStore((s) => s.setTerminalStatus);
   const removeTerminal = useTerminalStore((s) => s.removeTerminal);
 
   const closeTerminalMutation = useTerminalClose(groupId);
   const deleteTerminalMutation = useTerminalDelete(groupId);
   const createTerminalMutation = useTerminalCreate(groupId);
+  const renameTerminalMutation = useTerminalRename(groupId);
 
   const handleTerminalExited = useCallback(
     (terminalId: string) => {
@@ -74,6 +82,54 @@ const TerminalPage: React.FC<TerminalPageProps> = ({ groupId, cwd }) => {
   );
 
   const displayTerminals = useMemo(() => [...terminals].reverse(), [terminals]);
+  const activeTerminal = useMemo(
+    () => terminals.find((terminal) => terminal.id === activeTerminalId) ?? null,
+    [activeTerminalId, terminals]
+  );
+
+  const persistTerminalRename = useCallback(
+    async (terminalId: string, name: string) => {
+      try {
+        await renameTerminalMutation.mutateAsync({ id: terminalId, name });
+      } catch (e) {
+        await dialog.alert(e instanceof Error ? e.message : t("terminal.renameFailed"));
+        throw e;
+      }
+    },
+    [dialog, renameTerminalMutation, t]
+  );
+
+  const handleRenameTerminal = useCallback(
+    async (terminalId: string, currentName: string) => {
+      const nextName = await dialog.prompt(t("common.rename"), {
+        defaultValue: currentName,
+      });
+      const trimmedName = nextName?.trim();
+      if (!trimmedName || trimmedName === currentName) {
+        return;
+      }
+      await persistTerminalRename(terminalId, trimmedName);
+    },
+    [dialog, persistTerminalRename, t]
+  );
+
+  useEffect(() => {
+    if (showHistory || listManagerOpen || !activeTerminal) {
+      setPageMenuItems([]);
+      return;
+    }
+
+    setPageMenuItems([
+      {
+        id: "rename-terminal",
+        icon: <Edit2 size={18} />,
+        label: t("common.rename"),
+        onClick: () => void handleRenameTerminal(activeTerminal.id, activeTerminal.name),
+      },
+    ]);
+
+    return () => setPageMenuItems([]);
+  }, [activeTerminal, handleRenameTerminal, listManagerOpen, setPageMenuItems, showHistory, t]);
 
   const topBarConfig = useMemo(() => {
     return {
@@ -163,7 +219,7 @@ const TerminalPage: React.FC<TerminalPageProps> = ({ groupId, cwd }) => {
               setActiveId(groupId, id);
               setListManagerOpen(groupId, false);
             }}
-            onRename={(id, name) => renameTerminal(groupId, id, name)}
+            onRename={persistTerminalRename}
             onClose={(id) => closeTerminalMutation.mutate(id)}
             onDelete={(id) => deleteTerminalMutation.mutate(id)}
             onClearAll={handleClearAll}

@@ -37,6 +37,12 @@ export const terminalApi = {
       body: JSON.stringify(opts || {}),
     }),
 
+  rename: (id: string, name: string) =>
+    request<{ ok: boolean }>("/terminal/rename", {
+      method: "POST",
+      body: JSON.stringify({ id, name }),
+    }),
+
   close: (id: string) =>
     request<{ ok: boolean }>("/terminal/close", {
       method: "POST",

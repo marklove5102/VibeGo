@@ -18,7 +18,7 @@ interface TerminalListManagerProps {
   terminals: TerminalSession[];
   activeTerminalId: string | null;
   onSelect: (id: string) => void;
-  onRename: (id: string, name: string) => void;
+  onRename: (id: string, name: string) => void | Promise<void>;
   onClose: (id: string) => void;
   onDelete: (id: string) => void;
   onClearAll: () => void;
@@ -72,13 +72,15 @@ const TerminalListManager: React.FC<TerminalListManagerProps> = ({
     setShowClearConfirm(false);
   };
 
-  const handleRename = (id: string) => {
+  const handleRename = async (id: string) => {
     if (!editName.trim()) {
       setEditingId(null);
       return;
     }
-    onRename(id, editName.trim());
-    setEditingId(null);
+    try {
+      await onRename(id, editName.trim());
+      setEditingId(null);
+    } catch {}
   };
 
   const startEditing = (e: React.MouseEvent, terminal: TerminalSession) => {
@@ -169,12 +171,12 @@ const TerminalListManager: React.FC<TerminalListManagerProps> = ({
                           className="flex-1 px-2 py-0.5 bg-ide-bg border border-ide-accent rounded text-sm text-ide-text outline-none"
                           autoFocus
                           onKeyDown={(e) => {
-                            if (e.key === "Enter") handleRename(terminal.id);
+                            if (e.key === "Enter") void handleRename(terminal.id);
                             if (e.key === "Escape") setEditingId(null);
                           }}
                         />
                         <button
-                          onClick={() => handleRename(terminal.id)}
+                          onClick={() => void handleRename(terminal.id)}
                           className="p-2 rounded-md text-green-500 hover:bg-ide-bg"
                         >
                           <Check size={14} />

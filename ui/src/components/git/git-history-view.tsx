@@ -1,6 +1,7 @@
 import { ChevronDown, ChevronRight, Clock, GitCommit as GitCommitIcon, Undo2 } from "lucide-react";
 import React, { useCallback, useState } from "react";
 import type { CommitFileInfo, GitCommit } from "@/api/git";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { getIntlLocale, getTranslation, type Locale } from "@/lib/i18n";
 
 interface GitHistoryViewProps {
@@ -58,6 +59,12 @@ const hashColor = (name: string) => {
   return colors[Math.abs(h) % colors.length];
 };
 
+const getAuthorAvatarUrl = (email: string) => {
+  const trimmedEmail = email.trim();
+  if (!trimmedEmail) return undefined;
+  return `https://avatars.githubusercontent.com/u/e?email=${encodeURIComponent(trimmedEmail)}&s=64`;
+};
+
 interface CommitItemProps {
   commit: GitCommit;
   isExpanded: boolean;
@@ -86,6 +93,7 @@ const CommitItem: React.FC<CommitItemProps> = ({
   const t = useCallback((key: string) => getTranslation(locale, key), [locale]);
   const shortHash = commit.hash.substring(0, 7);
   const firstLine = commit.message.split("\n")[0];
+  const authorAvatarUrl = getAuthorAvatarUrl(commit.authorEmail);
 
   return (
     <div className={`border-b border-ide-border/50 ${isSelected ? "bg-ide-accent/5" : ""}`}>
@@ -93,11 +101,12 @@ const CommitItem: React.FC<CommitItemProps> = ({
         className="flex items-start gap-2.5 px-3 py-2.5 cursor-pointer hover:bg-ide-accent/10 active:bg-ide-accent/15"
         onClick={onToggle}
       >
-        <div
-          className={`w-7 h-7 rounded-full ${hashColor(commit.author)} flex items-center justify-center shrink-0 mt-0.5`}
-        >
-          <span className="text-[10px] font-bold text-white">{getInitials(commit.author)}</span>
-        </div>
+        <Avatar className="mt-0.5 size-7 shrink-0">
+          {authorAvatarUrl ? <AvatarImage src={authorAvatarUrl} alt={commit.author} /> : null}
+          <AvatarFallback className={`${hashColor(commit.author)} text-[10px] font-bold text-white`}>
+            {getInitials(commit.author)}
+          </AvatarFallback>
+        </Avatar>
         <div className="flex-1 min-w-0">
           <div className="text-sm text-ide-text font-medium truncate">{firstLine}</div>
           <div className="flex items-center gap-2 mt-0.5 text-[10px] text-ide-mute">

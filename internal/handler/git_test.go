@@ -116,6 +116,7 @@ func TestGitLog(t *testing.T) {
 	assert.Len(t, resp.Commits, 2)
 	assert.Equal(t, 1, resp.Commits[0].ParentCount)
 	assert.Equal(t, 0, resp.Commits[1].ParentCount)
+	assert.Equal(t, "test@example.com", resp.Commits[0].AuthorEmail)
 }
 
 func TestGitInit(t *testing.T) {

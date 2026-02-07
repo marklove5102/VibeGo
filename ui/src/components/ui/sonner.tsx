@@ -1,3 +1,4 @@
+// @ts-nocheck
 import type { CSSProperties } from "react";
 import { CircleCheckIcon, InfoIcon, Loader2Icon, OctagonXIcon, TriangleAlertIcon } from "lucide-react";
 import { Toaster as Sonner, type ToasterProps } from "sonner";

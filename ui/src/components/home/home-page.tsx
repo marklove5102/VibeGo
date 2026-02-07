@@ -3,14 +3,16 @@ import React, { useCallback, useState } from "react";
 import DirectoryPicker from "@/components/common/directory-picker";
 import { type Locale, useTranslation } from "@/lib/i18n";
 import { useSessionStore } from "@/stores/session-store";
+import AiSessionEntry from "./ai-session-entry";
 import RecentSessionList from "./recent-session-list";
 
 interface HomePageProps {
   onOpenFolder: (path: string) => void;
+  onOpenAISessions: () => void;
   locale: Locale;
 }
 
-const HomePage: React.FC<HomePageProps> = ({ locale }) => {
+const HomePage: React.FC<HomePageProps> = ({ locale, onOpenAISessions }) => {
   const t = useTranslation(locale);
   const [isPickerOpen, setPickerOpen] = useState(false);
   const [pathInput, setPathInput] = useState("");
@@ -74,6 +76,10 @@ const HomePage: React.FC<HomePageProps> = ({ locale }) => {
                 </button>
               </form>
             </div>
+          </div>
+
+          <div className="space-y-3">
+            <AiSessionEntry locale={locale} onOpen={onOpenAISessions} />
           </div>
 
           <div className="space-y-3">

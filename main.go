@@ -74,6 +74,7 @@ func main() {
 	db := config.GetDB(
 		&model.User{},
 		&model.UserSession{},
+		&model.AISessionIndex{},
 		&model.KV{},
 		&model.UserSetting{},
 		&model.TerminalSession{},
@@ -89,6 +90,7 @@ func main() {
 
 	handler.NewSettingsHandler(db).Register(api)
 	handler.NewSessionHandler(db).Register(api)
+	handler.NewAISessionHandler(db).Register(api)
 	handler.NewFileHandler().Register(api)
 	handler.NewTerminalHandler(db, cfg.DefaultShell).Register(api)
 	gitHandler := handler.NewGitHandler(db)
