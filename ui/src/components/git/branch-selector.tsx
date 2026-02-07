@@ -186,12 +186,29 @@ const BranchSelector: React.FC<BranchSelectorProps> = ({
                 autoFocus
                 onKeyDown={(e) => {
                   if (e.key === "Enter") handleCreate();
-                  if (e.key === "Escape") { setIsCreating(false); setNewBranchName(""); }
+                  if (e.key === "Escape") {
+                    setIsCreating(false);
+                    setNewBranchName("");
+                  }
                 }}
               />
               <div className="flex gap-2">
-                <button onClick={() => { setIsCreating(false); setNewBranchName(""); }} className="flex-1 px-3 py-2 text-sm text-ide-mute hover:text-ide-text rounded-lg">{t("git.cancel")}</button>
-                <button onClick={handleCreate} disabled={!newBranchName.trim()} className="flex-1 px-3 py-2 text-sm bg-ide-accent text-ide-bg rounded-lg disabled:opacity-50">{t("git.create")}</button>
+                <button
+                  onClick={() => {
+                    setIsCreating(false);
+                    setNewBranchName("");
+                  }}
+                  className="flex-1 px-3 py-2 text-sm text-ide-mute hover:text-ide-text rounded-lg"
+                >
+                  {t("git.cancel")}
+                </button>
+                <button
+                  onClick={handleCreate}
+                  disabled={!newBranchName.trim()}
+                  className="flex-1 px-3 py-2 text-sm bg-ide-accent text-ide-bg rounded-lg disabled:opacity-50"
+                >
+                  {t("git.create")}
+                </button>
               </div>
             </div>
           ) : (

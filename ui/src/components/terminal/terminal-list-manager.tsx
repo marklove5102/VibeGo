@@ -158,7 +158,10 @@ const TerminalListManager: React.FC<TerminalListManagerProps> = ({
                       isCurrent ? "bg-ide-accent/20" : "bg-ide-bg group-hover:bg-ide-panel"
                     }`}
                   >
-                    <Terminal size={18} className={isCurrent ? "text-ide-accent" : isClosed ? "text-ide-mute/50" : "text-ide-mute"} />
+                    <Terminal
+                      size={18}
+                      className={isCurrent ? "text-ide-accent" : isClosed ? "text-ide-mute/50" : "text-ide-mute"}
+                    />
                   </div>
 
                   <div className="flex-1 min-w-0">

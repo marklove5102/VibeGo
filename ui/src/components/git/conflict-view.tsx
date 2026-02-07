@@ -98,13 +98,7 @@ const getLanguageFromFilename = (filename?: string): string => {
   return langMap[ext || ""] || "plaintext";
 };
 
-const ConflictView: React.FC<ConflictViewProps> = ({
-  repoPath,
-  filePath,
-  locale,
-  onResolve,
-  onCancel,
-}) => {
+const ConflictView: React.FC<ConflictViewProps> = ({ repoPath, filePath, locale, onResolve, onCancel }) => {
   const t = i18n[locale] || i18n.en;
   const appTheme = useAppStore((s) => s.theme);
   const [loading, setLoading] = useState(true);
@@ -153,11 +147,7 @@ const ConflictView: React.FC<ConflictViewProps> = ({
   };
 
   if (loading) {
-    return (
-      <div className="h-full flex items-center justify-center text-ide-mute">
-        {t.loading}
-      </div>
-    );
+    return <div className="h-full flex items-center justify-center text-ide-mute">{t.loading}</div>;
   }
 
   return (
@@ -198,9 +188,7 @@ const ConflictView: React.FC<ConflictViewProps> = ({
         <button
           onClick={() => setActiveTab("edit")}
           className={`px-4 py-2 text-xs font-medium transition-colors ${
-            activeTab === "edit"
-              ? "text-ide-accent border-b-2 border-ide-accent"
-              : "text-ide-mute hover:text-ide-text"
+            activeTab === "edit" ? "text-ide-accent border-b-2 border-ide-accent" : "text-ide-mute hover:text-ide-text"
           }`}
         >
           {t.resolved}

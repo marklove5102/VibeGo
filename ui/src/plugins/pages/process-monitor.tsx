@@ -1,3 +1,4 @@
+import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   Activity,
   AlertTriangle,
@@ -18,7 +19,7 @@ import {
 } from "lucide-react";
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Area, AreaChart, Cell, Pie, PieChart, Tooltip, XAxis, YAxis } from "recharts";
-import { useVirtualizer } from "@tanstack/react-virtual";
+import type { ProcessInfo } from "@/api/process";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -35,10 +36,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useCombinedStats, useProcessKill } from "@/hooks/use-process";
-import { useFrameStore } from "@/stores/frame-store";
-import { useAppStore } from "@/stores/app-store";
 import { useTranslation } from "@/lib/i18n";
-import type { ProcessInfo } from "@/api/process";
+import { useAppStore } from "@/stores/app-store";
+import { useFrameStore } from "@/stores/frame-store";
 import { type PluginViewProps, registerPlugin } from "../registry";
 
 type SortField = "pid" | "name" | "cpuPercent" | "memPercent" | "status" | "numThreads" | "createTime";
@@ -102,68 +102,94 @@ interface ProcessRowProps {
   onToggle?: () => void;
 }
 
-const ProcessRow = memo(({ proc, onSelect, onKill, isTreeView, level = 0, isExpanded, hasChildren, onToggle }: ProcessRowProps) => {
-  const cpuColor = proc.cpuPercent > 80 ? "bg-red-500" : proc.cpuPercent > 50 ? "bg-yellow-500" : "bg-blue-500";
-  const memColor = proc.memPercent > 80 ? "bg-red-500" : proc.memPercent > 50 ? "bg-yellow-500" : "bg-green-500";
+const ProcessRow = memo(
+  ({ proc, onSelect, onKill, isTreeView, level = 0, isExpanded, hasChildren, onToggle }: ProcessRowProps) => {
+    const cpuColor = proc.cpuPercent > 80 ? "bg-red-500" : proc.cpuPercent > 50 ? "bg-yellow-500" : "bg-blue-500";
+    const memColor = proc.memPercent > 80 ? "bg-red-500" : proc.memPercent > 50 ? "bg-yellow-500" : "bg-green-500";
 
-  return (
-    <div
-      className="flex items-center border-b border-ide-border hover:bg-ide-panel/50 cursor-pointer"
-      style={{ height: ROW_HEIGHT, paddingLeft: isTreeView ? level * 16 + 8 : 8 }}
-      onClick={() => onSelect(proc)}
-    >
-      {isTreeView && (
-        <div className="w-5 flex-shrink-0">
-          {hasChildren && (
-            <button type="button" onClick={(e) => { e.stopPropagation(); onToggle?.(); }} className="p-0.5 hover:bg-ide-border rounded">
-              {isExpanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-            </button>
-          )}
-        </div>
-      )}
-      <div className="w-16 flex-shrink-0 font-mono text-ide-mute text-xs">{proc.pid}</div>
-      <div className="flex-1 min-w-0 font-medium text-ide-text truncate text-xs pr-2" title={proc.cmdline || proc.name}>
-        {proc.name}
-      </div>
-      <div className="hidden md:block w-20 flex-shrink-0 text-ide-mute truncate text-xs">{proc.username}</div>
-      <div className="w-24 flex-shrink-0">
-        <div className="flex items-center gap-1">
-          <div className="w-10 h-1.5 bg-ide-border rounded-full overflow-hidden">
-            <div className={`h-full ${cpuColor} rounded-full`} style={{ width: `${Math.min(proc.cpuPercent, 100)}%` }} />
+    return (
+      <div
+        className="flex items-center border-b border-ide-border hover:bg-ide-panel/50 cursor-pointer"
+        style={{ height: ROW_HEIGHT, paddingLeft: isTreeView ? level * 16 + 8 : 8 }}
+        onClick={() => onSelect(proc)}
+      >
+        {isTreeView && (
+          <div className="w-5 flex-shrink-0">
+            {hasChildren && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onToggle?.();
+                }}
+                className="p-0.5 hover:bg-ide-border rounded"
+              >
+                {isExpanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+              </button>
+            )}
           </div>
-          <span className="text-[10px] w-10">{proc.cpuPercent.toFixed(1)}%</span>
-        </div>
-      </div>
-      <div className="hidden sm:flex w-24 flex-shrink-0 items-center gap-1">
-        <div className="w-10 h-1.5 bg-ide-border rounded-full overflow-hidden">
-          <div className={`h-full ${memColor} rounded-full`} style={{ width: `${Math.min(proc.memPercent, 100)}%` }} />
-        </div>
-        <span className="text-[10px] w-10">{proc.memPercent.toFixed(1)}%</span>
-      </div>
-      <div className="hidden lg:block w-20 flex-shrink-0 text-ide-mute text-xs">{formatBytes(proc.memRss)}</div>
-      <div className="hidden md:block w-16 flex-shrink-0">
-        <span className={`px-1 py-0.5 rounded text-[10px] ${
-          proc.status === "R" || proc.status === "running" ? "bg-green-500/20 text-green-500" :
-          proc.status === "S" || proc.status === "sleeping" ? "bg-blue-500/20 text-blue-500" :
-          proc.status === "Z" || proc.status === "zombie" ? "bg-red-500/20 text-red-500" :
-          "bg-gray-500/20 text-gray-500"
-        }`}>
-          {proc.status}
-        </span>
-      </div>
-      <div className="w-8 flex-shrink-0">
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-6 w-6 p-0 text-red-500 hover:text-red-600 hover:bg-red-500/10"
-          onClick={(e) => { e.stopPropagation(); onKill(proc); }}
+        )}
+        <div className="w-16 flex-shrink-0 font-mono text-ide-mute text-xs">{proc.pid}</div>
+        <div
+          className="flex-1 min-w-0 font-medium text-ide-text truncate text-xs pr-2"
+          title={proc.cmdline || proc.name}
         >
-          <X size={12} />
-        </Button>
+          {proc.name}
+        </div>
+        <div className="hidden md:block w-20 flex-shrink-0 text-ide-mute truncate text-xs">{proc.username}</div>
+        <div className="w-24 flex-shrink-0">
+          <div className="flex items-center gap-1">
+            <div className="w-10 h-1.5 bg-ide-border rounded-full overflow-hidden">
+              <div
+                className={`h-full ${cpuColor} rounded-full`}
+                style={{ width: `${Math.min(proc.cpuPercent, 100)}%` }}
+              />
+            </div>
+            <span className="text-[10px] w-10">{proc.cpuPercent.toFixed(1)}%</span>
+          </div>
+        </div>
+        <div className="hidden sm:flex w-24 flex-shrink-0 items-center gap-1">
+          <div className="w-10 h-1.5 bg-ide-border rounded-full overflow-hidden">
+            <div
+              className={`h-full ${memColor} rounded-full`}
+              style={{ width: `${Math.min(proc.memPercent, 100)}%` }}
+            />
+          </div>
+          <span className="text-[10px] w-10">{proc.memPercent.toFixed(1)}%</span>
+        </div>
+        <div className="hidden lg:block w-20 flex-shrink-0 text-ide-mute text-xs">{formatBytes(proc.memRss)}</div>
+        <div className="hidden md:block w-16 flex-shrink-0">
+          <span
+            className={`px-1 py-0.5 rounded text-[10px] ${
+              proc.status === "R" || proc.status === "running"
+                ? "bg-green-500/20 text-green-500"
+                : proc.status === "S" || proc.status === "sleeping"
+                  ? "bg-blue-500/20 text-blue-500"
+                  : proc.status === "Z" || proc.status === "zombie"
+                    ? "bg-red-500/20 text-red-500"
+                    : "bg-gray-500/20 text-gray-500"
+            }`}
+          >
+            {proc.status}
+          </span>
+        </div>
+        <div className="w-8 flex-shrink-0">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-6 w-6 p-0 text-red-500 hover:text-red-600 hover:bg-red-500/10"
+            onClick={(e) => {
+              e.stopPropagation();
+              onKill(proc);
+            }}
+          >
+            <X size={12} />
+          </Button>
+        </div>
       </div>
-    </div>
-  );
-});
+    );
+  }
+);
 
 interface ProcessDetailSheetProps {
   process: ProcessInfo | null;
@@ -217,12 +243,17 @@ const ProcessDetailSheet = memo(({ process, open, onClose, onKill, t }: ProcessD
             </div>
             <div className="bg-ide-panel p-3 rounded-lg col-span-2">
               <div className="text-ide-mute text-xs mb-1">{t("plugin.processMonitor.status")}</div>
-              <span className={`px-2 py-0.5 rounded text-xs ${
-                process.status === "R" || process.status === "running" ? "bg-green-500/20 text-green-500" :
-                process.status === "S" || process.status === "sleeping" ? "bg-blue-500/20 text-blue-500" :
-                process.status === "Z" || process.status === "zombie" ? "bg-red-500/20 text-red-500" :
-                "bg-gray-500/20 text-gray-500"
-              }`}>
+              <span
+                className={`px-2 py-0.5 rounded text-xs ${
+                  process.status === "R" || process.status === "running"
+                    ? "bg-green-500/20 text-green-500"
+                    : process.status === "S" || process.status === "sleeping"
+                      ? "bg-blue-500/20 text-blue-500"
+                      : process.status === "Z" || process.status === "zombie"
+                        ? "bg-red-500/20 text-red-500"
+                        : "bg-gray-500/20 text-gray-500"
+                }`}
+              >
                 {process.status}
               </span>
             </div>
@@ -325,7 +356,12 @@ const ProcessMonitorView: React.FC<PluginViewProps> = ({ isActive }) => {
   useEffect(() => {
     if (!isActive) return;
     setPageMenuItems([
-      { id: "refresh-processes", icon: <RefreshCw size={18} />, label: t("plugin.processMonitor.refresh"), onClick: handleRefresh },
+      {
+        id: "refresh-processes",
+        icon: <RefreshCw size={18} />,
+        label: t("plugin.processMonitor.refresh"),
+        onClick: handleRefresh,
+      },
     ]);
     return () => setPageMenuItems([]);
   }, [isActive, setPageMenuItems, handleRefresh, t]);
@@ -355,7 +391,12 @@ const ProcessMonitorView: React.FC<PluginViewProps> = ({ isActive }) => {
     if (selectedProcess) {
       killMutation.mutate(
         { pid: selectedProcess.pid, signal: killSignal },
-        { onSuccess: () => { setKillDialogOpen(false); setSelectedProcess(null); } }
+        {
+          onSuccess: () => {
+            setKillDialogOpen(false);
+            setSelectedProcess(null);
+          },
+        }
       );
     }
   }, [selectedProcess, killSignal, killMutation]);
@@ -374,10 +415,11 @@ const ProcessMonitorView: React.FC<PluginViewProps> = ({ isActive }) => {
     let filtered = processData;
     if (searchTerm) {
       const lower = searchTerm.toLowerCase();
-      filtered = filtered.filter((p) =>
-        p.name.toLowerCase().includes(lower) ||
-        p.pid.toString().includes(lower) ||
-        p.username.toLowerCase().includes(lower)
+      filtered = filtered.filter(
+        (p) =>
+          p.name.toLowerCase().includes(lower) ||
+          p.pid.toString().includes(lower) ||
+          p.username.toLowerCase().includes(lower)
       );
     }
     return [...filtered].sort((a, b) => {
@@ -397,7 +439,8 @@ const ProcessMonitorView: React.FC<PluginViewProps> = ({ isActive }) => {
     return flattenTree(tree, expandedPids);
   }, [viewMode, filteredAndSortedProcesses, expandedPids]);
 
-  const displayData = viewMode === "tree" ? treeData : filteredAndSortedProcesses.map((p) => ({ node: p as TreeNode, level: 0 }));
+  const displayData =
+    viewMode === "tree" ? treeData : filteredAndSortedProcesses.map((p) => ({ node: p as TreeNode, level: 0 }));
 
   const virtualizer = useVirtualizer({
     count: displayData.length,
@@ -406,10 +449,12 @@ const ProcessMonitorView: React.FC<PluginViewProps> = ({ isActive }) => {
     overscan: 10,
   });
 
-  const memoryChartData = systemStats ? [
-    { name: "Used", value: systemStats.memory.used, color: "var(--color-primary)" },
-    { name: "Available", value: systemStats.memory.available, color: "var(--color-muted)" },
-  ] : [];
+  const memoryChartData = systemStats
+    ? [
+        { name: "Used", value: systemStats.memory.used, color: "var(--color-primary)" },
+        { name: "Available", value: systemStats.memory.available, color: "var(--color-muted)" },
+      ]
+    : [];
 
   const cpuHistory = cpuHistoryRef.current;
 
@@ -423,7 +468,10 @@ const ProcessMonitorView: React.FC<PluginViewProps> = ({ isActive }) => {
           </div>
           <div className="flex items-center gap-2 sm:gap-3">
             <div className="relative flex-1 sm:flex-none">
-              <Search size={14} className="absolute left-2 top-1/2 -translate-y-1/2 text-ide-mute sm:w-4 sm:h-4 sm:left-2.5" />
+              <Search
+                size={14}
+                className="absolute left-2 top-1/2 -translate-y-1/2 text-ide-mute sm:w-4 sm:h-4 sm:left-2.5"
+              />
               <Input
                 placeholder={t("plugin.processMonitor.search")}
                 value={searchTerm}
@@ -432,10 +480,20 @@ const ProcessMonitorView: React.FC<PluginViewProps> = ({ isActive }) => {
               />
             </div>
             <div className="flex border border-ide-border rounded-md overflow-hidden">
-              <Button variant={viewMode === "list" ? "secondary" : "ghost"} size="sm" className="h-7 px-2 rounded-none" onClick={() => setViewMode("list")}>
+              <Button
+                variant={viewMode === "list" ? "secondary" : "ghost"}
+                size="sm"
+                className="h-7 px-2 rounded-none"
+                onClick={() => setViewMode("list")}
+              >
                 <List size={14} />
               </Button>
-              <Button variant={viewMode === "tree" ? "secondary" : "ghost"} size="sm" className="h-7 px-2 rounded-none" onClick={() => setViewMode("tree")}>
+              <Button
+                variant={viewMode === "tree" ? "secondary" : "ghost"}
+                size="sm"
+                className="h-7 px-2 rounded-none"
+                onClick={() => setViewMode("tree")}
+              >
                 <Network size={14} />
               </Button>
             </div>
@@ -445,10 +503,20 @@ const ProcessMonitorView: React.FC<PluginViewProps> = ({ isActive }) => {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {refreshOptions.map((opt) => (<SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>))}
+                {refreshOptions.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
-            <Button variant="ghost" size="sm" onClick={handleRefresh} disabled={isLoading} className="h-7 w-7 sm:h-8 sm:w-8 p-0">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleRefresh}
+              disabled={isLoading}
+              className="h-7 w-7 sm:h-8 sm:w-8 p-0"
+            >
               <RefreshCw size={14} className={`sm:w-4 sm:h-4 ${isLoading ? "animate-spin" : ""}`} />
             </Button>
           </div>
@@ -458,8 +526,12 @@ const ProcessMonitorView: React.FC<PluginViewProps> = ({ isActive }) => {
       <div className="flex-shrink-0 p-2 sm:p-4 border-b border-ide-border overflow-x-auto">
         <Tabs defaultValue="overview" className="w-full">
           <TabsList className="mb-2">
-            <TabsTrigger value="overview" className="text-xs">{t("plugin.processMonitor.overview")}</TabsTrigger>
-            <TabsTrigger value="cpu-cores" className="text-xs">{t("plugin.processMonitor.cpuCores")}</TabsTrigger>
+            <TabsTrigger value="overview" className="text-xs">
+              {t("plugin.processMonitor.overview")}
+            </TabsTrigger>
+            <TabsTrigger value="cpu-cores" className="text-xs">
+              {t("plugin.processMonitor.cpuCores")}
+            </TabsTrigger>
           </TabsList>
           <TabsContent value="overview">
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-4 min-w-0">
@@ -471,23 +543,72 @@ const ProcessMonitorView: React.FC<PluginViewProps> = ({ isActive }) => {
                 <div className="h-12 sm:h-20" style={{ minWidth: 60 }}>
                   {cpuHistory.length > 1 ? (
                     <>
-                      <AreaChart width={120} height={48} data={cpuHistory.slice(-20)} margin={{ top: 0, right: 0, left: 0, bottom: 0 }} className="w-full h-full sm:hidden">
-                        <defs><linearGradient id="cpuGradientSm" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} /><stop offset="95%" stopColor="#3b82f6" stopOpacity={0} /></linearGradient></defs>
+                      <AreaChart
+                        width={120}
+                        height={48}
+                        data={cpuHistory.slice(-20)}
+                        margin={{ top: 0, right: 0, left: 0, bottom: 0 }}
+                        className="w-full h-full sm:hidden"
+                      >
+                        <defs>
+                          <linearGradient id="cpuGradientSm" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
+                            <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                          </linearGradient>
+                        </defs>
                         <YAxis domain={[0, 100]} hide />
-                        <Area type="monotone" dataKey="value" stroke="#3b82f6" strokeWidth={1.5} fill="url(#cpuGradientSm)" />
+                        <Area
+                          type="monotone"
+                          dataKey="value"
+                          stroke="#3b82f6"
+                          strokeWidth={1.5}
+                          fill="url(#cpuGradientSm)"
+                        />
                       </AreaChart>
-                      <AreaChart width={180} height={80} data={cpuHistory} margin={{ top: 0, right: 0, left: 0, bottom: 0 }} className="hidden sm:block w-full h-full">
-                        <defs><linearGradient id="cpuGradient" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} /><stop offset="95%" stopColor="#3b82f6" stopOpacity={0} /></linearGradient></defs>
+                      <AreaChart
+                        width={180}
+                        height={80}
+                        data={cpuHistory}
+                        margin={{ top: 0, right: 0, left: 0, bottom: 0 }}
+                        className="hidden sm:block w-full h-full"
+                      >
+                        <defs>
+                          <linearGradient id="cpuGradient" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
+                            <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                          </linearGradient>
+                        </defs>
                         <XAxis dataKey="time" hide />
                         <YAxis domain={[0, 100]} hide />
-                        <Tooltip contentStyle={{ backgroundColor: "var(--ide-panel)", border: "1px solid var(--ide-border)", borderRadius: "6px", fontSize: "12px" }} labelStyle={{ color: "var(--ide-text)" }} formatter={(value) => [`${value !== undefined ? value : 0}%`, t("plugin.processMonitor.cpu")]} />
-                        <Area type="monotone" dataKey="value" stroke="#3b82f6" strokeWidth={2} fill="url(#cpuGradient)" />
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: "var(--ide-panel)",
+                            border: "1px solid var(--ide-border)",
+                            borderRadius: "6px",
+                            fontSize: "12px",
+                          }}
+                          labelStyle={{ color: "var(--ide-text)" }}
+                          formatter={(value) => [`${value !== undefined ? value : 0}%`, t("plugin.processMonitor.cpu")]}
+                        />
+                        <Area
+                          type="monotone"
+                          dataKey="value"
+                          stroke="#3b82f6"
+                          strokeWidth={2}
+                          fill="url(#cpuGradient)"
+                        />
                       </AreaChart>
                     </>
-                  ) : (<div className="h-full flex items-center justify-center text-ide-mute text-xs sm:text-sm">{t("plugin.processMonitor.loading")}</div>)}
+                  ) : (
+                    <div className="h-full flex items-center justify-center text-ide-mute text-xs sm:text-sm">
+                      {t("plugin.processMonitor.loading")}
+                    </div>
+                  )}
                 </div>
                 <div className="mt-1 sm:mt-2 flex justify-between text-[10px] sm:text-xs">
-                  <span className="text-ide-mute">{systemStats?.cpu.cores || "-"} {t("plugin.processMonitor.cores")}</span>
+                  <span className="text-ide-mute">
+                    {systemStats?.cpu.cores || "-"} {t("plugin.processMonitor.cores")}
+                  </span>
                   <span className="text-blue-500 font-medium">{systemStats?.cpu.usagePercent.toFixed(1) || "-"}%</span>
                 </div>
               </div>
@@ -495,44 +616,86 @@ const ProcessMonitorView: React.FC<PluginViewProps> = ({ isActive }) => {
               <div className="bg-ide-panel rounded-lg p-2 sm:p-4 border border-ide-border min-w-0">
                 <div className="flex items-center gap-1.5 sm:gap-2 mb-2 sm:mb-3">
                   <HardDrive size={14} className="text-green-500 sm:w-[18px] sm:h-[18px]" />
-                  <span className="text-xs sm:text-sm font-medium text-ide-text">{t("plugin.processMonitor.memory")}</span>
+                  <span className="text-xs sm:text-sm font-medium text-ide-text">
+                    {t("plugin.processMonitor.memory")}
+                  </span>
                 </div>
                 <div className="h-12 sm:h-20 flex items-center justify-center" style={{ minWidth: 60 }}>
                   {systemStats ? (
                     <PieChart width={60} height={48} className="sm:w-[100px] sm:h-[80px]">
-                      <Pie data={memoryChartData} cx="50%" cy="50%" innerRadius={14} outerRadius={20} dataKey="value" strokeWidth={0}>
-                        {memoryChartData.map((entry, index) => (<Cell key={`cell-${entry.name}`} fill={index === 0 ? "#22c55e" : "var(--ide-border)"} />))}
+                      <Pie
+                        data={memoryChartData}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={14}
+                        outerRadius={20}
+                        dataKey="value"
+                        strokeWidth={0}
+                      >
+                        {memoryChartData.map((entry, index) => (
+                          <Cell key={`cell-${entry.name}`} fill={index === 0 ? "#22c55e" : "var(--ide-border)"} />
+                        ))}
                       </Pie>
                     </PieChart>
-                  ) : (<div className="text-ide-mute text-xs sm:text-sm">{t("plugin.processMonitor.loading")}</div>)}
+                  ) : (
+                    <div className="text-ide-mute text-xs sm:text-sm">{t("plugin.processMonitor.loading")}</div>
+                  )}
                 </div>
                 <div className="mt-1 sm:mt-2 flex justify-between text-[10px] sm:text-xs">
                   <span className="text-ide-mute truncate">{formatBytes(systemStats?.memory.used || 0)}</span>
-                  <span className="text-green-500 font-medium">{systemStats?.memory.usedPercent.toFixed(1) || "-"}%</span>
+                  <span className="text-green-500 font-medium">
+                    {systemStats?.memory.usedPercent.toFixed(1) || "-"}%
+                  </span>
                 </div>
               </div>
 
               <div className="bg-ide-panel rounded-lg p-2 sm:p-4 border border-ide-border min-w-0">
                 <div className="flex items-center gap-1.5 sm:gap-2 mb-2 sm:mb-3">
                   <Server size={14} className="text-purple-500 sm:w-[18px] sm:h-[18px]" />
-                  <span className="text-xs sm:text-sm font-medium text-ide-text">{t("plugin.processMonitor.system")}</span>
+                  <span className="text-xs sm:text-sm font-medium text-ide-text">
+                    {t("plugin.processMonitor.system")}
+                  </span>
                 </div>
                 <div className="space-y-1 sm:space-y-2 text-[10px] sm:text-xs">
-                  <div className="flex justify-between gap-1"><span className="text-ide-mute">{t("plugin.processMonitor.host")}</span><span className="text-ide-text font-medium truncate">{systemStats?.hostname || "-"}</span></div>
-                  <div className="flex justify-between gap-1"><span className="text-ide-mute">{t("plugin.processMonitor.os")}</span><span className="text-ide-text truncate">{systemStats ? `${systemStats.os}/${systemStats.arch}` : "-"}</span></div>
-                  <div className="flex justify-between gap-1"><span className="text-ide-mute">{t("plugin.processMonitor.load")}</span><span className="text-ide-text">{systemStats ? `${systemStats.loadAvg.load1.toFixed(1)}` : "-"}</span></div>
+                  <div className="flex justify-between gap-1">
+                    <span className="text-ide-mute">{t("plugin.processMonitor.host")}</span>
+                    <span className="text-ide-text font-medium truncate">{systemStats?.hostname || "-"}</span>
+                  </div>
+                  <div className="flex justify-between gap-1">
+                    <span className="text-ide-mute">{t("plugin.processMonitor.os")}</span>
+                    <span className="text-ide-text truncate">
+                      {systemStats ? `${systemStats.os}/${systemStats.arch}` : "-"}
+                    </span>
+                  </div>
+                  <div className="flex justify-between gap-1">
+                    <span className="text-ide-mute">{t("plugin.processMonitor.load")}</span>
+                    <span className="text-ide-text">
+                      {systemStats ? `${systemStats.loadAvg.load1.toFixed(1)}` : "-"}
+                    </span>
+                  </div>
                 </div>
               </div>
 
               <div className="bg-ide-panel rounded-lg p-2 sm:p-4 border border-ide-border min-w-0">
                 <div className="flex items-center gap-1.5 sm:gap-2 mb-2 sm:mb-3">
                   <Clock size={14} className="text-orange-500 sm:w-[18px] sm:h-[18px]" />
-                  <span className="text-xs sm:text-sm font-medium text-ide-text">{t("plugin.processMonitor.stats")}</span>
+                  <span className="text-xs sm:text-sm font-medium text-ide-text">
+                    {t("plugin.processMonitor.stats")}
+                  </span>
                 </div>
                 <div className="space-y-1 sm:space-y-2 text-[10px] sm:text-xs">
-                  <div className="flex justify-between gap-1"><span className="text-ide-mute">{t("plugin.processMonitor.uptime")}</span><span className="text-ide-text font-medium">{formatUptime(systemStats?.uptime || 0)}</span></div>
-                  <div className="flex justify-between gap-1"><span className="text-ide-mute">{t("plugin.processMonitor.processes")}</span><span className="text-ide-text font-medium">{combinedData?.total || "-"}</span></div>
-                  <div className="flex justify-between gap-1"><span className="text-ide-mute">{t("plugin.processMonitor.showing")}</span><span className="text-ide-text">{displayData.length}</span></div>
+                  <div className="flex justify-between gap-1">
+                    <span className="text-ide-mute">{t("plugin.processMonitor.uptime")}</span>
+                    <span className="text-ide-text font-medium">{formatUptime(systemStats?.uptime || 0)}</span>
+                  </div>
+                  <div className="flex justify-between gap-1">
+                    <span className="text-ide-mute">{t("plugin.processMonitor.processes")}</span>
+                    <span className="text-ide-text font-medium">{combinedData?.total || "-"}</span>
+                  </div>
+                  <div className="flex justify-between gap-1">
+                    <span className="text-ide-mute">{t("plugin.processMonitor.showing")}</span>
+                    <span className="text-ide-text">{displayData.length}</span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -542,7 +705,9 @@ const ProcessMonitorView: React.FC<PluginViewProps> = ({ isActive }) => {
               <div className="flex items-center gap-2 mb-3">
                 <Cpu size={16} className="text-blue-500" />
                 <span className="text-sm font-medium">{t("plugin.processMonitor.perCoreUsage")}</span>
-                <span className="text-xs text-ide-mute">({systemStats?.cpu.cores || 0} {t("plugin.processMonitor.cores")})</span>
+                <span className="text-xs text-ide-mute">
+                  ({systemStats?.cpu.cores || 0} {t("plugin.processMonitor.cores")})
+                </span>
               </div>
               {systemStats?.cpu.perCoreUsage ? (
                 <div className="grid grid-cols-4 sm:grid-cols-8 lg:grid-cols-12 gap-2">
@@ -559,22 +724,54 @@ const ProcessMonitorView: React.FC<PluginViewProps> = ({ isActive }) => {
                     </div>
                   ))}
                 </div>
-              ) : (<div className="text-center text-ide-mute py-4">{t("plugin.processMonitor.loading")}</div>)}
+              ) : (
+                <div className="text-center text-ide-mute py-4">{t("plugin.processMonitor.loading")}</div>
+              )}
             </div>
           </TabsContent>
         </Tabs>
       </div>
 
       <div className="flex-1 overflow-hidden flex flex-col">
-        <div className="flex items-center border-b border-ide-border bg-ide-bg text-xs font-medium text-ide-mute" style={{ height: ROW_HEIGHT, paddingLeft: viewMode === "tree" ? 28 : 8 }}>
+        <div
+          className="flex items-center border-b border-ide-border bg-ide-bg text-xs font-medium text-ide-mute"
+          style={{ height: ROW_HEIGHT, paddingLeft: viewMode === "tree" ? 28 : 8 }}
+        >
           {viewMode === "tree" && <div className="w-5 flex-shrink-0" />}
-          <div className="w-16 flex-shrink-0 cursor-pointer flex items-center gap-0.5" onClick={() => handleSort("pid")}>{t("plugin.processMonitor.pid")} <SortIcon field="pid" sortField={sortField} sortDirection={sortDirection} /></div>
-          <div className="flex-1 min-w-0 cursor-pointer flex items-center gap-0.5" onClick={() => handleSort("name")}>{t("plugin.processMonitor.processName")} <SortIcon field="name" sortField={sortField} sortDirection={sortDirection} /></div>
+          <div
+            className="w-16 flex-shrink-0 cursor-pointer flex items-center gap-0.5"
+            onClick={() => handleSort("pid")}
+          >
+            {t("plugin.processMonitor.pid")}{" "}
+            <SortIcon field="pid" sortField={sortField} sortDirection={sortDirection} />
+          </div>
+          <div className="flex-1 min-w-0 cursor-pointer flex items-center gap-0.5" onClick={() => handleSort("name")}>
+            {t("plugin.processMonitor.processName")}{" "}
+            <SortIcon field="name" sortField={sortField} sortDirection={sortDirection} />
+          </div>
           <div className="hidden md:flex w-20 flex-shrink-0">{t("plugin.processMonitor.user")}</div>
-          <div className="w-24 flex-shrink-0 cursor-pointer flex items-center gap-0.5" onClick={() => handleSort("cpuPercent")}>{t("plugin.processMonitor.cpuPercent")} <SortIcon field="cpuPercent" sortField={sortField} sortDirection={sortDirection} /></div>
-          <div className="hidden sm:flex w-24 flex-shrink-0 cursor-pointer items-center gap-0.5" onClick={() => handleSort("memPercent")}>{t("plugin.processMonitor.memPercent")} <SortIcon field="memPercent" sortField={sortField} sortDirection={sortDirection} /></div>
+          <div
+            className="w-24 flex-shrink-0 cursor-pointer flex items-center gap-0.5"
+            onClick={() => handleSort("cpuPercent")}
+          >
+            {t("plugin.processMonitor.cpuPercent")}{" "}
+            <SortIcon field="cpuPercent" sortField={sortField} sortDirection={sortDirection} />
+          </div>
+          <div
+            className="hidden sm:flex w-24 flex-shrink-0 cursor-pointer items-center gap-0.5"
+            onClick={() => handleSort("memPercent")}
+          >
+            {t("plugin.processMonitor.memPercent")}{" "}
+            <SortIcon field="memPercent" sortField={sortField} sortDirection={sortDirection} />
+          </div>
           <div className="hidden lg:flex w-20 flex-shrink-0">{t("plugin.processMonitor.memSize")}</div>
-          <div className="hidden md:flex w-16 flex-shrink-0 cursor-pointer items-center gap-0.5" onClick={() => handleSort("status")}>{t("plugin.processMonitor.status")} <SortIcon field="status" sortField={sortField} sortDirection={sortDirection} /></div>
+          <div
+            className="hidden md:flex w-16 flex-shrink-0 cursor-pointer items-center gap-0.5"
+            onClick={() => handleSort("status")}
+          >
+            {t("plugin.processMonitor.status")}{" "}
+            <SortIcon field="status" sortField={sortField} sortDirection={sortDirection} />
+          </div>
           <div className="w-8 flex-shrink-0" />
         </div>
 
@@ -584,7 +781,17 @@ const ProcessMonitorView: React.FC<PluginViewProps> = ({ isActive }) => {
               const { node, level } = displayData[virtualRow.index];
               const hasChildren = node.children?.length > 0;
               return (
-                <div key={node.pid} style={{ position: "absolute", top: 0, left: 0, width: "100%", height: `${virtualRow.size}px`, transform: `translateY(${virtualRow.start}px)` }}>
+                <div
+                  key={node.pid}
+                  style={{
+                    position: "absolute",
+                    top: 0,
+                    left: 0,
+                    width: "100%",
+                    height: `${virtualRow.size}px`,
+                    transform: `translateY(${virtualRow.start}px)`,
+                  }}
+                >
                   <ProcessRow
                     proc={node}
                     onSelect={handleSelectProcess}
@@ -602,7 +809,13 @@ const ProcessMonitorView: React.FC<PluginViewProps> = ({ isActive }) => {
         </div>
       </div>
 
-      <ProcessDetailSheet process={selectedProcess} open={detailSheetOpen} onClose={() => setDetailSheetOpen(false)} onKill={handleKillClick} t={t} />
+      <ProcessDetailSheet
+        process={selectedProcess}
+        open={detailSheetOpen}
+        onClose={() => setDetailSheetOpen(false)}
+        onKill={handleKillClick}
+        t={t}
+      />
 
       <AlertDialog open={killDialogOpen} onOpenChange={setKillDialogOpen}>
         <AlertDialogContent className="max-w-[calc(100%-2rem)] sm:max-w-lg">
@@ -612,13 +825,17 @@ const ProcessMonitorView: React.FC<PluginViewProps> = ({ isActive }) => {
               {t("plugin.processMonitor.killTitle")}
             </AlertDialogTitle>
             <AlertDialogDescription className="text-sm">
-              {t("plugin.processMonitor.killConfirm").replace("{name}", selectedProcess?.name || "").replace("{pid}", String(selectedProcess?.pid || ""))}
+              {t("plugin.processMonitor.killConfirm")
+                .replace("{name}", selectedProcess?.name || "")
+                .replace("{pid}", String(selectedProcess?.pid || ""))}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="py-3 sm:py-4">
             <label className="text-xs sm:text-sm text-ide-mute block mb-2">{t("plugin.processMonitor.signal")}</label>
             <Select value={killSignal} onValueChange={setKillSignal}>
-              <SelectTrigger className="w-full text-sm"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="w-full text-sm">
+                <SelectValue />
+              </SelectTrigger>
               <SelectContent>
                 <SelectItem value="SIGTERM">{t("plugin.processMonitor.sigterm")}</SelectItem>
                 <SelectItem value="SIGKILL">{t("plugin.processMonitor.sigkill")}</SelectItem>
@@ -628,7 +845,12 @@ const ProcessMonitorView: React.FC<PluginViewProps> = ({ isActive }) => {
           </div>
           <AlertDialogFooter className="gap-2 sm:gap-0">
             <AlertDialogCancel className="text-sm">{t("common.cancel")}</AlertDialogCancel>
-            <AlertDialogAction onClick={handleKillProcess} variant="destructive" disabled={killMutation.isPending} className="text-sm">
+            <AlertDialogAction
+              onClick={handleKillProcess}
+              variant="destructive"
+              disabled={killMutation.isPending}
+              className="text-sm"
+            >
               {killMutation.isPending ? t("plugin.processMonitor.killing") : t("plugin.processMonitor.killProcess")}
             </AlertDialogAction>
           </AlertDialogFooter>

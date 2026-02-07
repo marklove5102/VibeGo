@@ -41,11 +41,10 @@ const RecentSessionList: React.FC<RecentSessionListProps> = ({ onSwitchSession, 
   };
 
   const handleClearAll = async () => {
-    const confirmed = await dialog.confirm(
-      t("session.clearAllConfirm"),
-      undefined,
-      { confirmVariant: "danger", confirmText: t("session.clearAll") }
-    );
+    const confirmed = await dialog.confirm(t("session.clearAllConfirm"), undefined, {
+      confirmVariant: "danger",
+      confirmText: t("session.clearAll"),
+    });
     if (!confirmed) return;
     await clearAllSessions();
   };

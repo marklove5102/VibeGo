@@ -1,5 +1,6 @@
 import { ArrowLeft, CheckSquare, RefreshCw, Square, Terminal, Trash2, X } from "lucide-react";
 import React, { useCallback, useMemo, useState } from "react";
+import type { TerminalInfo } from "@/api/terminal";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -10,7 +11,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import type { TerminalInfo } from "@/api/terminal";
 import { usePageTopBar } from "@/hooks/use-page-top-bar";
 import { useTerminalDeleteBatch, useTerminalList } from "@/hooks/use-terminal";
 import { useTranslation } from "@/lib/i18n";
@@ -55,13 +55,16 @@ const TerminalHistoryPage: React.FC<TerminalHistoryPageProps> = ({ onBack }) => 
     setSelectedIds(new Set());
   }, []);
 
-  const handleItemClick = useCallback((terminal: TerminalInfo) => {
-    if (selectionMode) {
-      toggleSelect(terminal.id);
-    } else {
-      setViewingTerminal(terminal);
-    }
-  }, [selectionMode, toggleSelect]);
+  const handleItemClick = useCallback(
+    (terminal: TerminalInfo) => {
+      if (selectionMode) {
+        toggleSelect(terminal.id);
+      } else {
+        setViewingTerminal(terminal);
+      }
+    },
+    [selectionMode, toggleSelect]
+  );
 
   const handleDeleteSelected = useCallback(() => {
     if (selectedIds.size > 0) {
@@ -136,15 +139,20 @@ const TerminalHistoryPage: React.FC<TerminalHistoryPageProps> = ({ onBack }) => 
         ],
         centerContent: (
           <div className="flex items-center h-full">
-            <span className="text-sm text-ide-mute">{selectedIds.size} {t("terminal.selected")}</span>
+            <span className="text-sm text-ide-mute">
+              {selectedIds.size} {t("terminal.selected")}
+            </span>
           </div>
         ),
-        rightButtons: selectedIds.size > 0 ? [
-          {
-            icon: <Trash2 size={18} className="text-red-500" />,
-            onClick: handleDeleteSelected,
-          },
-        ] : [],
+        rightButtons:
+          selectedIds.size > 0
+            ? [
+                {
+                  icon: <Trash2 size={18} className="text-red-500" />,
+                  onClick: handleDeleteSelected,
+                },
+              ]
+            : [],
       };
     }
 
@@ -162,10 +170,14 @@ const TerminalHistoryPage: React.FC<TerminalHistoryPageProps> = ({ onBack }) => 
         </div>
       ),
       rightButtons: [
-        ...(closedTerminals.length > 0 ? [{
-          icon: <CheckSquare size={18} />,
-          onClick: () => setSelectionMode(true),
-        }] : []),
+        ...(closedTerminals.length > 0
+          ? [
+              {
+                icon: <CheckSquare size={18} />,
+                onClick: () => setSelectionMode(true),
+              },
+            ]
+          : []),
         {
           icon: <RefreshCw size={18} />,
           onClick: handleRefresh,
@@ -193,11 +205,7 @@ const TerminalHistoryPage: React.FC<TerminalHistoryPageProps> = ({ onBack }) => 
     return (
       <div className="flex flex-col h-full bg-ide-bg">
         <div className="flex-1 relative overflow-hidden">
-          <TerminalInstance
-            terminalId={viewingTerminal.id}
-            isActive={true}
-            isExited={true}
-          />
+          <TerminalInstance terminalId={viewingTerminal.id} isActive={true} isExited={true} />
         </div>
       </div>
     );
@@ -245,9 +253,7 @@ const TerminalHistoryPage: React.FC<TerminalHistoryPageProps> = ({ onBack }) => 
 
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <span className="font-medium truncate text-sm text-ide-text">
-                        {terminal.name}
-                      </span>
+                      <span className="font-medium truncate text-sm text-ide-text">{terminal.name}</span>
                     </div>
                     <div className="text-xs text-ide-mute mt-0.5">
                       {formatDate(terminal.created_at)} - {terminal.cwd}
@@ -283,11 +289,7 @@ const TerminalHistoryPage: React.FC<TerminalHistoryPageProps> = ({ onBack }) => 
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={confirmDelete}
-              variant="destructive"
-              disabled={deleteBatchMutation.isPending}
-            >
+            <AlertDialogAction onClick={confirmDelete} variant="destructive" disabled={deleteBatchMutation.isPending}>
               {t("common.delete")}
             </AlertDialogAction>
           </AlertDialogFooter>

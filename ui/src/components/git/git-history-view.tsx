@@ -1,6 +1,6 @@
 import { ChevronDown, ChevronRight, Clock, GitCommit as GitCommitIcon } from "lucide-react";
 import React, { useCallback, useState } from "react";
-import type { GitCommit, CommitFileInfo } from "@/api/git";
+import type { CommitFileInfo, GitCommit } from "@/api/git";
 import { getTranslation, type Locale } from "@/lib/i18n";
 
 interface GitHistoryViewProps {
@@ -30,10 +30,17 @@ const formatRelativeTime = (dateStr: string): string => {
 
 const getStatusColor = (status: string) => {
   switch (status) {
-    case "M": case "modified": return "text-yellow-500";
-    case "A": case "added": return "text-green-500";
-    case "D": case "deleted": return "text-red-500";
-    default: return "text-ide-mute";
+    case "M":
+    case "modified":
+      return "text-yellow-500";
+    case "A":
+    case "added":
+      return "text-green-500";
+    case "D":
+    case "deleted":
+      return "text-red-500";
+    default:
+      return "text-ide-mute";
   }
 };
 
@@ -60,15 +67,28 @@ interface CommitItemProps {
   files: CommitFileInfo[];
 }
 
-const CommitItem: React.FC<CommitItemProps> = ({ commit, isExpanded, isSelected, locale, onToggle, onFileClick, files }) => {
+const CommitItem: React.FC<CommitItemProps> = ({
+  commit,
+  isExpanded,
+  isSelected,
+  locale,
+  onToggle,
+  onFileClick,
+  files,
+}) => {
   const t = (key: string) => getTranslation(locale, key);
   const shortHash = commit.hash.substring(0, 7);
   const firstLine = commit.message.split("\n")[0];
 
   return (
     <div className={`border-b border-ide-border/50 ${isSelected ? "bg-ide-accent/5" : ""}`}>
-      <div className="flex items-start gap-2.5 px-3 py-2.5 cursor-pointer hover:bg-ide-accent/10 active:bg-ide-accent/15" onClick={onToggle}>
-        <div className={`w-7 h-7 rounded-full ${hashColor(commit.author)} flex items-center justify-center shrink-0 mt-0.5`}>
+      <div
+        className="flex items-start gap-2.5 px-3 py-2.5 cursor-pointer hover:bg-ide-accent/10 active:bg-ide-accent/15"
+        onClick={onToggle}
+      >
+        <div
+          className={`w-7 h-7 rounded-full ${hashColor(commit.author)} flex items-center justify-center shrink-0 mt-0.5`}
+        >
           <span className="text-[10px] font-bold text-white">{getInitials(commit.author)}</span>
         </div>
         <div className="flex-1 min-w-0">
@@ -86,7 +106,11 @@ const CommitItem: React.FC<CommitItemProps> = ({ commit, isExpanded, isSelected,
           </div>
         </div>
         <div className="pt-1">
-          {isExpanded ? <ChevronDown size={14} className="text-ide-mute" /> : <ChevronRight size={14} className="text-ide-mute" />}
+          {isExpanded ? (
+            <ChevronDown size={14} className="text-ide-mute" />
+          ) : (
+            <ChevronRight size={14} className="text-ide-mute" />
+          )}
         </div>
       </div>
 
@@ -99,7 +123,10 @@ const CommitItem: React.FC<CommitItemProps> = ({ commit, isExpanded, isSelected,
             <div
               key={file.path}
               className="flex items-center gap-2 px-4 py-1 hover:bg-ide-accent/10 cursor-pointer active:bg-ide-accent/15"
-              onClick={(e) => { e.stopPropagation(); onFileClick(file.path); }}
+              onClick={(e) => {
+                e.stopPropagation();
+                onFileClick(file.path);
+              }}
             >
               <span className={`w-3 text-center font-bold text-[10px] ${getStatusColor(file.status)}`}>
                 {file.status[0]?.toUpperCase() || "?"}

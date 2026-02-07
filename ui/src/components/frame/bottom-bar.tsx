@@ -1,4 +1,16 @@
-import { Box, Files, FolderOpen, GitGraph, Home, Maximize, Menu, Minimize, Plus, Settings, Terminal } from "lucide-react";
+import {
+  Box,
+  Files,
+  FolderOpen,
+  GitGraph,
+  Home,
+  Maximize,
+  Menu,
+  Minimize,
+  Plus,
+  Settings,
+  Terminal,
+} from "lucide-react";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { pluginRegistry } from "@/plugins/registry";
 import {

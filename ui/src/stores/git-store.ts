@@ -5,8 +5,8 @@ import {
   type GitCommit,
   type GitDiff,
   type GitFileStatus,
-  type StashEntry,
   gitApi,
+  type StashEntry,
 } from "@/api/git";
 
 export interface GitFileNode {

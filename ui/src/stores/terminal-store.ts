@@ -152,9 +152,7 @@ export const useTerminalStore = create<TerminalState>((set, get) => ({
     set((s) => ({
       terminalsByGroup: {
         ...s.terminalsByGroup,
-        [groupId]: (s.terminalsByGroup[groupId] || []).map((t) =>
-          t.id === id ? { ...t, status } : t
-        ),
+        [groupId]: (s.terminalsByGroup[groupId] || []).map((t) => (t.id === id ? { ...t, status } : t)),
       },
     })),
 

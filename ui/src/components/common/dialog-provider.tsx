@@ -1,4 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -7,7 +8,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { type Locale, useTranslation } from "@/lib/i18n";
 import { useSettingsStore } from "@/lib/settings";
@@ -29,8 +29,15 @@ interface DialogState {
 
 interface DialogContextType {
   alert: (title: string, message?: string) => Promise<void>;
-  confirm: (title: string, message?: string, options?: { confirmText?: string; cancelText?: string; confirmVariant?: "default" | "danger" }) => Promise<boolean>;
-  prompt: (title: string, options?: { defaultValue?: string; placeholder?: string; confirmText?: string; cancelText?: string }) => Promise<string | null>;
+  confirm: (
+    title: string,
+    message?: string,
+    options?: { confirmText?: string; cancelText?: string; confirmVariant?: "default" | "danger" }
+  ) => Promise<boolean>;
+  prompt: (
+    title: string,
+    options?: { defaultValue?: string; placeholder?: string; confirmText?: string; cancelText?: string }
+  ) => Promise<string | null>;
 }
 
 const DialogContext = createContext<DialogContextType | null>(null);
@@ -60,7 +67,11 @@ export const DialogProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   }, []);
 
   const confirm = useCallback(
-    (title: string, message?: string, options?: { confirmText?: string; cancelText?: string; confirmVariant?: "default" | "danger" }): Promise<boolean> => {
+    (
+      title: string,
+      message?: string,
+      options?: { confirmText?: string; cancelText?: string; confirmVariant?: "default" | "danger" }
+    ): Promise<boolean> => {
       return new Promise((resolve) => {
         setDialog({
           type: "confirm",
@@ -77,7 +88,10 @@ export const DialogProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   );
 
   const prompt = useCallback(
-    (title: string, options?: { defaultValue?: string; placeholder?: string; confirmText?: string; cancelText?: string }): Promise<string | null> => {
+    (
+      title: string,
+      options?: { defaultValue?: string; placeholder?: string; confirmText?: string; cancelText?: string }
+    ): Promise<string | null> => {
       setInputValue(options?.defaultValue || "");
       return new Promise((resolve) => {
         setDialog({

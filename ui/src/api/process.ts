@@ -68,8 +68,7 @@ export const processApi = {
 
   list: () => request<{ processes: ProcessInfo[] }>("/process"),
 
-  combined: (limit = 100, offset = 0) =>
-    request<CombinedStats>(`/system/combined?limit=${limit}&offset=${offset}`),
+  combined: (limit = 100, offset = 0) => request<CombinedStats>(`/system/combined?limit=${limit}&offset=${offset}`),
 
   detail: (pid: number) => request<ProcessInfo>(`/process/${pid}`),
 

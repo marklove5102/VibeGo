@@ -1,7 +1,7 @@
 import { DiffEditor } from "@monaco-editor/react";
 import { Columns2, Plus, Rows2, SquareCheck } from "lucide-react";
-import React, { useMemo, useRef, useState } from "react";
 import type * as Monaco from "monaco-editor";
+import React, { useMemo, useRef, useState } from "react";
 import "@/lib/monaco";
 import { useAppStore } from "@/stores/app-store";
 
@@ -19,14 +19,44 @@ const getLanguageFromFilename = (filename?: string): string => {
   if (!filename) return "plaintext";
   const ext = filename.split(".").pop()?.toLowerCase();
   const langMap: Record<string, string> = {
-    ts: "typescript", tsx: "typescript", js: "javascript", jsx: "javascript",
-    json: "json", md: "markdown", css: "css", scss: "scss", less: "less",
-    html: "html", xml: "xml", yaml: "yaml", yml: "yaml", py: "python",
-    go: "go", rs: "rust", java: "java", c: "c", cpp: "cpp", h: "c", hpp: "cpp",
-    sh: "shell", bash: "shell", sql: "sql", graphql: "graphql", vue: "vue",
-    svelte: "svelte", php: "php", rb: "ruby", swift: "swift", kt: "kotlin",
-    scala: "scala", lua: "lua", r: "r", toml: "toml", ini: "ini",
-    dockerfile: "dockerfile", makefile: "makefile",
+    ts: "typescript",
+    tsx: "typescript",
+    js: "javascript",
+    jsx: "javascript",
+    json: "json",
+    md: "markdown",
+    css: "css",
+    scss: "scss",
+    less: "less",
+    html: "html",
+    xml: "xml",
+    yaml: "yaml",
+    yml: "yaml",
+    py: "python",
+    go: "go",
+    rs: "rust",
+    java: "java",
+    c: "c",
+    cpp: "cpp",
+    h: "c",
+    hpp: "cpp",
+    sh: "shell",
+    bash: "shell",
+    sql: "sql",
+    graphql: "graphql",
+    vue: "vue",
+    svelte: "svelte",
+    php: "php",
+    rb: "ruby",
+    swift: "swift",
+    kt: "kotlin",
+    scala: "scala",
+    lua: "lua",
+    r: "r",
+    toml: "toml",
+    ini: "ini",
+    dockerfile: "dockerfile",
+    makefile: "makefile",
   };
   return langMap[ext || ""] || "plaintext";
 };
@@ -92,8 +122,10 @@ const DiffView: React.FC<DiffViewProps> = ({
       const o = origLines[i];
       const m = modLines[i];
       if (o !== m) {
-        if (o !== undefined && m !== undefined) { added++; removed++; }
-        else if (o === undefined) added++;
+        if (o !== undefined && m !== undefined) {
+          added++;
+          removed++;
+        } else if (o === undefined) added++;
         else removed++;
       }
     }
@@ -104,9 +136,7 @@ const DiffView: React.FC<DiffViewProps> = ({
     <div className="h-full flex flex-col bg-ide-bg">
       <div className="flex items-center justify-between px-3 py-1.5 border-b border-ide-border bg-ide-panel/50">
         <div className="flex items-center gap-2 min-w-0 flex-1">
-          <span className="text-xs text-ide-mute font-medium truncate">
-            {filename || "Diff View"}
-          </span>
+          <span className="text-xs text-ide-mute font-medium truncate">{filename || "Diff View"}</span>
           <span className="text-[10px] text-ide-mute/60 bg-ide-bg px-1.5 py-0.5 rounded shrink-0">
             {detectedLanguage}
           </span>
@@ -140,7 +170,9 @@ const DiffView: React.FC<DiffViewProps> = ({
           <button
             onClick={() => setRenderSideBySide(true)}
             className={`p-1.5 rounded transition-colors ${
-              renderSideBySide ? "bg-ide-accent/20 text-ide-accent" : "text-ide-mute hover:bg-ide-accent/10 hover:text-ide-text"
+              renderSideBySide
+                ? "bg-ide-accent/20 text-ide-accent"
+                : "text-ide-mute hover:bg-ide-accent/10 hover:text-ide-text"
             }`}
           >
             <Columns2 size={14} />
@@ -148,7 +180,9 @@ const DiffView: React.FC<DiffViewProps> = ({
           <button
             onClick={() => setRenderSideBySide(false)}
             className={`p-1.5 rounded transition-colors ${
-              !renderSideBySide ? "bg-ide-accent/20 text-ide-accent" : "text-ide-mute hover:bg-ide-accent/10 hover:text-ide-text"
+              !renderSideBySide
+                ? "bg-ide-accent/20 text-ide-accent"
+                : "text-ide-mute hover:bg-ide-accent/10 hover:text-ide-text"
             }`}
           >
             <Rows2 size={14} />

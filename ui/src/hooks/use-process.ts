@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { processApi, type CombinedStats, type ProcessInfo, type SystemStats } from "@/api/process";
+import { type CombinedStats, type ProcessInfo, processApi, type SystemStats } from "@/api/process";
 
 export const processKeys = {
   all: ["process"] as const,

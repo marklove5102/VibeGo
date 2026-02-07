@@ -1,4 +1,4 @@
-import { AlignLeft, Eye, EyeOff, Grid, List, Mail, Settings, User, WrapText, X, Clock } from "lucide-react";
+import { AlignLeft, Clock, Eye, EyeOff, Grid, List, Mail, Settings, User, WrapText, X } from "lucide-react";
 import React, { useEffect, useState } from "react";
 import { type Locale, useTranslation } from "@/lib/i18n";
 import { getSettingsByCategory, SETTING_CATEGORIES, type SettingSchema, useSettingsStore } from "@/lib/settings";
@@ -151,17 +151,17 @@ const SettingsPage: React.FC = () => {
       centerContent: (
         <div className="flex items-center gap-2 overflow-x-auto no-scrollbar touch-pan-x h-full">
           {SETTING_CATEGORIES.map((cat) => (
-              <div
-                key={cat.key}
-                onClick={() => setActiveTab(cat.key)}
-                className={`shrink-0 px-2 h-7 rounded-md flex items-center gap-1 text-xs border transition-all cursor-pointer ${
-                  activeTab === cat.key
-                    ? "bg-ide-panel border-ide-accent text-ide-accent border-b-2 shadow-sm"
-                    : "bg-transparent border-transparent text-ide-mute hover:bg-ide-panel hover:text-ide-text"
-                }`}
-              >
-                <span className="font-medium">{t(cat.labelKey)}</span>
-              </div>
+            <div
+              key={cat.key}
+              onClick={() => setActiveTab(cat.key)}
+              className={`shrink-0 px-2 h-7 rounded-md flex items-center gap-1 text-xs border transition-all cursor-pointer ${
+                activeTab === cat.key
+                  ? "bg-ide-panel border-ide-accent text-ide-accent border-b-2 shadow-sm"
+                  : "bg-transparent border-transparent text-ide-mute hover:bg-ide-panel hover:text-ide-text"
+              }`}
+            >
+              <span className="font-medium">{t(cat.labelKey)}</span>
+            </div>
           ))}
         </div>
       ),

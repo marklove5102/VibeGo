@@ -1,4 +1,15 @@
-import { AlertTriangle, Archive, Check, ChevronDown, ChevronRight, Square, SquareCheck, Undo2, ArrowUp, X } from "lucide-react";
+import {
+  AlertTriangle,
+  Archive,
+  ArrowUp,
+  Check,
+  ChevronDown,
+  ChevronRight,
+  Square,
+  SquareCheck,
+  Undo2,
+  X,
+} from "lucide-react";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import type { StashEntry } from "@/api/git";
 import { getTranslation, type Locale } from "@/lib/i18n";
@@ -26,23 +37,37 @@ interface GitChangesViewProps {
 
 const getStatusColor = (status: string) => {
   switch (status) {
-    case "modified": return "text-yellow-500";
-    case "added": case "untracked": return "text-green-500";
-    case "deleted": return "text-red-500";
-    case "renamed": case "copied": return "text-blue-500";
-    default: return "text-ide-mute";
+    case "modified":
+      return "text-yellow-500";
+    case "added":
+    case "untracked":
+      return "text-green-500";
+    case "deleted":
+      return "text-red-500";
+    case "renamed":
+    case "copied":
+      return "text-blue-500";
+    default:
+      return "text-ide-mute";
   }
 };
 
 const getStatusLabel = (status: string) => {
   switch (status) {
-    case "modified": return "M";
-    case "added": return "A";
-    case "deleted": return "D";
-    case "renamed": return "R";
-    case "copied": return "C";
-    case "untracked": return "U";
-    default: return "?";
+    case "modified":
+      return "M";
+    case "added":
+      return "A";
+    case "deleted":
+      return "D";
+    case "renamed":
+      return "R";
+    case "copied":
+      return "C";
+    case "untracked":
+      return "U";
+    default:
+      return "?";
   }
 };
 
@@ -66,9 +91,19 @@ const GitChangesView: React.FC<GitChangesViewProps> = ({
 }) => {
   const t = (key: string) => getTranslation(locale, key);
   const {
-    summary, description, isAmend, showPostCommit, lastCommitHash,
-    setSummary, setDescription, setIsAmend,
-    commitSelected, amendCommit, undoLastCommit, gitPush, dismissPostCommit,
+    summary,
+    description,
+    isAmend,
+    showPostCommit,
+    lastCommitHash,
+    setSummary,
+    setDescription,
+    setIsAmend,
+    commitSelected,
+    amendCommit,
+    undoLastCommit,
+    gitPush,
+    dismissPostCommit,
   } = useGitStore();
 
   const [showStashes, setShowStashes] = useState(false);
@@ -170,7 +205,10 @@ const GitChangesView: React.FC<GitChangesViewProps> = ({
                     className="flex items-center gap-2 px-3 py-1.5 hover:bg-ide-accent/10 cursor-pointer group transition-colors"
                   >
                     <div
-                      onClick={(e) => { e.stopPropagation(); onToggleFile(file.path); }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onToggleFile(file.path);
+                      }}
                       className="shrink-0"
                     >
                       {checked ? (
@@ -182,10 +220,7 @@ const GitChangesView: React.FC<GitChangesViewProps> = ({
                     <span className={`w-4 text-center font-bold text-[10px] shrink-0 ${getStatusColor(file.status)}`}>
                       {getStatusLabel(file.status)}
                     </span>
-                    <div
-                      className="flex-1 min-w-0 flex flex-col"
-                      onClick={() => onFileClick(file.path)}
-                    >
+                    <div className="flex-1 min-w-0 flex flex-col" onClick={() => onFileClick(file.path)}>
                       <span className="text-xs text-ide-text truncate leading-tight">{file.name}</span>
                       {file.path !== file.name && (
                         <span className="text-[10px] text-ide-mute/70 truncate leading-tight">{file.path}</span>
@@ -193,7 +228,10 @@ const GitChangesView: React.FC<GitChangesViewProps> = ({
                     </div>
                     <button
                       className="p-1 hover:bg-purple-500/20 rounded text-ide-mute hover:text-purple-400 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
-                      onClick={(e) => { e.stopPropagation(); onStash(undefined, [file.path]); }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onStash(undefined, [file.path]);
+                      }}
                       title={t("git.stashFile")}
                     >
                       <Archive size={12} />
@@ -201,7 +239,10 @@ const GitChangesView: React.FC<GitChangesViewProps> = ({
                     {file.status !== "untracked" && (
                       <button
                         className="p-1 hover:bg-red-500/20 rounded text-ide-mute hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
-                        onClick={(e) => { e.stopPropagation(); handleDiscardClick(file.path); }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDiscardClick(file.path);
+                        }}
                       >
                         <X size={12} />
                       </button>
@@ -221,10 +262,16 @@ const GitChangesView: React.FC<GitChangesViewProps> = ({
             onClick={() => setShowStashes(!showStashes)}
           >
             <div className="flex items-center gap-1">
-              {showStashes ? <ChevronDown size={12} className="text-ide-mute" /> : <ChevronRight size={12} className="text-ide-mute" />}
+              {showStashes ? (
+                <ChevronDown size={12} className="text-ide-mute" />
+              ) : (
+                <ChevronRight size={12} className="text-ide-mute" />
+              )}
               <span className="text-[10px] font-bold text-ide-mute uppercase">{t("git.stashes")}</span>
             </div>
-            <span className="text-[10px] bg-purple-500/20 text-purple-400 px-1.5 py-0.5 rounded">{safeStashes.length}</span>
+            <span className="text-[10px] bg-purple-500/20 text-purple-400 px-1.5 py-0.5 rounded">
+              {safeStashes.length}
+            </span>
           </div>
           {showStashes && (
             <div>
@@ -233,8 +280,18 @@ const GitChangesView: React.FC<GitChangesViewProps> = ({
                   <Archive size={12} className="text-purple-400 shrink-0" />
                   <span className="flex-1 text-[10px] text-ide-text truncate">{s.message}</span>
                   <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button className="px-1.5 py-0.5 text-[10px] bg-green-500/20 text-green-400 rounded hover:bg-green-500/30" onClick={() => onStashPop(s.index)}>{t("git.pop")}</button>
-                    <button className="px-1.5 py-0.5 text-[10px] bg-red-500/20 text-red-400 rounded hover:bg-red-500/30" onClick={() => onStashDrop(s.index)}>{t("git.drop")}</button>
+                    <button
+                      className="px-1.5 py-0.5 text-[10px] bg-green-500/20 text-green-400 rounded hover:bg-green-500/30"
+                      onClick={() => onStashPop(s.index)}
+                    >
+                      {t("git.pop")}
+                    </button>
+                    <button
+                      className="px-1.5 py-0.5 text-[10px] bg-red-500/20 text-red-400 rounded hover:bg-red-500/30"
+                      onClick={() => onStashDrop(s.index)}
+                    >
+                      {t("git.drop")}
+                    </button>
                   </div>
                 </div>
               ))}
@@ -287,10 +344,7 @@ const GitChangesView: React.FC<GitChangesViewProps> = ({
             className="w-full bg-ide-bg border border-ide-border rounded px-3 py-2 text-xs text-ide-text focus:outline-none focus:border-ide-accent min-h-[48px] resize-none placeholder-ide-mute/50"
           />
         ) : (
-          <button
-            className="text-[10px] text-ide-mute hover:text-ide-accent"
-            onClick={() => setShowDescription(true)}
-          >
+          <button className="text-[10px] text-ide-mute hover:text-ide-accent" onClick={() => setShowDescription(true)}>
             + {t("git.descriptionPlaceholder")}
           </button>
         )}
@@ -318,17 +372,35 @@ const GitChangesView: React.FC<GitChangesViewProps> = ({
       </div>
 
       {discardConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setDiscardConfirm(null)}>
-          <div className="bg-ide-bg border border-ide-border rounded-lg shadow-xl w-80 p-4" onClick={(e) => e.stopPropagation()}>
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+          onClick={() => setDiscardConfirm(null)}
+        >
+          <div
+            className="bg-ide-bg border border-ide-border rounded-lg shadow-xl w-80 p-4"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex items-center gap-2 mb-3">
               <AlertTriangle size={20} className="text-red-400" />
               <span className="text-sm font-medium text-ide-text">{t("git.discardConfirm")}</span>
             </div>
-            <p className="text-xs text-ide-mute mb-2 font-mono bg-ide-panel px-2 py-1 rounded truncate">{discardConfirm}</p>
+            <p className="text-xs text-ide-mute mb-2 font-mono bg-ide-panel px-2 py-1 rounded truncate">
+              {discardConfirm}
+            </p>
             <p className="text-xs text-red-400 mb-4">{t("git.discardWarning")}</p>
             <div className="flex gap-2">
-              <button onClick={() => setDiscardConfirm(null)} className="flex-1 px-3 py-1.5 text-sm text-ide-mute hover:text-ide-text border border-ide-border rounded">{t("git.cancel")}</button>
-              <button onClick={handleConfirmDiscard} className="flex-1 px-3 py-1.5 text-sm bg-red-500 text-white rounded hover:bg-red-600">{t("git.confirm")}</button>
+              <button
+                onClick={() => setDiscardConfirm(null)}
+                className="flex-1 px-3 py-1.5 text-sm text-ide-mute hover:text-ide-text border border-ide-border rounded"
+              >
+                {t("git.cancel")}
+              </button>
+              <button
+                onClick={handleConfirmDiscard}
+                className="flex-1 px-3 py-1.5 text-sm bg-red-500 text-white rounded hover:bg-red-600"
+              >
+                {t("git.confirm")}
+              </button>
             </div>
           </div>
         </div>

@@ -270,7 +270,15 @@ const App: React.FC = () => {
     switch (currentPage.type) {
       case "git":
         if (activeTabId === null) {
-          return <GitView path={pagePath} locale={locale} onFileDiff={handleGitDiff} onConflict={handleConflict} isActive={true} />;
+          return (
+            <GitView
+              path={pagePath}
+              locale={locale}
+              onFileDiff={handleGitDiff}
+              onConflict={handleConflict}
+              isActive={true}
+            />
+          );
         }
         if (activeTab?.data?.type === "diff") {
           return (
@@ -351,7 +359,12 @@ const App: React.FC = () => {
 
   return (
     <>
-      <AppFrame onMenuOpen={() => setMenuOpen(true)} onTabAction={handleTabAction} onBackToList={handleBackToList} onNewPage={() => setNewPageMenuOpen(true)}>
+      <AppFrame
+        onMenuOpen={() => setMenuOpen(true)}
+        onTabAction={handleTabAction}
+        onBackToList={handleBackToList}
+        onNewPage={() => setNewPageMenuOpen(true)}
+      >
         {renderContent()}
       </AppFrame>
       <ProjectMenu

@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowUp, CloudUpload, GitBranch, GitGraph, History, FileText, RefreshCw } from "lucide-react";
+import { ArrowDown, ArrowUp, CloudUpload, FileText, GitBranch, GitGraph, History, RefreshCw } from "lucide-react";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { GitCommit } from "@/api/git";
 import { gitApi } from "@/api/git";
@@ -88,7 +88,19 @@ const GitView: React.FC<GitViewProps> = ({ path, locale, onFileDiff, onConflict,
       fetchStashes();
       fetchConflicts();
     }
-  }, [path, currentRepoPath, setCurrentPath, reset, fetchStatus, fetchLog, fetchBranches, fetchRemotes, fetchBranchStatus, fetchStashes, fetchConflicts]);
+  }, [
+    path,
+    currentRepoPath,
+    setCurrentPath,
+    reset,
+    fetchStatus,
+    fetchLog,
+    fetchBranches,
+    fetchRemotes,
+    fetchBranchStatus,
+    fetchStashes,
+    fetchConflicts,
+  ]);
 
   useEffect(() => {
     if (!path || !isActive) return;
@@ -114,8 +126,10 @@ const GitView: React.FC<GitViewProps> = ({ path, locale, onFileDiff, onConflict,
 
   const smartAction = useMemo(() => {
     if (!hasRemote) return { label: t("git.publish"), icon: <CloudUpload size={14} />, action: gitPush };
-    if (behindCount > 0) return { label: `${t("git.pull")} (${behindCount})`, icon: <ArrowDown size={14} />, action: gitPull };
-    if (aheadCount > 0) return { label: `${t("git.push")} (${aheadCount})`, icon: <ArrowUp size={14} />, action: gitPush };
+    if (behindCount > 0)
+      return { label: `${t("git.pull")} (${behindCount})`, icon: <ArrowDown size={14} />, action: gitPull };
+    if (aheadCount > 0)
+      return { label: `${t("git.push")} (${aheadCount})`, icon: <ArrowUp size={14} />, action: gitPush };
     return { label: t("git.fetch"), icon: <RefreshCw size={14} />, action: gitFetch };
   }, [hasRemote, aheadCount, behindCount, gitPull, gitPush, gitFetch, t]);
 
@@ -123,9 +137,7 @@ const GitView: React.FC<GitViewProps> = ({ path, locale, onFileDiff, onConflict,
     if (!isActive) return null;
     return {
       show: true,
-      leftButtons: [
-        { icon: <GitGraph size={18} /> },
-      ],
+      leftButtons: [{ icon: <GitGraph size={18} /> }],
       centerContent: (
         <div className="flex items-center gap-1 h-full">
           <div
@@ -218,8 +230,18 @@ const GitView: React.FC<GitViewProps> = ({ path, locale, onFileDiff, onConflict,
             <span className="truncate max-w-[120px]">{currentBranch || "branch"}</span>
             {(aheadCount > 0 || behindCount > 0) && (
               <span className="flex items-center gap-1 shrink-0">
-                {aheadCount > 0 && <span className="text-[10px] text-blue-400">{aheadCount}<ArrowUp size={8} className="inline" /></span>}
-                {behindCount > 0 && <span className="text-[10px] text-orange-400">{behindCount}<ArrowDown size={8} className="inline" /></span>}
+                {aheadCount > 0 && (
+                  <span className="text-[10px] text-blue-400">
+                    {aheadCount}
+                    <ArrowUp size={8} className="inline" />
+                  </span>
+                )}
+                {behindCount > 0 && (
+                  <span className="text-[10px] text-orange-400">
+                    {behindCount}
+                    <ArrowDown size={8} className="inline" />
+                  </span>
+                )}
               </span>
             )}
           </button>

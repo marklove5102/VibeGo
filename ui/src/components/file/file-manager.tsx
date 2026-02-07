@@ -202,20 +202,26 @@ const FileManager: React.FC<FileManagerProps> = ({ initialPath = ".", onFileOpen
     }
   }, [dialog, t, currentPath, loadFiles, setError]);
 
-  const handleShowRenameDialog = useCallback(async (file: FileItem) => {
-    const name = await dialog.prompt(t("common.rename"), { defaultValue: file.name, placeholder: t("fileManager.enterName") });
-    if (name?.trim() && name !== file.name) {
-      const dir = file.path.substring(0, file.path.lastIndexOf("/"));
-      const newPath = `${dir}/${name}`;
-      try {
-        await fileApi.rename(file.path, newPath);
-        setDetailFile(null);
-        loadFiles(currentPath);
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "Failed to rename");
+  const handleShowRenameDialog = useCallback(
+    async (file: FileItem) => {
+      const name = await dialog.prompt(t("common.rename"), {
+        defaultValue: file.name,
+        placeholder: t("fileManager.enterName"),
+      });
+      if (name?.trim() && name !== file.name) {
+        const dir = file.path.substring(0, file.path.lastIndexOf("/"));
+        const newPath = `${dir}/${name}`;
+        try {
+          await fileApi.rename(file.path, newPath);
+          setDetailFile(null);
+          loadFiles(currentPath);
+        } catch (e) {
+          setError(e instanceof Error ? e.message : "Failed to rename");
+        }
       }
-    }
-  }, [dialog, t, currentPath, loadFiles, setError, setDetailFile]);
+    },
+    [dialog, t, currentPath, loadFiles, setError, setDetailFile]
+  );
 
   useEffect(() => {
     setPageMenuItems([
@@ -253,13 +259,11 @@ const FileManager: React.FC<FileManagerProps> = ({ initialPath = ".", onFileOpen
 
   const handleRefresh = () => loadFiles(currentPath);
 
-
   const handleDelete = async (file: FileItem) => {
-    const confirmed = await dialog.confirm(
-      t("dialog.deleteFile").replace("{name}", file.name),
-      undefined,
-      { confirmVariant: "danger", confirmText: t("common.delete") }
-    );
+    const confirmed = await dialog.confirm(t("dialog.deleteFile").replace("{name}", file.name), undefined, {
+      confirmVariant: "danger",
+      confirmText: t("common.delete"),
+    });
     if (!confirmed) return;
     try {
       await fileApi.delete(file.path);
