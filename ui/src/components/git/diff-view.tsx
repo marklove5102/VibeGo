@@ -1,11 +1,8 @@
-import { DiffEditor } from "@monaco-editor/react";
-import { Columns2, Rows2, Square, SquareCheck, SquareMinus } from "lucide-react";
-import React, { useMemo, useRef, useState } from "react";
+import { Square, SquareCheck, SquareMinus } from "lucide-react";
+import React, { useMemo } from "react";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { type GitDiffHunk, type GitDiffRow, type GitSelectionType, parseGitDiff } from "@/lib/git-diff";
-import "@/lib/monaco";
 import { useGitStore } from "@/stores";
-import { useAppStore } from "@/stores/app-store";
 
 interface DiffViewProps {
   original: string;
@@ -94,19 +91,28 @@ const getRowSelectionType = (row: GitDiffRow, selectedRowIds: Set<string>): GitS
   return selectedRowIds.has(row.id) ? "all" : "none";
 };
 
-const getSelectionSurfaceClassName = (row: GitDiffRow, selected: boolean) => {
+const getSelectionSurfaceClassName = (row: GitDiffRow, selected: boolean, interactive: boolean) => {
   if (row.type === "added") {
+    if (!interactive) {
+      return "bg-green-500/20";
+    }
     return selected ? "bg-green-500/12 hover:bg-green-500/18" : "bg-green-500/5 hover:bg-green-500/10";
   }
   if (row.type === "removed") {
+    if (!interactive) {
+      return "bg-red-500/20";
+    }
     return selected ? "bg-red-500/12 hover:bg-red-500/18" : "bg-red-500/5 hover:bg-red-500/10";
   }
-  return "bg-ide-bg hover:bg-ide-panel/40";
+  return interactive ? "bg-ide-bg hover:bg-ide-panel/40" : "bg-ide-bg";
 };
 
-const getSelectionClassName = (row: GitDiffRow, selected: boolean) => {
-  const surfaceClassName = getSelectionSurfaceClassName(row, selected);
+const getSelectionClassName = (row: GitDiffRow, selected: boolean, interactive: boolean) => {
+  const surfaceClassName = getSelectionSurfaceClassName(row, selected, interactive);
   if (row.type === "added" || row.type === "removed") {
+    if (!interactive) {
+      return `${surfaceClassName} text-ide-text`;
+    }
     return selected ? surfaceClassName : `${surfaceClassName} text-ide-mute/80`;
   }
   return surfaceClassName;
@@ -120,16 +126,12 @@ const DiffView: React.FC<DiffViewProps> = ({
   language,
   allowSelection = false,
 }) => {
-  const appTheme = useAppStore((state) => state.theme);
   const checkedFiles = useGitStore((state) => state.checkedFiles);
-  const isMobile = useIsMobile();
   const partialSelection = useGitStore((state) => (filePath ? state.partialSelections[filePath] : undefined));
   const setPartialSelection = useGitStore((state) => state.setPartialSelection);
   const toggleFile = useGitStore((state) => state.toggleFile);
-  const [renderSideBySide, setRenderSideBySide] = useState(false);
-  const modelIdRef = useRef(`git-diff-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+  const isMobile = useIsMobile();
 
-  const editorTheme = useMemo(() => (appTheme === "light" ? "light" : "vs-dark"), [appTheme]);
   const detectedLanguage = useMemo(() => language || getLanguageFromFilename(filename), [language, filename]);
   const parsedDiff = useMemo(() => parseGitDiff(original, modified), [original, modified]);
   const diffStats = useMemo(() => {
@@ -174,11 +176,12 @@ const DiffView: React.FC<DiffViewProps> = ({
     ]);
     return Math.max(24, ...lineLengths);
   }, [isMobile, parsedDiff.hunks]);
+
   const diffContentWrapperClassName = isMobile ? "min-w-full" : "";
   const diffContentWrapperStyle = isMobile ? { minWidth: `calc(${maxMobileContentColumns}ch + 60px)` } : undefined;
   const diffRowClassName = isMobile
-    ? "w-full flex items-stretch text-left transition-colors"
-    : "w-full grid grid-cols-[26px_56px_56px_minmax(0,1fr)] items-start gap-2 px-2 py-0.5 text-left transition-colors";
+    ? `w-full flex items-stretch transition-colors ${interactive ? "text-left" : "select-text"}`
+    : `w-full grid grid-cols-[26px_56px_56px_minmax(0,1fr)] items-start gap-2 px-2 py-0.5 transition-colors ${interactive ? "text-left" : "select-text"}`;
   const diffLeftPaneClassName = isMobile
     ? "sticky left-0 z-10 flex shrink-0 self-stretch items-center gap-0 border-r border-ide-border bg-inherit px-0.5"
     : "contents";
@@ -236,97 +239,27 @@ const DiffView: React.FC<DiffViewProps> = ({
     setPartialSelection(filePath, Array.from(nextSelectedRowIds), parsedDiff.selectableRowIds);
   };
 
-  if (!interactive) {
-    return (
-      <div className="h-full flex flex-col bg-ide-bg">
-        <div className="flex items-center justify-between px-3 py-1.5 border-b border-ide-border bg-ide-panel/50">
-          <div className="flex items-center gap-2 min-w-0 flex-1">
-            <span className="text-xs text-ide-mute font-medium truncate">{filename || "Diff View"}</span>
-            <span className="text-[10px] text-ide-mute/60 bg-ide-bg px-1.5 py-0.5 rounded shrink-0">
-              {detectedLanguage}
-            </span>
-            {(diffStats.added > 0 || diffStats.removed > 0) && (
-              <span className="text-[10px] shrink-0">
-                {diffStats.added > 0 && <span className="text-green-400">+{diffStats.added}</span>}
-                {diffStats.added > 0 && diffStats.removed > 0 && <span className="text-ide-mute mx-0.5">/</span>}
-                {diffStats.removed > 0 && <span className="text-red-400">-{diffStats.removed}</span>}
-              </span>
-            )}
-          </div>
-          <div className="flex items-center gap-1 shrink-0">
-            <button
-              onClick={() => setRenderSideBySide(true)}
-              className={`p-1.5 rounded transition-colors ${
-                renderSideBySide
-                  ? "bg-ide-accent/20 text-ide-accent"
-                  : "text-ide-mute hover:bg-ide-accent/10 hover:text-ide-text"
-              }`}
-            >
-              <Columns2 size={14} />
-            </button>
-            <button
-              onClick={() => setRenderSideBySide(false)}
-              className={`p-1.5 rounded transition-colors ${
-                !renderSideBySide
-                  ? "bg-ide-accent/20 text-ide-accent"
-                  : "text-ide-mute hover:bg-ide-accent/10 hover:text-ide-text"
-              }`}
-            >
-              <Rows2 size={14} />
-            </button>
-          </div>
-        </div>
-        <div className="flex-1 overflow-hidden">
-          <DiffEditor
-            original={original}
-            modified={modified}
-            language={detectedLanguage}
-            theme={editorTheme}
-            keepCurrentOriginalModel={true}
-            keepCurrentModifiedModel={true}
-            originalModelPath={`${modelIdRef.current}-original`}
-            modifiedModelPath={`${modelIdRef.current}-modified`}
-            options={{
-              readOnly: true,
-              renderSideBySide,
-              originalEditable: false,
-              minimap: { enabled: false },
-              scrollBeyondLastLine: false,
-              fontSize: 13,
-              lineNumbers: "on",
-              wordWrap: isMobile ? "off" : "on",
-              automaticLayout: true,
-              renderOverviewRuler: false,
-              diffWordWrap: isMobile ? "off" : "on",
-              ignoreTrimWhitespace: false,
-              renderIndicators: true,
-              renderLineHighlight: "none",
-              scrollbar: { verticalScrollbarSize: 8, horizontalScrollbarSize: 8 },
-            }}
-          />
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="h-full flex flex-col bg-ide-bg">
       <div className="flex items-center justify-between px-3 py-1.5 border-b border-ide-border bg-ide-panel/50 gap-3">
         <div className="flex items-center gap-2 min-w-0 flex-1">
-          <button
-            className="shrink-0"
-            onClick={() => {
-              if (filePath) {
-                toggleFile(filePath);
-              }
-            }}
-          >
-            {getSelectionIcon(
-              fileSelectionType,
-              16,
-              fileSelectionType === "none" ? "text-ide-mute" : "text-ide-accent"
-            )}
-          </button>
+          {interactive && (
+            <button
+              type="button"
+              className="shrink-0"
+              onClick={() => {
+                if (filePath) {
+                  toggleFile(filePath);
+                }
+              }}
+            >
+              {getSelectionIcon(
+                fileSelectionType,
+                16,
+                fileSelectionType === "none" ? "text-ide-mute" : "text-ide-accent"
+              )}
+            </button>
+          )}
           <span className="text-xs text-ide-text font-medium truncate">{filePath || filename || "Diff View"}</span>
           <span className="text-[10px] text-ide-mute/60 bg-ide-bg px-1.5 py-0.5 rounded shrink-0">
             {detectedLanguage}
@@ -339,9 +272,11 @@ const DiffView: React.FC<DiffViewProps> = ({
             </span>
           )}
         </div>
-        <div className="text-[10px] text-ide-mute shrink-0">
-          {selectedRowIds.size}/{parsedDiff.selectableRowIds.length}
-        </div>
+        {interactive && (
+          <div className="text-[10px] text-ide-mute shrink-0">
+            {selectedRowIds.size}/{parsedDiff.selectableRowIds.length}
+          </div>
+        )}
       </div>
 
       <div className={diffBodyClassName} style={isMobile ? { overscrollBehaviorX: "contain" } : undefined}>
@@ -349,61 +284,79 @@ const DiffView: React.FC<DiffViewProps> = ({
           <div className="h-full flex items-center justify-center text-ide-mute">No changes</div>
         ) : (
           <div className={diffContentWrapperClassName} style={diffContentWrapperStyle}>
-            {parsedDiff.hunks.map((hunk) => {
-              return (
-                <div key={hunk.id} className="border-b border-ide-border/60 last:border-b-0">
-                  <div
-                    className={hunkHeaderClassName}
-                    onClick={() => {
-                      if (isMobile && interactive) {
-                        handleHunkToggle(hunk);
-                      }
-                    }}
-                  >
-                    <div className={hunkHeaderLeftClassName}>
-                      <span className={diffCheckboxClassName} />
-                      <span className={diffLineNumberClassName} />
-                      <span className={diffLineNumberClassName} />
-                    </div>
-                    <span className={hunkHeaderTextClassName}>{hunk.header}</span>
+            {parsedDiff.hunks.map((hunk) => (
+              <div key={hunk.id} className="border-b border-ide-border/60 last:border-b-0">
+                <div
+                  className={hunkHeaderClassName}
+                  onClick={() => {
+                    if (isMobile && interactive) {
+                      handleHunkToggle(hunk);
+                    }
+                  }}
+                >
+                  <div className={hunkHeaderLeftClassName}>
+                    <span className={diffCheckboxClassName} />
+                    <span className={diffLineNumberClassName} />
+                    <span className={diffLineNumberClassName} />
                   </div>
+                  <span className={hunkHeaderTextClassName}>{hunk.header}</span>
+                </div>
 
-                  {hunk.rows
-                    .filter((row) => row.type !== "hunk")
-                    .map((row) => {
-                      const rowSelectionType = getRowSelectionType(row, selectedRowIds);
-                      const selected = rowSelectionType === "all";
+                {hunk.rows
+                  .filter((row) => row.type !== "hunk")
+                  .map((row) => {
+                    const rowSelectionType = getRowSelectionType(row, selectedRowIds);
+                    const selected = rowSelectionType === "all";
+                    const rowContent = (
+                      <>
+                        <div
+                          className={`${diffLeftPaneClassName} ${getSelectionSurfaceClassName(row, selected, interactive)}`}
+                        >
+                          <span className={diffCheckboxClassName}>
+                            {interactive && row.selectable
+                              ? getSelectionIcon(rowSelectionType, 13, selected ? "text-ide-accent" : "text-ide-mute")
+                              : null}
+                          </span>
+                          <span className={diffLineNumberClassName}>{row.oldLineNumber ?? ""}</span>
+                          <span className={diffLineNumberClassName}>{row.newLineNumber ?? ""}</span>
+                        </div>
+                        <span className={diffContentClassName}>
+                          <span className={diffPrefixClassName}>
+                            {row.type === "added" ? "+" : row.type === "removed" ? "-" : " "}
+                          </span>
+                          <span>{row.content || " "}</span>
+                        </span>
+                      </>
+                    );
+
+                    if (interactive) {
                       return (
                         <button
+                          type="button"
                           key={row.id}
-                          className={`${diffRowClassName} ${getSelectionClassName(row, selected)}`}
+                          className={`${diffRowClassName} ${getSelectionClassName(row, selected, interactive)}`}
                           onClick={() => {
                             if (row.selectable) {
                               handleRowToggle(row.id);
                             }
                           }}
                         >
-                          <div className={`${diffLeftPaneClassName} ${getSelectionSurfaceClassName(row, selected)}`}>
-                            <span className={diffCheckboxClassName}>
-                              {row.selectable
-                                ? getSelectionIcon(rowSelectionType, 13, selected ? "text-ide-accent" : "text-ide-mute")
-                                : null}
-                            </span>
-                            <span className={diffLineNumberClassName}>{row.oldLineNumber ?? ""}</span>
-                            <span className={diffLineNumberClassName}>{row.newLineNumber ?? ""}</span>
-                          </div>
-                          <span className={diffContentClassName}>
-                            <span className={diffPrefixClassName}>
-                              {row.type === "added" ? "+" : row.type === "removed" ? "-" : " "}
-                            </span>
-                            <span>{row.content || " "}</span>
-                          </span>
+                          {rowContent}
                         </button>
                       );
-                    })}
-                </div>
-              );
-            })}
+                    }
+
+                    return (
+                      <div
+                        key={row.id}
+                        className={`${diffRowClassName} ${getSelectionClassName(row, selected, interactive)}`}
+                      >
+                        {rowContent}
+                      </div>
+                    );
+                  })}
+              </div>
+            ))}
           </div>
         )}
       </div>
