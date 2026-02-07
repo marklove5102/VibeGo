@@ -36,7 +36,6 @@ jobs:
     needs: meta
     runs-on: ubuntu-latest
     permissions:
-      id-token: write
       contents: read
 
     steps:
@@ -72,18 +71,24 @@ jobs:
       - name: Publish to npm
         env:
           VERSION: ${{ needs.meta.outputs.version }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           set -euo pipefail
 
           publish_one() {
             file="$1"
+            access="$2"
             if [ ! -f "$file" ]; then
               echo "missing tarball: $file"
               exit 1
             fi
 
             set +e
-            out=$(npm publish "$file" --provenance 2>&1)
+            if [ -n "$access" ]; then
+              out=$(npm publish "$file" --provenance --access "$access" 2>&1)
+            else
+              out=$(npm publish "$file" --provenance 2>&1)
+            fi
             status=$?
             set -e
 
@@ -101,9 +106,9 @@ jobs:
 
           platforms=(linux-x64 linux-arm64 darwin-x64 darwin-arm64 win32-x64 win32-arm64)
           for platform in "${platforms[@]}"; do
-            publish_one "dist/npm/vibego-npm-${platform}-${VERSION}.tgz"
+            publish_one "dist/npm/vibego-npm-${platform}-${VERSION}.tgz" "public"
           done
-          publish_one "dist/npm/vibego-npm-${VERSION}.tgz"
+          publish_one "dist/npm/vibego-npm-${VERSION}.tgz" ""
 
   smoke-test:
     if: ${{ needs.meta.outputs.should_publish_npm == 'true' }}
