@@ -49,6 +49,59 @@ func (h *GitHandler) getGitAuthor() (string, string) {
 	return author, email
 }
 
+func gitCommandError(err error, output []byte) error {
+	msg := strings.TrimSpace(string(output))
+	if msg == "" {
+		msg = err.Error()
+	}
+	return fmt.Errorf("%s", msg)
+}
+
+func buildCommitMessageArgs(summary, description string) []string {
+	args := []string{"-m", summary}
+	if strings.TrimSpace(description) != "" {
+		args = append(args, "-m", description)
+	}
+	return args
+}
+
+func (h *GitHandler) commitOnlySelectedFiles(repoRoot string, files []string, summary, description, author, email string, amend bool) (string, error) {
+	addArgs := append([]string{"add", "--"}, files...)
+	addCmd := exec.Command("git", addArgs...)
+	addCmd.Dir = repoRoot
+	if output, err := addCmd.CombinedOutput(); err != nil {
+		return "", gitCommandError(err, output)
+	}
+
+	commitArgs := []string{"-c", "user.name=" + author, "-c", "user.email=" + email, "commit", "--only"}
+	if amend {
+		commitArgs = append(commitArgs, "--amend")
+	}
+	commitArgs = append(commitArgs, buildCommitMessageArgs(summary, description)...)
+	commitArgs = append(commitArgs, "--")
+	commitArgs = append(commitArgs, files...)
+
+	commitCmd := exec.Command("git", commitArgs...)
+	commitCmd.Dir = repoRoot
+	commitCmd.Env = append(os.Environ(),
+		"GIT_AUTHOR_NAME="+author,
+		"GIT_AUTHOR_EMAIL="+email,
+		"GIT_COMMITTER_NAME="+author,
+		"GIT_COMMITTER_EMAIL="+email,
+	)
+	if output, err := commitCmd.CombinedOutput(); err != nil {
+		return "", gitCommandError(err, output)
+	}
+
+	hashCmd := exec.Command("git", "rev-parse", "HEAD")
+	hashCmd.Dir = repoRoot
+	output, err := hashCmd.Output()
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(output)), nil
+}
+
 func (h *GitHandler) Register(r *gin.RouterGroup) {
 	g := r.Group("/git")
 	g.POST("/init", h.Init)
@@ -740,14 +793,39 @@ func (h *GitHandler) CommitSelected(c *gin.Context) {
 		return
 	}
 
-	head, err := repo.Head()
-	if err == nil {
-		_ = w.Reset(&git.ResetOptions{Commit: head.Hash(), Mode: git.MixedReset})
-	}
-
 	if len(req.Files) == 0 && len(req.Patches) == 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "no selected changes"})
 		return
+	}
+
+	repoRoot, err := h.getRepoRoot(req.Path)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	author, email := h.getGitAuthor()
+	if req.Author != "" {
+		author = req.Author
+	}
+	if req.Email != "" {
+		email = req.Email
+	}
+
+	if len(req.Patches) == 0 {
+		hash, err := h.commitOnlySelectedFiles(repoRoot, req.Files, req.Summary, req.Description, author, email, false)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		bs := collectBranchStatus(repoRoot)
+		c.JSON(http.StatusOK, gin.H{"ok": true, "hash": hash, "branchStatus": bs})
+		return
+	}
+
+	head, err := repo.Head()
+	if err == nil {
+		_ = w.Reset(&git.ResetOptions{Commit: head.Hash(), Mode: git.MixedReset})
 	}
 
 	for _, file := range req.Files {
@@ -755,12 +833,6 @@ func (h *GitHandler) CommitSelected(c *gin.Context) {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to add " + file + ": " + err.Error()})
 			return
 		}
-	}
-
-	repoRoot, err := h.getRepoRoot(req.Path)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
 	}
 
 	for _, patch := range req.Patches {
@@ -773,14 +845,6 @@ func (h *GitHandler) CommitSelected(c *gin.Context) {
 	message := req.Summary
 	if req.Description != "" {
 		message += "\n\n" + req.Description
-	}
-
-	author, email := h.getGitAuthor()
-	if req.Author != "" {
-		author = req.Author
-	}
-	if req.Email != "" {
-		email = req.Email
 	}
 
 	hash, err := w.Commit(message, &git.CommitOptions{
@@ -822,14 +886,39 @@ func (h *GitHandler) Amend(c *gin.Context) {
 		return
 	}
 
-	head, err := repo.Head()
-	if err == nil {
-		_ = w.Reset(&git.ResetOptions{Commit: head.Hash(), Mode: git.MixedReset})
-	}
-
 	if len(req.Files) == 0 && len(req.Patches) == 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "no selected changes"})
 		return
+	}
+
+	repoRoot, err := h.getRepoRoot(req.Path)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	author, email := h.getGitAuthor()
+	if req.Author != "" {
+		author = req.Author
+	}
+	if req.Email != "" {
+		email = req.Email
+	}
+
+	if len(req.Patches) == 0 {
+		hash, err := h.commitOnlySelectedFiles(repoRoot, req.Files, req.Summary, req.Description, author, email, true)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		bs := collectBranchStatus(repoRoot)
+		c.JSON(http.StatusOK, gin.H{"ok": true, "hash": hash, "branchStatus": bs})
+		return
+	}
+
+	head, err := repo.Head()
+	if err == nil {
+		_ = w.Reset(&git.ResetOptions{Commit: head.Hash(), Mode: git.MixedReset})
 	}
 
 	for _, file := range req.Files {
@@ -837,12 +926,6 @@ func (h *GitHandler) Amend(c *gin.Context) {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to add " + file + ": " + err.Error()})
 			return
 		}
-	}
-
-	repoRoot, err := h.getRepoRoot(req.Path)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
 	}
 
 	for _, patch := range req.Patches {
@@ -855,14 +938,6 @@ func (h *GitHandler) Amend(c *gin.Context) {
 	message := req.Summary
 	if req.Description != "" {
 		message += "\n\n" + req.Description
-	}
-
-	author, email := h.getGitAuthor()
-	if req.Author != "" {
-		author = req.Author
-	}
-	if req.Email != "" {
-		email = req.Email
 	}
 
 	_, err = w.Commit(message, &git.CommitOptions{

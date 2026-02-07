@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -15,6 +16,15 @@ import (
 	"github.com/go-git/go-git/v6/plumbing/object"
 	"github.com/stretchr/testify/assert"
 )
+
+func containsStatusPath(files []FileStatus, path string) bool {
+	for _, file := range files {
+		if file.Path == path {
+			return true
+		}
+	}
+	return false
+}
 
 func setupGitRepo(t *testing.T) string {
 	dir, err := os.MkdirTemp("", "git-test")
@@ -212,6 +222,58 @@ func TestGitCommit(t *testing.T) {
 	r.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
+}
+
+func TestGitCommitSelectedOnlyCommitsSelectedFiles(t *testing.T) {
+	repoDir := setupGitRepo(t)
+	defer os.RemoveAll(repoDir)
+
+	err := os.WriteFile(filepath.Join(repoDir, "test.txt"), []byte("selected change"), 0644)
+	assert.NoError(t, err)
+	err = os.WriteFile(filepath.Join(repoDir, "keep-staged.txt"), []byte("staged only"), 0644)
+	assert.NoError(t, err)
+
+	repo, err := git.PlainOpen(repoDir)
+	assert.NoError(t, err)
+	wt, err := repo.Worktree()
+	assert.NoError(t, err)
+	_, err = wt.Add("keep-staged.txt")
+	assert.NoError(t, err)
+
+	h := NewGitHandler(nil)
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	h.Register(r.Group("/"))
+
+	reqBody := map[string]interface{}{
+		"path":    repoDir,
+		"files":   []string{"test.txt"},
+		"patches": []interface{}{},
+		"summary": "selected only",
+	}
+	body, _ := json.Marshal(reqBody)
+	req, _ := http.NewRequest("POST", "/git/commit-selected", bytes.NewBuffer(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	repo, err = git.PlainOpen(repoDir)
+	assert.NoError(t, err)
+	status := collectFileStatus(repo)
+	assert.True(t, containsStatusPath(status, "keep-staged.txt"))
+	assert.False(t, containsStatusPath(status, "test.txt"))
+
+	head, err := repo.Head()
+	assert.NoError(t, err)
+	commit, err := repo.CommitObject(head.Hash())
+	assert.NoError(t, err)
+	assert.Equal(t, "selected only", strings.TrimSpace(commit.Message))
+	_, err = commit.File("test.txt")
+	assert.NoError(t, err)
+	_, err = commit.File("keep-staged.txt")
+	assert.Error(t, err)
 }
 
 func TestGitUndoCommit(t *testing.T) {

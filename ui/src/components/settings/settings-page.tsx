@@ -26,6 +26,8 @@ const SettingItem: React.FC<{
         return <User size={18} />;
       case "gitUserEmail":
         return <Mail size={18} />;
+      case "gitDefaultCommitMessage":
+        return <AlignLeft size={18} />;
       case "gitCommitTimeMode":
         return <Clock size={18} />;
       default:
@@ -34,23 +36,27 @@ const SettingItem: React.FC<{
   };
 
   if (schema.type === "toggle") {
+    const enabled = value === "true";
+
     return (
-      <div className="flex items-center justify-between p-4 bg-ide-bg rounded-lg border border-ide-border">
-        <div className="flex items-center gap-3">
-          <div className="text-ide-mute">{getIcon()}</div>
-          <div>
+      <div className="flex items-center justify-between gap-4 p-4 bg-ide-bg rounded-lg border border-ide-border">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className={`shrink-0 transition-colors ${enabled ? "text-ide-accent" : "text-ide-mute"}`}>
+            {getIcon()}
+          </div>
+          <div className="min-w-0">
             <div className="text-sm font-medium text-ide-text">{t(schema.labelKey)}</div>
-            {schema.descriptionKey && <div className="text-xs text-ide-mute">{t(schema.descriptionKey)}</div>}
+            {schema.descriptionKey && <div className="text-xs leading-5 text-ide-mute">{t(schema.descriptionKey)}</div>}
           </div>
         </div>
         <button
-          onClick={() => onChange(value === "true" ? "false" : "true")}
-          className={`w-12 h-6 rounded-full transition-colors ${value === "true" ? "bg-ide-accent" : "bg-ide-border"}`}
+          type="button"
+          aria-pressed={enabled}
+          onClick={() => onChange(enabled ? "false" : "true")}
+          className={`relative inline-flex h-7 w-12 shrink-0 rounded-full border transition-colors duration-200 focus:outline-none focus:border-ide-accent ${enabled ? "border-ide-accent bg-ide-accent/12" : "border-ide-border bg-ide-panel hover:border-ide-mute/40"}`}
         >
-          <div
-            className={`w-5 h-5 rounded-full bg-white shadow transition-transform ${
-              value === "true" ? "translate-x-6" : "translate-x-0.5"
-            }`}
+          <span
+            className={`absolute left-0.5 top-1/2 h-5 w-5 -translate-y-1/2 rounded-full border shadow-sm transition-all duration-200 ${enabled ? "translate-x-5 border-ide-accent bg-ide-accent" : "translate-x-0 border-ide-border bg-white"}`}
           />
         </button>
       </div>

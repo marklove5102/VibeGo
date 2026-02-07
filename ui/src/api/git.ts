@@ -64,10 +64,10 @@ export interface StatusPayload {
 
 export interface CommitSelectedResponse {
   ok: boolean;
-  hash: string;
-  status: StatusPayload;
-  commits: GitCommit[];
-  branchStatus: BranchStatusInfo;
+  hash?: string;
+  status?: StatusPayload;
+  commits?: GitCommit[];
+  branchStatus?: BranchStatusInfo;
 }
 
 export interface GitPatchPayload {

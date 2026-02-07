@@ -9,6 +9,7 @@ import {
   type StashEntry,
 } from "@/api/git";
 import { buildPatchFromSelection } from "@/lib/git-diff";
+import { useSettingsStore } from "@/lib/settings";
 
 export interface GitFileNode {
   path: string;
@@ -115,9 +116,9 @@ const mapStatus = (status: string): GitFileNode["status"] => {
   }
 };
 
-const statusFilesToNodes = (files: GitFileStatus[]): GitFileNode[] => {
+const statusFilesToNodes = (files?: GitFileStatus[] | null): GitFileNode[] => {
   const map = new Map<string, GitFileNode>();
-  for (const file of files) {
+  for (const file of files ?? []) {
     if (!map.has(file.path)) {
       map.set(file.path, {
         path: file.path,
@@ -130,6 +131,8 @@ const statusFilesToNodes = (files: GitFileStatus[]): GitFileNode[] => {
 };
 
 const getCheckedFilesForNodes = (nodes: GitFileNode[]) => new Set(nodes.map((node) => node.path));
+
+const getDefaultCommitSummary = () => useSettingsStore.getState().get("gitDefaultCommitMessage");
 
 const getValidPathSet = (nodes: GitFileNode[]) => new Set(nodes.map((node) => node.path));
 
@@ -183,7 +186,7 @@ export const useGitStore = create<GitState>((set, get) => ({
   checkedFiles: new Set<string>(),
   partialSelections: {},
   workingDiffs: {},
-  summary: "",
+  summary: getDefaultCommitSummary(),
   description: "",
   isAmend: false,
   currentBranch: "main",
@@ -204,7 +207,8 @@ export const useGitStore = create<GitState>((set, get) => ({
   isLoading: false,
   error: null,
 
-  setCurrentPath: (path) => set({ currentPath: path }),
+  setCurrentPath: (path) =>
+    set((state) => ({ currentPath: path, summary: state.summary || getDefaultCommitSummary() })),
   setSummary: (summary) => set({ summary }),
   setDescription: (description) => set({ description }),
   setIsAmend: (isAmend) => set({ isAmend }),
@@ -271,7 +275,7 @@ export const useGitStore = create<GitState>((set, get) => ({
       checkedFiles: new Set<string>(),
       partialSelections: {},
       workingDiffs: {},
-      summary: "",
+      summary: getDefaultCommitSummary(),
       description: "",
       isAmend: false,
       commits: [],
@@ -448,19 +452,67 @@ export const useGitStore = create<GitState>((set, get) => ({
       }
 
       const res = await gitApi.commitSelected(currentPath, files, patches, summary, description);
-      const nodes = statusFilesToNodes(res.status.files);
-      set({
-        allFiles: nodes,
-        checkedFiles: getCheckedFilesForNodes(nodes),
-        partialSelections: {},
-        workingDiffs: {},
-        commits: res.commits,
-        summary: "",
-        description: "",
-        isAmend: false,
-        lastCommitHash: res.hash,
-        showPostCommit: true,
-      });
+      const nextSummary = getDefaultCommitSummary();
+
+      if (res.status?.files) {
+        const nodes = statusFilesToNodes(res.status.files);
+        set({
+          allFiles: nodes,
+          checkedFiles: getCheckedFilesForNodes(nodes),
+          partialSelections: {},
+          workingDiffs: {},
+          commits: res.commits ?? get().commits,
+          summary: nextSummary,
+          description: "",
+          isAmend: false,
+          lastCommitHash: res.hash ?? null,
+          showPostCommit: true,
+        });
+      } else {
+        set({
+          checkedFiles: new Set<string>(),
+          partialSelections: {},
+          workingDiffs: {},
+          summary: nextSummary,
+          description: "",
+          isAmend: false,
+          lastCommitHash: res.hash ?? null,
+          showPostCommit: true,
+        });
+        void Promise.allSettled([
+          gitApi.status(currentPath),
+          gitApi.log(currentPath, 50),
+          gitApi.conflicts(currentPath),
+          res.branchStatus ? Promise.resolve(res.branchStatus) : gitApi.branchStatus(currentPath),
+        ]).then(([statusResult, logResult, conflictsResult, branchResult]) => {
+          const stateUpdate: Partial<GitState> = {};
+
+          if (statusResult.status === "fulfilled") {
+            const nodes = statusFilesToNodes(statusResult.value.files);
+            stateUpdate.allFiles = nodes;
+            stateUpdate.checkedFiles = getCheckedFilesForNodes(nodes);
+            stateUpdate.partialSelections = {};
+            stateUpdate.workingDiffs = {};
+          }
+
+          if (logResult.status === "fulfilled") {
+            stateUpdate.commits = logResult.value.commits;
+          }
+
+          if (conflictsResult.status === "fulfilled") {
+            stateUpdate.conflicts = conflictsResult.value.conflicts ?? [];
+          }
+
+          if (Object.keys(stateUpdate).length > 0) {
+            set(stateUpdate);
+          }
+
+          if (branchResult.status === "fulfilled") {
+            get().applyBranchStatus(branchResult.value);
+          }
+        });
+      }
+
       if (res.branchStatus) {
         get().applyBranchStatus(res.branchStatus);
       }
@@ -491,18 +543,65 @@ export const useGitStore = create<GitState>((set, get) => ({
       }
 
       const res = await gitApi.amend(currentPath, files, patches, summary, description);
-      const nodes = statusFilesToNodes(res.status.files);
-      set({
-        allFiles: nodes,
-        checkedFiles: getCheckedFilesForNodes(nodes),
-        partialSelections: {},
-        workingDiffs: {},
-        commits: res.commits,
-        summary: "",
-        description: "",
-        isAmend: false,
-        showPostCommit: false,
-      });
+      const nextSummary = getDefaultCommitSummary();
+
+      if (res.status?.files) {
+        const nodes = statusFilesToNodes(res.status.files);
+        set({
+          allFiles: nodes,
+          checkedFiles: getCheckedFilesForNodes(nodes),
+          partialSelections: {},
+          workingDiffs: {},
+          commits: res.commits ?? get().commits,
+          summary: nextSummary,
+          description: "",
+          isAmend: false,
+          showPostCommit: false,
+        });
+      } else {
+        set({
+          checkedFiles: new Set<string>(),
+          partialSelections: {},
+          workingDiffs: {},
+          summary: nextSummary,
+          description: "",
+          isAmend: false,
+          showPostCommit: false,
+        });
+        void Promise.allSettled([
+          gitApi.status(currentPath),
+          gitApi.log(currentPath, 50),
+          gitApi.conflicts(currentPath),
+          res.branchStatus ? Promise.resolve(res.branchStatus) : gitApi.branchStatus(currentPath),
+        ]).then(([statusResult, logResult, conflictsResult, branchResult]) => {
+          const stateUpdate: Partial<GitState> = {};
+
+          if (statusResult.status === "fulfilled") {
+            const nodes = statusFilesToNodes(statusResult.value.files);
+            stateUpdate.allFiles = nodes;
+            stateUpdate.checkedFiles = getCheckedFilesForNodes(nodes);
+            stateUpdate.partialSelections = {};
+            stateUpdate.workingDiffs = {};
+          }
+
+          if (logResult.status === "fulfilled") {
+            stateUpdate.commits = logResult.value.commits;
+          }
+
+          if (conflictsResult.status === "fulfilled") {
+            stateUpdate.conflicts = conflictsResult.value.conflicts ?? [];
+          }
+
+          if (Object.keys(stateUpdate).length > 0) {
+            set(stateUpdate);
+          }
+
+          if (branchResult.status === "fulfilled") {
+            get().applyBranchStatus(branchResult.value);
+          }
+        });
+      }
+
       if (res.branchStatus) {
         get().applyBranchStatus(res.branchStatus);
       }

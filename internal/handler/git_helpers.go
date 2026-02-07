@@ -23,16 +23,16 @@ type BranchStatusInfo struct {
 func collectFileStatus(repo *git.Repository) []FileStatus {
 	w, err := repo.Worktree()
 	if err != nil {
-		return nil
+		return []FileStatus{}
 	}
 	repoRoot := w.Filesystem.Root()
 	cmd := exec.Command("git", "status", "--porcelain=v1", "-z")
 	cmd.Dir = repoRoot
 	output, err := cmd.Output()
 	if err != nil {
-		return nil
+		return []FileStatus{}
 	}
-	var files []FileStatus
+	files := []FileStatus{}
 	entries := strings.Split(string(output), "\x00")
 	for i := 0; i < len(entries); i++ {
 		line := entries[i]

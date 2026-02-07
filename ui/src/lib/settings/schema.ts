@@ -133,6 +133,14 @@ export const SETTINGS_SCHEMA: SettingSchema[] = [
     defaultValue: "",
   },
   {
+    key: "gitDefaultCommitMessage",
+    type: "text",
+    category: "git",
+    labelKey: "settings.gitDefaultCommitMessage.label",
+    descriptionKey: "settings.gitDefaultCommitMessage.description",
+    defaultValue: "",
+  },
+  {
     key: "gitCommitTimeMode",
     type: "select",
     category: "git",

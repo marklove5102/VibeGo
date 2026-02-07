@@ -256,6 +256,10 @@
       "label": "Git Email",
       "description": "Email address for Git commits"
     },
+    "gitDefaultCommitMessage": {
+      "label": "Default Commit Message",
+      "description": "Auto-fill the commit title when opening Git view or after each commit"
+    },
     "gitCommitTimeMode": {
       "label": "Commit Time Mode",
       "description": "Use client current time or increment from previous commit time",

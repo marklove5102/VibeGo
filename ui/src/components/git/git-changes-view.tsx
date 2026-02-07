@@ -5,6 +5,7 @@ import {
   Check,
   ChevronDown,
   ChevronRight,
+  Loader2,
   Square,
   SquareCheck,
   SquareMinus,
@@ -441,9 +442,18 @@ const GitChangesView: React.FC<GitChangesViewProps> = ({
           className="w-full bg-ide-accent text-ide-bg font-bold py-2 text-sm flex items-center justify-center gap-2 rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-ide-accent/80 transition-colors"
           title={t("git.commitShortcut")}
         >
-          <Check size={14} />
-          {t("git.commitTo")} {currentBranch}
-          {checkedCount > 0 && <span className="text-xs opacity-80">({checkedCount})</span>}
+          {isLoading ? (
+            <>
+              <Loader2 size={14} className="animate-spin" />
+              {t("common.loading")}
+            </>
+          ) : (
+            <>
+              <Check size={14} />
+              {t("git.commitTo")} {currentBranch}
+              {checkedCount > 0 && <span className="text-xs opacity-80">({checkedCount})</span>}
+            </>
+          )}
         </button>
       </div>
 
