@@ -7,18 +7,22 @@ import {
   ChevronRight,
   Square,
   SquareCheck,
+  SquareMinus,
   Undo2,
   X,
 } from "lucide-react";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import type { StashEntry } from "@/api/git";
 import { getTranslation, type Locale } from "@/lib/i18n";
-import type { GitFileNode } from "@/stores";
+import type { GitFileNode, GitPartialSelection } from "@/stores";
 import { useGitStore } from "@/stores";
+
+type FileSelectionType = "all" | "partial" | "none";
 
 interface GitChangesViewProps {
   allFiles: GitFileNode[];
   checkedFiles: Set<string>;
+  partialSelections: Record<string, GitPartialSelection>;
   isLoading: boolean;
   locale: Locale;
   currentBranch: string;
@@ -71,9 +75,79 @@ const getStatusLabel = (status: string) => {
   }
 };
 
+const getFileSelectionType = (
+  filePath: string,
+  checkedFiles: Set<string>,
+  partialSelections: Record<string, GitPartialSelection>
+): FileSelectionType => {
+  if (partialSelections[filePath]) {
+    return "partial";
+  }
+  return checkedFiles.has(filePath) ? "all" : "none";
+};
+
+const getAggregateSelectionType = (
+  allFiles: GitFileNode[],
+  checkedFiles: Set<string>,
+  partialSelections: Record<string, GitPartialSelection>
+): FileSelectionType => {
+  if (allFiles.length === 0) {
+    return "none";
+  }
+  const types = allFiles.map((file) => getFileSelectionType(file.path, checkedFiles, partialSelections));
+  if (types.every((type) => type === "all")) {
+    return "all";
+  }
+  if (types.every((type) => type === "none")) {
+    return "none";
+  }
+  return "partial";
+};
+
+const renderSelectionIcon = (selectionType: FileSelectionType, size: number, className: string) => {
+  if (selectionType === "all") {
+    return <SquareCheck size={size} className={className} />;
+  }
+  if (selectionType === "partial") {
+    return <SquareMinus size={size} className={className} />;
+  }
+  return <Square size={size} className={className} />;
+};
+
+const getFileRowClassName = (selectionType: FileSelectionType) => {
+  if (selectionType === "all") {
+    return "bg-ide-accent/8 ring-1 ring-inset ring-ide-accent/20 hover:bg-ide-accent/12";
+  }
+  if (selectionType === "partial") {
+    return "bg-amber-500/7 ring-1 ring-inset ring-amber-400/18 hover:bg-amber-500/10";
+  }
+  return "hover:bg-ide-accent/10";
+};
+
+const getFileNameClassName = (selectionType: FileSelectionType) => {
+  if (selectionType === "all") {
+    return "text-xs text-ide-text truncate leading-tight";
+  }
+  if (selectionType === "partial") {
+    return "text-xs text-amber-100 truncate leading-tight";
+  }
+  return "text-xs text-ide-text truncate leading-tight";
+};
+
+const getFilePathClassName = (selectionType: FileSelectionType) => {
+  if (selectionType === "all") {
+    return "text-[10px] text-ide-accent/80 truncate leading-tight";
+  }
+  if (selectionType === "partial") {
+    return "text-[10px] text-amber-300/80 truncate leading-tight";
+  }
+  return "text-[10px] text-ide-mute/70 truncate leading-tight";
+};
+
 const GitChangesView: React.FC<GitChangesViewProps> = ({
   allFiles,
   checkedFiles,
+  partialSelections,
   isLoading,
   locale,
   currentBranch,
@@ -115,7 +189,7 @@ const GitChangesView: React.FC<GitChangesViewProps> = ({
   const safeConflicts = conflicts ?? [];
   const hasChanges = allFiles.length > 0;
   const checkedCount = checkedFiles.size;
-  const allChecked = hasChanges && allFiles.every((f) => checkedFiles.has(f.path));
+  const allSelectionType = getAggregateSelectionType(allFiles, checkedFiles, partialSelections);
   const canCommit = checkedCount > 0 && summary.trim().length > 0 && safeConflicts.length === 0;
 
   useEffect(() => {
@@ -179,13 +253,15 @@ const GitChangesView: React.FC<GitChangesViewProps> = ({
           <>
             <div className="flex items-center gap-2 px-3 py-2 border-b border-ide-border bg-ide-panel/30">
               <div className="flex items-center gap-2 flex-1 cursor-pointer" onClick={onToggleAll}>
-                {allChecked ? (
-                  <SquareCheck size={16} className="text-ide-accent shrink-0" />
-                ) : (
-                  <Square size={16} className="text-ide-mute shrink-0" />
+                {renderSelectionIcon(
+                  allSelectionType,
+                  16,
+                  allSelectionType === "none" ? "text-ide-mute shrink-0" : "text-ide-accent shrink-0"
                 )}
                 <span className="text-xs text-ide-mute font-medium flex-1">{t("git.selectAll")}</span>
-                <span className="text-xs text-ide-mute">{allFiles.length}</span>
+                <span className="text-xs text-ide-mute">
+                  {checkedCount}/{allFiles.length}
+                </span>
               </div>
               <button
                 className="p-1 hover:bg-purple-500/20 rounded text-ide-mute hover:text-purple-400 transition-colors shrink-0"
@@ -198,11 +274,11 @@ const GitChangesView: React.FC<GitChangesViewProps> = ({
 
             <div>
               {allFiles.map((file) => {
-                const checked = checkedFiles.has(file.path);
+                const selectionType = getFileSelectionType(file.path, checkedFiles, partialSelections);
                 return (
                   <div
                     key={file.path}
-                    className="flex items-center gap-2 px-3 py-1.5 hover:bg-ide-accent/10 cursor-pointer group transition-colors"
+                    className={`flex items-center gap-2 px-3 py-1.5 cursor-pointer group transition-colors ${getFileRowClassName(selectionType)}`}
                   >
                     <div
                       onClick={(e) => {
@@ -211,23 +287,23 @@ const GitChangesView: React.FC<GitChangesViewProps> = ({
                       }}
                       className="shrink-0"
                     >
-                      {checked ? (
-                        <SquareCheck size={16} className="text-ide-accent" />
-                      ) : (
-                        <Square size={16} className="text-ide-mute" />
+                      {renderSelectionIcon(
+                        selectionType,
+                        16,
+                        selectionType === "none" ? "text-ide-mute" : "text-ide-accent"
                       )}
                     </div>
                     <span className={`w-4 text-center font-bold text-[10px] shrink-0 ${getStatusColor(file.status)}`}>
                       {getStatusLabel(file.status)}
                     </span>
                     <div className="flex-1 min-w-0 flex flex-col" onClick={() => onFileClick(file.path)}>
-                      <span className="text-xs text-ide-text truncate leading-tight">{file.name}</span>
+                      <span className={getFileNameClassName(selectionType)}>{file.name}</span>
                       {file.path !== file.name && (
-                        <span className="text-[10px] text-ide-mute/70 truncate leading-tight">{file.path}</span>
+                        <span className={getFilePathClassName(selectionType)}>{file.path}</span>
                       )}
                     </div>
                     <button
-                      className="p-1 hover:bg-purple-500/20 rounded text-ide-mute hover:text-purple-400 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+                      className={`p-1 hover:bg-purple-500/20 rounded hover:text-purple-400 transition-opacity shrink-0 ${selectionType === "none" ? "text-ide-mute opacity-0 group-hover:opacity-100" : selectionType === "partial" ? "text-amber-300/80 opacity-100" : "text-ide-accent/80 opacity-100"}`}
                       onClick={(e) => {
                         e.stopPropagation();
                         onStash(undefined, [file.path]);
@@ -238,7 +314,7 @@ const GitChangesView: React.FC<GitChangesViewProps> = ({
                     </button>
                     {file.status !== "untracked" && (
                       <button
-                        className="p-1 hover:bg-red-500/20 rounded text-ide-mute hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+                        className={`p-1 hover:bg-red-500/20 rounded hover:text-red-400 transition-opacity shrink-0 ${selectionType === "none" ? "text-ide-mute opacity-0 group-hover:opacity-100" : selectionType === "partial" ? "text-amber-300/80 opacity-100" : "text-ide-accent/80 opacity-100"}`}
                         onClick={(e) => {
                           e.stopPropagation();
                           handleDiscardClick(file.path);

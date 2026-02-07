@@ -712,12 +712,13 @@ func (h *GitHandler) UndoCommit(c *gin.Context) {
 }
 
 type CommitSelectedRequest struct {
-	Path        string   `json:"path" binding:"required"`
-	Files       []string `json:"files" binding:"required"`
-	Summary     string   `json:"summary" binding:"required"`
-	Description string   `json:"description"`
-	Author      string   `json:"author"`
-	Email       string   `json:"email"`
+	Path        string            `json:"path" binding:"required"`
+	Files       []string          `json:"files"`
+	Patches     []GitPatchPayload `json:"patches"`
+	Summary     string            `json:"summary" binding:"required"`
+	Description string            `json:"description"`
+	Author      string            `json:"author"`
+	Email       string            `json:"email"`
 }
 
 func (h *GitHandler) CommitSelected(c *gin.Context) {
@@ -744,9 +745,27 @@ func (h *GitHandler) CommitSelected(c *gin.Context) {
 		_ = w.Reset(&git.ResetOptions{Commit: head.Hash(), Mode: git.MixedReset})
 	}
 
+	if len(req.Files) == 0 && len(req.Patches) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "no selected changes"})
+		return
+	}
+
 	for _, file := range req.Files {
 		if _, err := w.Add(file); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to add " + file + ": " + err.Error()})
+			return
+		}
+	}
+
+	repoRoot, err := h.getRepoRoot(req.Path)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	for _, patch := range req.Patches {
+		if err := applyPatchToIndex(repoRoot, patch.Patch); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to apply patch for " + patch.FilePath + ": " + err.Error()})
 			return
 		}
 	}
@@ -775,7 +794,7 @@ func (h *GitHandler) CommitSelected(c *gin.Context) {
 	repo, _ = h.openRepo(req.Path)
 	files := collectFileStatus(repo)
 	commits := collectCommitLog(repo, 20)
-	repoRoot, _ := h.getRepoRoot(req.Path)
+	repoRoot, _ = h.getRepoRoot(req.Path)
 	bs := collectBranchStatus(repoRoot)
 
 	c.JSON(http.StatusOK, gin.H{
@@ -808,9 +827,27 @@ func (h *GitHandler) Amend(c *gin.Context) {
 		_ = w.Reset(&git.ResetOptions{Commit: head.Hash(), Mode: git.MixedReset})
 	}
 
+	if len(req.Files) == 0 && len(req.Patches) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "no selected changes"})
+		return
+	}
+
 	for _, file := range req.Files {
 		if _, err := w.Add(file); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to add " + file + ": " + err.Error()})
+			return
+		}
+	}
+
+	repoRoot, err := h.getRepoRoot(req.Path)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	for _, patch := range req.Patches {
+		if err := applyPatchToIndex(repoRoot, patch.Patch); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to apply patch for " + patch.FilePath + ": " + err.Error()})
 			return
 		}
 	}
@@ -837,7 +874,7 @@ func (h *GitHandler) Amend(c *gin.Context) {
 		return
 	}
 
-	repoRoot, _ := h.getRepoRoot(req.Path)
+	repoRoot, _ = h.getRepoRoot(req.Path)
 	repo, _ = h.openRepo(req.Path)
 	files := collectFileStatus(repo)
 	commits := collectCommitLog(repo, 20)
@@ -1551,6 +1588,26 @@ type GitAddPatchRequest struct {
 	Patch    string `json:"patch" binding:"required"`
 }
 
+type GitPatchPayload struct {
+	FilePath string `json:"filePath" binding:"required"`
+	Patch    string `json:"patch" binding:"required"`
+}
+
+func applyPatchToIndex(repoRoot string, patch string) error {
+	cmd := exec.Command("git", "apply", "--cached", "--unidiff-zero", "--whitespace=nowarn", "-")
+	cmd.Dir = repoRoot
+	cmd.Stdin = strings.NewReader(patch)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		message := strings.TrimSpace(string(output))
+		if message == "" {
+			message = err.Error()
+		}
+		return fmt.Errorf("%s", message)
+	}
+	return nil
+}
+
 // AddPatch godoc
 // @Summary Apply patch to staging
 // @Description Apply a unified diff patch to the staging area (uses git CLI for git apply --cached)
@@ -1575,12 +1632,8 @@ func (h *GitHandler) AddPatch(c *gin.Context) {
 		return
 	}
 
-	cmd := exec.Command("git", "apply", "--cached", "-")
-	cmd.Dir = repoRoot
-	cmd.Stdin = strings.NewReader(req.Patch)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": string(output)})
+	if err := applyPatchToIndex(repoRoot, req.Patch); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 

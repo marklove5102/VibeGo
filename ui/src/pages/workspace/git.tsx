@@ -6,6 +6,16 @@ import { useAppStore } from "@/stores/app-store";
 import { registerPage } from "../registry";
 import type { PageViewProps } from "../types";
 
+interface GitDiffTabPayload {
+  original: string;
+  modified: string;
+  title: string;
+  filename?: string;
+  filePath?: string;
+  repoPath?: string;
+  allowSelection?: boolean;
+}
+
 const GitViewPage: React.FC<PageViewProps> = ({ context }) => {
   const locale = useAppStore((s) => s.locale);
   const tabs = useFrameStore((s) => s.getCurrentTabs());
@@ -17,19 +27,22 @@ const GitViewPage: React.FC<PageViewProps> = ({ context }) => {
   const activeTab = tabs.find((t) => t.id === activeTabId);
 
   const handleGitDiff = useCallback(
-    (original: string, modified: string, title: string, filename?: string) => {
+    ({ original, modified, title, filename, filePath, repoPath, allowSelection }: GitDiffTabPayload) => {
       openPreviewTab({
-        id: `diff-${filename || title}`,
+        id: `diff-${repoPath || context.path || "repo"}-${filePath || filename || title}`,
         title,
         data: {
           type: "diff",
           original,
           modified,
           filename,
+          filePath,
+          repoPath,
+          allowSelection,
         },
       });
     },
-    [openPreviewTab]
+    [context.path, openPreviewTab]
   );
 
   const handleConflict = useCallback(
@@ -62,6 +75,9 @@ const GitViewPage: React.FC<PageViewProps> = ({ context }) => {
         original={(activeTab.data.original as string) || ""}
         modified={(activeTab.data.modified as string) || ""}
         filename={(activeTab.data.filename as string) || undefined}
+        filePath={(activeTab.data.filePath as string) || undefined}
+        repoPath={(activeTab.data.repoPath as string) || pagePath}
+        allowSelection={Boolean(activeTab.data.allowSelection)}
       />
     );
   }

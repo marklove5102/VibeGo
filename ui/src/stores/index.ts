@@ -22,7 +22,7 @@ export {
   useFrameStore,
   type ViewType,
 } from "./frame-store";
-export { type GitFileNode, useGitStore } from "./git-store";
+export { type GitFileNode, type GitPartialSelection, useGitStore } from "./git-store";
 export {
   getLanguageFromExtension,
   getPreviewType,

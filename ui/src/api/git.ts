@@ -70,6 +70,11 @@ export interface CommitSelectedResponse {
   branchStatus: BranchStatusInfo;
 }
 
+export interface GitPatchPayload {
+  filePath: string;
+  patch: string;
+}
+
 export interface PullResponse {
   ok: boolean;
   status: StatusPayload;
@@ -155,16 +160,16 @@ export const gitApi = {
       body: JSON.stringify({ path, message, author, email }),
     }),
 
-  commitSelected: (path: string, files: string[], summary: string, description?: string) =>
+  commitSelected: (path: string, files: string[], patches: GitPatchPayload[], summary: string, description?: string) =>
     request<CommitSelectedResponse>("/git/commit-selected", {
       method: "POST",
-      body: JSON.stringify({ path, files, summary, description }),
+      body: JSON.stringify({ path, files, patches, summary, description }),
     }),
 
-  amend: (path: string, files: string[], summary: string, description?: string) =>
+  amend: (path: string, files: string[], patches: GitPatchPayload[], summary: string, description?: string) =>
     request<CommitSelectedResponse>("/git/amend", {
       method: "POST",
-      body: JSON.stringify({ path, files, summary, description }),
+      body: JSON.stringify({ path, files, patches, summary, description }),
     }),
 
   undo: (path: string) =>

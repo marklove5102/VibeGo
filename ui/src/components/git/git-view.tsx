@@ -9,10 +9,20 @@ import BranchSelector from "./branch-selector";
 import GitChangesView from "./git-changes-view";
 import GitHistoryView from "./git-history-view";
 
+interface GitDiffRequest {
+  original: string;
+  modified: string;
+  title: string;
+  filename?: string;
+  filePath?: string;
+  repoPath?: string;
+  allowSelection?: boolean;
+}
+
 interface GitViewProps {
   path: string;
   locale: Locale;
-  onFileDiff: (original: string, modified: string, title: string, filename?: string) => void;
+  onFileDiff: (payload: GitDiffRequest) => void;
   onConflict?: (repoPath: string, filePath: string) => void;
   isActive?: boolean;
 }
@@ -25,6 +35,7 @@ const GitView: React.FC<GitViewProps> = ({ path, locale, onFileDiff, onConflict,
     currentPath: currentRepoPath,
     allFiles,
     checkedFiles,
+    partialSelections,
     commits,
     isLoading,
     selectedCommit,
@@ -183,11 +194,20 @@ const GitView: React.FC<GitViewProps> = ({ path, locale, onFileDiff, onConflict,
     async (filePath: string) => {
       const diff = await getDiff(filePath);
       if (diff) {
+        const file = allFiles.find((item) => item.path === filePath);
         const fileName = filePath.split("/").pop() || filePath;
-        onFileDiff(diff.old, diff.new, `${fileName} [DIFF]`, fileName);
+        onFileDiff({
+          original: diff.old,
+          modified: diff.new,
+          title: `${fileName} [DIFF]`,
+          filename: fileName,
+          filePath,
+          repoPath: path,
+          allowSelection: file ? ["modified", "added", "untracked"].includes(file.status) : false,
+        });
       }
     },
-    [getDiff, onFileDiff]
+    [allFiles, getDiff, onFileDiff, path]
   );
 
   const handleCommitSelect = useCallback(
@@ -204,10 +224,18 @@ const GitView: React.FC<GitViewProps> = ({ path, locale, onFileDiff, onConflict,
       if (diff) {
         const fileName = filePath.split("/").pop() || filePath;
         const shortHash = commitInfo.hash.substring(0, 7);
-        onFileDiff(diff.old, diff.new, `${fileName} @ ${shortHash}`, fileName);
+        onFileDiff({
+          original: diff.old,
+          modified: diff.new,
+          title: `${fileName} @ ${shortHash}`,
+          filename: fileName,
+          filePath,
+          repoPath: path,
+          allowSelection: false,
+        });
       }
     },
-    [getCommitDiff, onFileDiff]
+    [getCommitDiff, onFileDiff, path]
   );
 
   const handleConflictClick = useCallback(
@@ -263,6 +291,7 @@ const GitView: React.FC<GitViewProps> = ({ path, locale, onFileDiff, onConflict,
             <GitChangesView
               allFiles={allFiles}
               checkedFiles={checkedFiles}
+              partialSelections={partialSelections}
               isLoading={isLoading}
               locale={locale}
               currentBranch={currentBranch}

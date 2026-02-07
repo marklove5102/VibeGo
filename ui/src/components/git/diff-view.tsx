@@ -1,18 +1,20 @@
 import { DiffEditor } from "@monaco-editor/react";
-import { Columns2, Plus, Rows2, SquareCheck } from "lucide-react";
-import type * as Monaco from "monaco-editor";
+import { Columns2, Rows2, Square, SquareCheck, SquareMinus } from "lucide-react";
 import React, { useMemo, useRef, useState } from "react";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { type GitDiffHunk, type GitDiffRow, type GitSelectionType, parseGitDiff } from "@/lib/git-diff";
 import "@/lib/monaco";
+import { useGitStore } from "@/stores";
 import { useAppStore } from "@/stores/app-store";
 
 interface DiffViewProps {
   original: string;
   modified: string;
   filename?: string;
+  filePath?: string;
+  repoPath?: string;
   language?: string;
-  allowPartialStaging?: boolean;
-  onStageSelected?: (patch: string) => void;
-  onStageFile?: () => void;
+  allowSelection?: boolean;
 }
 
 const getLanguageFromFilename = (filename?: string): string => {
@@ -61,82 +63,271 @@ const getLanguageFromFilename = (filename?: string): string => {
   return langMap[ext || ""] || "plaintext";
 };
 
+const getSelectionIcon = (selectionType: GitSelectionType, size: number, className: string) => {
+  if (selectionType === "all") {
+    return <SquareCheck size={size} className={className} />;
+  }
+  if (selectionType === "partial") {
+    return <SquareMinus size={size} className={className} />;
+  }
+  return <Square size={size} className={className} />;
+};
+
+const getHunkSelectionType = (hunk: GitDiffHunk, selectedRowIds: Set<string>): GitSelectionType => {
+  if (hunk.selectableRowIds.length === 0) {
+    return "none";
+  }
+  const selectedCount = hunk.selectableRowIds.filter((rowId) => selectedRowIds.has(rowId)).length;
+  if (selectedCount === 0) {
+    return "none";
+  }
+  if (selectedCount === hunk.selectableRowIds.length) {
+    return "all";
+  }
+  return "partial";
+};
+
+const getRowSelectionType = (row: GitDiffRow, selectedRowIds: Set<string>): GitSelectionType => {
+  if (!row.selectable) {
+    return "none";
+  }
+  return selectedRowIds.has(row.id) ? "all" : "none";
+};
+
+const getSelectionSurfaceClassName = (row: GitDiffRow, selected: boolean) => {
+  if (row.type === "added") {
+    return selected ? "bg-green-500/12 hover:bg-green-500/18" : "bg-green-500/5 hover:bg-green-500/10";
+  }
+  if (row.type === "removed") {
+    return selected ? "bg-red-500/12 hover:bg-red-500/18" : "bg-red-500/5 hover:bg-red-500/10";
+  }
+  return "bg-ide-bg hover:bg-ide-panel/40";
+};
+
+const getSelectionClassName = (row: GitDiffRow, selected: boolean) => {
+  const surfaceClassName = getSelectionSurfaceClassName(row, selected);
+  if (row.type === "added" || row.type === "removed") {
+    return selected ? surfaceClassName : `${surfaceClassName} text-ide-mute/80`;
+  }
+  return surfaceClassName;
+};
+
 const DiffView: React.FC<DiffViewProps> = ({
   original,
   modified,
   filename,
+  filePath,
   language,
-  allowPartialStaging = false,
-  onStageSelected,
-  onStageFile,
+  allowSelection = false,
 }) => {
-  const appTheme = useAppStore((s) => s.theme);
+  const appTheme = useAppStore((state) => state.theme);
+  const checkedFiles = useGitStore((state) => state.checkedFiles);
+  const isMobile = useIsMobile();
+  const partialSelection = useGitStore((state) => (filePath ? state.partialSelections[filePath] : undefined));
+  const setPartialSelection = useGitStore((state) => state.setPartialSelection);
+  const toggleFile = useGitStore((state) => state.toggleFile);
   const [renderSideBySide, setRenderSideBySide] = useState(false);
-  const editorRef = useRef<Monaco.editor.IStandaloneDiffEditor | null>(null);
-  const [hasSelection, setHasSelection] = useState(false);
   const modelIdRef = useRef(`git-diff-${Date.now()}-${Math.random().toString(36).slice(2)}`);
 
-  const editorTheme = useMemo(() => {
-    return appTheme === "light" ? "light" : "vs-dark";
-  }, [appTheme]);
+  const editorTheme = useMemo(() => (appTheme === "light" ? "light" : "vs-dark"), [appTheme]);
+  const detectedLanguage = useMemo(() => language || getLanguageFromFilename(filename), [language, filename]);
+  const parsedDiff = useMemo(() => parseGitDiff(original, modified), [original, modified]);
+  const diffStats = useMemo(() => {
+    const rows = parsedDiff.hunks.flatMap((hunk) => hunk.rows);
+    return {
+      added: rows.filter((row) => row.type === "added").length,
+      removed: rows.filter((row) => row.type === "removed").length,
+    };
+  }, [parsedDiff]);
 
-  const detectedLanguage = useMemo(() => {
-    return language || getLanguageFromFilename(filename);
-  }, [language, filename]);
-
-  const generatePatch = () => {
-    if (!editorRef.current || !filename) return;
-    const modifiedEditor = editorRef.current.getModifiedEditor();
-    const selection = modifiedEditor.getSelection();
-    if (!selection || selection.isEmpty()) return;
-
-    const startLine = selection.startLineNumber;
-    const endLine = selection.endLineNumber;
-    const originalLines = original.split("\n");
-    const modifiedLines = modified.split("\n");
-
-    let patch = `--- a/${filename}\n+++ b/${filename}\n`;
-    patch += `@@ -${startLine},${endLine - startLine + 1} +${startLine},${endLine - startLine + 1} @@\n`;
-
-    for (let i = startLine - 1; i <= endLine - 1 && i < modifiedLines.length; i++) {
-      const origLine = originalLines[i] || "";
-      const modLine = modifiedLines[i] || "";
-      if (origLine === modLine) {
-        patch += ` ${modLine}\n`;
-      } else {
-        if (origLine) patch += `-${origLine}\n`;
-        if (modLine) patch += `+${modLine}\n`;
-      }
+  const interactive = allowSelection && Boolean(filePath);
+  const fileSelectionType = useMemo<GitSelectionType>(() => {
+    if (!interactive || !filePath) {
+      return "none";
     }
+    if (partialSelection) {
+      return "partial";
+    }
+    return checkedFiles.has(filePath) ? "all" : "none";
+  }, [checkedFiles, filePath, interactive, partialSelection]);
 
-    onStageSelected?.(patch);
+  const selectedRowIds = useMemo(() => {
+    if (!interactive || !filePath) {
+      return new Set<string>();
+    }
+    if (partialSelection) {
+      return new Set(partialSelection.selectedRowIds);
+    }
+    if (checkedFiles.has(filePath)) {
+      return new Set(parsedDiff.selectableRowIds);
+    }
+    return new Set<string>();
+  }, [checkedFiles, filePath, interactive, parsedDiff.selectableRowIds, partialSelection]);
+
+  const maxMobileContentColumns = useMemo(() => {
+    if (!isMobile) {
+      return 0;
+    }
+    const lineLengths = parsedDiff.hunks.flatMap((hunk) => [
+      hunk.header.length,
+      ...hunk.rows.map((row) => row.content.length + 2),
+    ]);
+    return Math.max(24, ...lineLengths);
+  }, [isMobile, parsedDiff.hunks]);
+  const diffContentWrapperClassName = isMobile ? "min-w-full" : "";
+  const diffContentWrapperStyle = isMobile ? { minWidth: `calc(${maxMobileContentColumns}ch + 60px)` } : undefined;
+  const diffRowClassName = isMobile
+    ? "w-full flex items-stretch text-left transition-colors"
+    : "w-full grid grid-cols-[26px_56px_56px_minmax(0,1fr)] items-start gap-2 px-2 py-0.5 text-left transition-colors";
+  const diffLeftPaneClassName = isMobile
+    ? "sticky left-0 z-10 flex shrink-0 self-stretch items-center gap-0 border-r border-ide-border bg-inherit px-0.5"
+    : "contents";
+  const diffCheckboxClassName = isMobile
+    ? "h-5 w-3 flex items-center justify-center"
+    : "h-5 flex items-center justify-center";
+  const diffLineNumberClassName = isMobile
+    ? "h-5 w-[26px] flex items-center justify-end text-[8px] text-ide-mute/60 tabular-nums"
+    : "h-5 flex items-center justify-end text-ide-mute/70 tabular-nums";
+  const diffPrefixClassName = isMobile
+    ? "inline-block w-2 shrink-0 text-ide-mute/70"
+    : "inline-block w-3 shrink-0 text-ide-mute/70";
+  const diffContentClassName = isMobile
+    ? "flex-1 min-w-0 px-2 leading-5 whitespace-pre"
+    : "leading-5 whitespace-pre-wrap break-words min-w-0";
+  const diffBodyClassName = isMobile
+    ? "flex-1 overflow-auto font-mono text-[11px]"
+    : "flex-1 overflow-auto font-mono text-xs";
+  const hunkHeaderClassName = isMobile
+    ? `w-full flex items-stretch bg-ide-panel border-b border-ide-border sticky top-0 z-10 ${interactive ? "cursor-pointer" : ""}`
+    : "flex items-center gap-2 bg-ide-panel/40 border-b border-ide-border/50 sticky top-0 z-10 px-2 py-1";
+  const hunkHeaderLeftClassName = isMobile
+    ? "sticky left-0 z-10 flex shrink-0 self-stretch items-center gap-0 border-r border-ide-border bg-ide-panel px-0.5"
+    : "flex items-center gap-2";
+  const hunkHeaderTextClassName = isMobile ? "px-2 py-0.75 text-[11px] text-ide-accent" : "text-[11px] text-ide-accent";
+
+  const handleRowToggle = (rowId: string) => {
+    if (!interactive || !filePath) {
+      return;
+    }
+    const nextSelectedRowIds = new Set(selectedRowIds);
+    if (nextSelectedRowIds.has(rowId)) {
+      nextSelectedRowIds.delete(rowId);
+    } else {
+      nextSelectedRowIds.add(rowId);
+    }
+    setPartialSelection(filePath, Array.from(nextSelectedRowIds), parsedDiff.selectableRowIds);
   };
 
-  const diffStats = useMemo(() => {
-    const origLines = original.split("\n");
-    const modLines = modified.split("\n");
-    let added = 0;
-    let removed = 0;
-    const maxLen = Math.max(origLines.length, modLines.length);
-    for (let i = 0; i < maxLen; i++) {
-      const o = origLines[i];
-      const m = modLines[i];
-      if (o !== m) {
-        if (o !== undefined && m !== undefined) {
-          added++;
-          removed++;
-        } else if (o === undefined) added++;
-        else removed++;
+  const handleHunkToggle = (hunk: GitDiffHunk) => {
+    if (!interactive || !filePath || hunk.selectableRowIds.length === 0) {
+      return;
+    }
+    const nextSelectedRowIds = new Set(selectedRowIds);
+    const hunkSelectionType = getHunkSelectionType(hunk, selectedRowIds);
+    if (hunkSelectionType === "none") {
+      for (const rowId of hunk.selectableRowIds) {
+        nextSelectedRowIds.add(rowId);
+      }
+    } else {
+      for (const rowId of hunk.selectableRowIds) {
+        nextSelectedRowIds.delete(rowId);
       }
     }
-    return { added, removed };
-  }, [original, modified]);
+    setPartialSelection(filePath, Array.from(nextSelectedRowIds), parsedDiff.selectableRowIds);
+  };
+
+  if (!interactive) {
+    return (
+      <div className="h-full flex flex-col bg-ide-bg">
+        <div className="flex items-center justify-between px-3 py-1.5 border-b border-ide-border bg-ide-panel/50">
+          <div className="flex items-center gap-2 min-w-0 flex-1">
+            <span className="text-xs text-ide-mute font-medium truncate">{filename || "Diff View"}</span>
+            <span className="text-[10px] text-ide-mute/60 bg-ide-bg px-1.5 py-0.5 rounded shrink-0">
+              {detectedLanguage}
+            </span>
+            {(diffStats.added > 0 || diffStats.removed > 0) && (
+              <span className="text-[10px] shrink-0">
+                {diffStats.added > 0 && <span className="text-green-400">+{diffStats.added}</span>}
+                {diffStats.added > 0 && diffStats.removed > 0 && <span className="text-ide-mute mx-0.5">/</span>}
+                {diffStats.removed > 0 && <span className="text-red-400">-{diffStats.removed}</span>}
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-1 shrink-0">
+            <button
+              onClick={() => setRenderSideBySide(true)}
+              className={`p-1.5 rounded transition-colors ${
+                renderSideBySide
+                  ? "bg-ide-accent/20 text-ide-accent"
+                  : "text-ide-mute hover:bg-ide-accent/10 hover:text-ide-text"
+              }`}
+            >
+              <Columns2 size={14} />
+            </button>
+            <button
+              onClick={() => setRenderSideBySide(false)}
+              className={`p-1.5 rounded transition-colors ${
+                !renderSideBySide
+                  ? "bg-ide-accent/20 text-ide-accent"
+                  : "text-ide-mute hover:bg-ide-accent/10 hover:text-ide-text"
+              }`}
+            >
+              <Rows2 size={14} />
+            </button>
+          </div>
+        </div>
+        <div className="flex-1 overflow-hidden">
+          <DiffEditor
+            original={original}
+            modified={modified}
+            language={detectedLanguage}
+            theme={editorTheme}
+            keepCurrentOriginalModel={true}
+            keepCurrentModifiedModel={true}
+            originalModelPath={`${modelIdRef.current}-original`}
+            modifiedModelPath={`${modelIdRef.current}-modified`}
+            options={{
+              readOnly: true,
+              renderSideBySide,
+              originalEditable: false,
+              minimap: { enabled: false },
+              scrollBeyondLastLine: false,
+              fontSize: 13,
+              lineNumbers: "on",
+              wordWrap: isMobile ? "off" : "on",
+              automaticLayout: true,
+              renderOverviewRuler: false,
+              diffWordWrap: isMobile ? "off" : "on",
+              ignoreTrimWhitespace: false,
+              renderIndicators: true,
+              renderLineHighlight: "none",
+              scrollbar: { verticalScrollbarSize: 8, horizontalScrollbarSize: 8 },
+            }}
+          />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="h-full flex flex-col bg-ide-bg">
-      <div className="flex items-center justify-between px-3 py-1.5 border-b border-ide-border bg-ide-panel/50">
+      <div className="flex items-center justify-between px-3 py-1.5 border-b border-ide-border bg-ide-panel/50 gap-3">
         <div className="flex items-center gap-2 min-w-0 flex-1">
-          <span className="text-xs text-ide-mute font-medium truncate">{filename || "Diff View"}</span>
+          <button
+            className="shrink-0"
+            onClick={() => {
+              if (filePath) {
+                toggleFile(filePath);
+              }
+            }}
+          >
+            {getSelectionIcon(
+              fileSelectionType,
+              16,
+              fileSelectionType === "none" ? "text-ide-mute" : "text-ide-accent"
+            )}
+          </button>
+          <span className="text-xs text-ide-text font-medium truncate">{filePath || filename || "Diff View"}</span>
           <span className="text-[10px] text-ide-mute/60 bg-ide-bg px-1.5 py-0.5 rounded shrink-0">
             {detectedLanguage}
           </span>
@@ -148,82 +339,73 @@ const DiffView: React.FC<DiffViewProps> = ({
             </span>
           )}
         </div>
-        <div className="flex items-center gap-1 shrink-0">
-          {allowPartialStaging && onStageFile && (
-            <button
-              onClick={onStageFile}
-              className="px-2 py-1 text-xs bg-green-500/20 text-green-400 rounded hover:bg-green-500/30 flex items-center gap-1 mr-1"
-            >
-              <SquareCheck size={12} />
-              Stage
-            </button>
-          )}
-          {allowPartialStaging && hasSelection && (
-            <button
-              onClick={generatePatch}
-              className="px-2 py-1 text-xs bg-blue-500/20 text-blue-400 rounded hover:bg-blue-500/30 flex items-center gap-1 mr-1"
-            >
-              <Plus size={12} />
-              Partial
-            </button>
-          )}
-          <button
-            onClick={() => setRenderSideBySide(true)}
-            className={`p-1.5 rounded transition-colors ${
-              renderSideBySide
-                ? "bg-ide-accent/20 text-ide-accent"
-                : "text-ide-mute hover:bg-ide-accent/10 hover:text-ide-text"
-            }`}
-          >
-            <Columns2 size={14} />
-          </button>
-          <button
-            onClick={() => setRenderSideBySide(false)}
-            className={`p-1.5 rounded transition-colors ${
-              !renderSideBySide
-                ? "bg-ide-accent/20 text-ide-accent"
-                : "text-ide-mute hover:bg-ide-accent/10 hover:text-ide-text"
-            }`}
-          >
-            <Rows2 size={14} />
-          </button>
+        <div className="text-[10px] text-ide-mute shrink-0">
+          {selectedRowIds.size}/{parsedDiff.selectableRowIds.length}
         </div>
       </div>
-      <div className="flex-1 overflow-hidden">
-        <DiffEditor
-          original={original}
-          modified={modified}
-          language={detectedLanguage}
-          theme={editorTheme}
-          keepCurrentOriginalModel={true}
-          keepCurrentModifiedModel={true}
-          originalModelPath={`${modelIdRef.current}-original`}
-          modifiedModelPath={`${modelIdRef.current}-modified`}
-          onMount={(editor) => {
-            editorRef.current = editor;
-            const modifiedEditor = editor.getModifiedEditor();
-            modifiedEditor.onDidChangeCursorSelection((e) => {
-              setHasSelection(!e.selection.isEmpty());
-            });
-          }}
-          options={{
-            readOnly: !allowPartialStaging,
-            renderSideBySide,
-            originalEditable: false,
-            minimap: { enabled: false },
-            scrollBeyondLastLine: false,
-            fontSize: 13,
-            lineNumbers: "on",
-            wordWrap: "on",
-            automaticLayout: true,
-            renderOverviewRuler: false,
-            diffWordWrap: "on",
-            ignoreTrimWhitespace: false,
-            renderIndicators: true,
-            renderLineHighlight: "none",
-            scrollbar: { verticalScrollbarSize: 8, horizontalScrollbarSize: 8 },
-          }}
-        />
+
+      <div className={diffBodyClassName} style={isMobile ? { overscrollBehaviorX: "contain" } : undefined}>
+        {parsedDiff.hunks.length === 0 ? (
+          <div className="h-full flex items-center justify-center text-ide-mute">No changes</div>
+        ) : (
+          <div className={diffContentWrapperClassName} style={diffContentWrapperStyle}>
+            {parsedDiff.hunks.map((hunk) => {
+              return (
+                <div key={hunk.id} className="border-b border-ide-border/60 last:border-b-0">
+                  <div
+                    className={hunkHeaderClassName}
+                    onClick={() => {
+                      if (isMobile && interactive) {
+                        handleHunkToggle(hunk);
+                      }
+                    }}
+                  >
+                    <div className={hunkHeaderLeftClassName}>
+                      <span className={diffCheckboxClassName} />
+                      <span className={diffLineNumberClassName} />
+                      <span className={diffLineNumberClassName} />
+                    </div>
+                    <span className={hunkHeaderTextClassName}>{hunk.header}</span>
+                  </div>
+
+                  {hunk.rows
+                    .filter((row) => row.type !== "hunk")
+                    .map((row) => {
+                      const rowSelectionType = getRowSelectionType(row, selectedRowIds);
+                      const selected = rowSelectionType === "all";
+                      return (
+                        <button
+                          key={row.id}
+                          className={`${diffRowClassName} ${getSelectionClassName(row, selected)}`}
+                          onClick={() => {
+                            if (row.selectable) {
+                              handleRowToggle(row.id);
+                            }
+                          }}
+                        >
+                          <div className={`${diffLeftPaneClassName} ${getSelectionSurfaceClassName(row, selected)}`}>
+                            <span className={diffCheckboxClassName}>
+                              {row.selectable
+                                ? getSelectionIcon(rowSelectionType, 13, selected ? "text-ide-accent" : "text-ide-mute")
+                                : null}
+                            </span>
+                            <span className={diffLineNumberClassName}>{row.oldLineNumber ?? ""}</span>
+                            <span className={diffLineNumberClassName}>{row.newLineNumber ?? ""}</span>
+                          </div>
+                          <span className={diffContentClassName}>
+                            <span className={diffPrefixClassName}>
+                              {row.type === "added" ? "+" : row.type === "removed" ? "-" : " "}
+                            </span>
+                            <span>{row.content || " "}</span>
+                          </span>
+                        </button>
+                      );
+                    })}
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );
