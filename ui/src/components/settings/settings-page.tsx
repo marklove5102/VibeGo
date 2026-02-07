@@ -1,8 +1,9 @@
-import { AlignLeft, Clock, Eye, EyeOff, Grid, List, Mail, Settings, User, WrapText, X } from "lucide-react";
+import { AlignLeft, Bell, Clock, Eye, EyeOff, Grid, List, Mail, Settings, User, WrapText, X } from "lucide-react";
 import React, { useEffect, useState } from "react";
 import { useFrameController } from "@/framework/frame/controller";
 import { type Locale, useTranslation } from "@/lib/i18n";
 import { getSettingsByCategory, SETTING_CATEGORIES, type SettingSchema, useSettingsStore } from "@/lib/settings";
+import { requestTerminalNotificationPermission } from "@/services/terminal-notification-service";
 import { useFrameStore } from "@/stores/frame-store";
 
 const SettingItem: React.FC<{
@@ -19,6 +20,8 @@ const SettingItem: React.FC<{
         return value === "list" ? <List size={18} /> : <Grid size={18} />;
       case "editorWordWrap":
         return value === "true" ? <WrapText size={18} /> : <AlignLeft size={18} />;
+      case "terminalDesktopNotifications":
+        return <Bell size={18} />;
       case "gitUserName":
         return <User size={18} />;
       case "gitUserEmail":
@@ -141,6 +144,13 @@ const SettingsPage: React.FC = () => {
   const hiddenKeys = new Set(["theme", "locale"]);
   const [activeTab, setActiveTab] = useState(SETTING_CATEGORIES[0].key);
 
+  const handleSettingChange = (key: string, value: string) => {
+    if (key === "terminalDesktopNotifications" && value === "true") {
+      void requestTerminalNotificationPermission();
+    }
+    void set(key, value);
+  };
+
   useEffect(() => {
     init();
   }, [init]);
@@ -195,7 +205,7 @@ const SettingsPage: React.FC = () => {
               key={schema.key}
               schema={schema}
               value={settings[schema.key] || schema.defaultValue}
-              onChange={(v) => set(schema.key, v)}
+              onChange={(v) => handleSettingChange(schema.key, v)}
               t={t}
             />
           ))}

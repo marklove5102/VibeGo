@@ -5,20 +5,31 @@ import React, { useCallback, useEffect, useRef } from "react";
 import "@xterm/xterm/css/xterm.css";
 import { terminalApi } from "@/api/terminal";
 import { useTranslation } from "@/lib/i18n";
+import { notifyTerminal } from "@/services/terminal-notification-service";
 import { type Theme, useAppStore } from "@/stores";
 
 interface TerminalInstanceProps {
   terminalId: string;
+  terminalName: string;
   isActive: boolean;
   isExited?: boolean;
   onExited?: () => void;
 }
 
 interface CallbackRefs {
+  isActive: boolean;
   isExited: boolean;
   onExited?: () => void;
+  terminalName: string;
   t: (key: string) => string;
 }
+
+interface ParsedTerminalNotification {
+  body: string;
+  title: string;
+}
+
+type TerminalDisposable = { dispose: () => void };
 
 const encodeUtf8Base64 = (data: string): string => {
   const bytes = new TextEncoder().encode(data);
@@ -106,10 +117,41 @@ const getXtermTheme = (appTheme: Theme): ITheme => {
   };
 };
 
-const TerminalInstance: React.FC<TerminalInstanceProps> = ({ terminalId, isActive, isExited = false, onExited }) => {
+const parseOsc9Notification = (data: string, defaultTitle: string): ParsedTerminalNotification | null => {
+  const body = data.trim();
+  const title = defaultTitle.trim();
+  if (!title || !body) {
+    return null;
+  }
+  return { title, body };
+};
+
+const parseOsc777Notification = (data: string): ParsedTerminalNotification | null => {
+  const [command = "", title = "", ...bodyParts] = data.split(";");
+  if (command !== "notify") {
+    return null;
+  }
+
+  const normalizedTitle = title.trim();
+  const body = bodyParts.join(";").trim();
+  if (!normalizedTitle || !body) {
+    return null;
+  }
+
+  return { title: normalizedTitle, body };
+};
+
+const TerminalInstance: React.FC<TerminalInstanceProps> = ({
+  terminalId,
+  terminalName,
+  isActive,
+  isExited = false,
+  onExited,
+}) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
+  const oscHandlersRef = useRef<TerminalDisposable[]>([]);
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reconnectAttemptsRef = useRef(0);
@@ -121,11 +163,50 @@ const TerminalInstance: React.FC<TerminalInstanceProps> = ({ terminalId, isActiv
   const replayServerDoneRef = useRef(false);
   const pendingReplayWritesRef = useRef(0);
   const inputReadyRef = useRef(false);
-  const callbacksRef = useRef<CallbackRefs>({ isExited, onExited, t: (key: string) => key });
+  const callbacksRef = useRef<CallbackRefs>({
+    isActive,
+    isExited,
+    onExited,
+    terminalName,
+    t: (key: string) => key,
+  });
 
   const theme = useAppStore((s) => s.theme);
   const locale = useAppStore((s) => s.locale);
   const t = useTranslation(locale);
+
+  const disposeOscHandlers = () => {
+    oscHandlersRef.current.forEach((handler) => handler.dispose());
+    oscHandlersRef.current = [];
+  };
+
+  const handleOscNotification = useCallback(
+    (data: string, parser: (value: string) => ParsedTerminalNotification | null) => {
+      if (!inputReadyRef.current) {
+        return true;
+      }
+
+      const notification = parser(data);
+      if (!notification) {
+        return true;
+      }
+
+      const currentCallbacks = callbacksRef.current;
+      if (currentCallbacks.isExited) {
+        return true;
+      }
+
+      notifyTerminal({
+        body: notification.body,
+        isActive: currentCallbacks.isActive,
+        terminalId,
+        title: notification.title,
+      });
+
+      return true;
+    },
+    [terminalId]
+  );
 
   const clearReconnectTimer = () => {
     if (reconnectTimerRef.current) {
@@ -315,7 +396,7 @@ const TerminalInstance: React.FC<TerminalInstanceProps> = ({ terminalId, isActiv
   );
 
   useEffect(() => {
-    callbacksRef.current = { isExited, onExited, t };
+    callbacksRef.current = { isActive, isExited, onExited, terminalName, t };
     if (isExited && terminalRef.current) {
       terminalRef.current.options.cursorBlink = false;
       terminalRef.current.options.disableStdin = true;
@@ -335,7 +416,7 @@ const TerminalInstance: React.FC<TerminalInstanceProps> = ({ terminalId, isActiv
         } catch {}
       }
     }
-  }, [isExited, onExited, t]);
+  }, [isActive, isExited, onExited, t, terminalName]);
 
   useEffect(() => {
     if (terminalRef.current) {
@@ -373,6 +454,15 @@ const TerminalInstance: React.FC<TerminalInstanceProps> = ({ terminalId, isActiv
 
     terminalRef.current = terminal;
     fitAddonRef.current = fitAddon;
+    oscHandlersRef.current = [
+      terminal.parser.registerOscHandler(9, (data) => {
+        const defaultTitle = callbacksRef.current.terminalName.trim() || callbacksRef.current.t("sidebar.terminal");
+        return handleOscNotification(data, (value) => parseOsc9Notification(value, defaultTitle));
+      }),
+      terminal.parser.registerOscHandler(777, (data) => {
+        return handleOscNotification(data, parseOsc777Notification);
+      }),
+    ];
 
     terminal.onData((data) => {
       if (callbacksRef.current.isExited) return;
@@ -403,12 +493,13 @@ const TerminalInstance: React.FC<TerminalInstanceProps> = ({ terminalId, isActiv
           ws.close();
         } catch {}
       }
+      disposeOscHandlers();
       terminal.dispose();
       terminalRef.current = null;
       fitAddonRef.current = null;
       initializedRef.current = false;
     };
-  }, [terminalId, connectWebSocket]);
+  }, [connectWebSocket, handleOscNotification, terminalId]);
 
   useEffect(() => {
     if (isActive && fitAddonRef.current && terminalRef.current) {

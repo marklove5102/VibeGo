@@ -176,6 +176,7 @@ const TerminalPage: React.FC<TerminalPageProps> = ({ groupId, cwd }) => {
             <TerminalInstance
               key={terminal.id}
               terminalId={terminal.id}
+              terminalName={terminal.name}
               isActive={terminal.id === activeTerminalId}
               isExited={terminal.status !== "running"}
               onExited={() => handleTerminalExited(terminal.id)}

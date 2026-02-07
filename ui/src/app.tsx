@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import { fileApi } from "@/api/file";
 import { DirectoryPicker, NewPageMenu, ProjectMenu, useDialog } from "@/components/common";
 import { AppFrame, NewGroupMenu } from "@/components/frame";
+import { Toaster } from "@/components/ui/sonner";
 import { useTranslation } from "@/lib/i18n";
 import { useSettingsStore } from "@/lib/settings";
 import { pageRegistry } from "@/pages/registry";
@@ -281,6 +282,7 @@ const App: React.FC = () => {
         initialPath="."
         locale={locale}
       />
+      <Toaster />
     </>
   );
 };

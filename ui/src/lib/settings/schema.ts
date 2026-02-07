@@ -109,6 +109,14 @@ export const SETTINGS_SCHEMA: SettingSchema[] = [
     defaultValue: "false",
   },
   {
+    key: "terminalDesktopNotifications",
+    type: "toggle",
+    category: "terminal",
+    labelKey: "settings.terminalDesktopNotifications.label",
+    descriptionKey: "settings.terminalDesktopNotifications.description",
+    defaultValue: "true",
+  },
+  {
     key: "gitUserName",
     type: "text",
     category: "git",
@@ -142,6 +150,7 @@ export const SETTING_CATEGORIES = [
   { key: "appearance", labelKey: "settings.category.appearance" },
   { key: "fileManager", labelKey: "settings.category.fileManager" },
   { key: "editor", labelKey: "settings.category.editor" },
+  { key: "terminal", labelKey: "settings.category.terminal" },
   { key: "git", labelKey: "settings.category.git" },
 ];
 
