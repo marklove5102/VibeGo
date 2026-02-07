@@ -11,7 +11,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"os/user"
 	"path/filepath"
 	"regexp"
 	"runtime"
@@ -21,7 +20,6 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"golang.org/x/sys/unix"
 )
 
 var systemPrefixes []string
@@ -349,22 +347,7 @@ func getFileInfo(path string) (*FileInfo, error) {
 		ModTime:   info.ModTime(),
 		MimeType:  getMimeType(path, info.IsDir()),
 	}
-	if runtime.GOOS != "windows" {
-		if stat, ok := info.Sys().(*unix.Stat_t); ok {
-			fi.Uid = strconv.FormatUint(uint64(stat.Uid), 10)
-			fi.Gid = strconv.FormatUint(uint64(stat.Gid), 10)
-			if u, err := user.LookupId(fi.Uid); err == nil {
-				fi.User = u.Username
-			} else {
-				fi.User = fi.Uid
-			}
-			if g, err := user.LookupGroupId(fi.Gid); err == nil {
-				fi.Group = g.Name
-			} else {
-				fi.Group = fi.Gid
-			}
-		}
-	}
+	fillFileOwnership(fi, info)
 	if fi.IsSymlink {
 		if linkPath, err := os.Readlink(path); err == nil {
 			fi.LinkPath = linkPath
