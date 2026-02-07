@@ -128,14 +128,6 @@ const TerminalHistoryPage: React.FC<TerminalHistoryPageProps> = ({ onBack }) => 
             icon: <X size={18} />,
             onClick: exitSelectionMode,
           },
-          {
-            icon: <CheckSquare size={18} />,
-            onClick: selectAll,
-          },
-          {
-            icon: <Square size={18} />,
-            onClick: clearSelection,
-          },
         ],
         centerContent: (
           <div className="flex items-center h-full">
@@ -144,15 +136,24 @@ const TerminalHistoryPage: React.FC<TerminalHistoryPageProps> = ({ onBack }) => 
             </span>
           </div>
         ),
-        rightButtons:
-          selectedIds.size > 0
+        rightButtons: [
+          {
+            icon: <CheckSquare size={18} />,
+            onClick: selectAll,
+          },
+          {
+            icon: <Square size={18} />,
+            onClick: clearSelection,
+          },
+          ...(selectedIds.size > 0
             ? [
                 {
                   icon: <Trash2 size={18} className="text-red-500" />,
                   onClick: handleDeleteSelected,
                 },
               ]
-            : [],
+            : []),
+        ],
       };
     }
 

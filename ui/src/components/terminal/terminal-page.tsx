@@ -49,12 +49,9 @@ const TerminalPage: React.FC<TerminalPageProps> = ({ groupId, cwd }) => {
 
   const handleToggleListManager = useCallback(() => {
     if (listManagerOpen) {
-      // Closing the manager - ensure we have an active terminal
       if (terminals.length === 0) {
-        return; // Cannot close if no terminals
+        return;
       }
-
-      // If no active terminal is selected, select the last one
       if (!activeTerminalId) {
         const lastTerminal = terminals[terminals.length - 1];
         setActiveId(groupId, lastTerminal.id);
@@ -86,11 +83,6 @@ const TerminalPage: React.FC<TerminalPageProps> = ({ groupId, cwd }) => {
           icon: <Terminal size={18} />,
           onClick: handleToggleListManager,
           active: listManagerOpen,
-          // Add styling to match file browser button if needed,
-          // but TopBar handles 'active' style.
-          // User complaint about "missing border" might imply they want
-          // the button to look like a specific "toggle" state.
-          // The TopBar 'active' class has 'border-ide-accent'.
         },
       ],
       centerContent:
@@ -153,7 +145,8 @@ const TerminalPage: React.FC<TerminalPageProps> = ({ groupId, cwd }) => {
     groupId,
   ]);
 
-  usePageTopBar(topBarConfig, [topBarConfig]);
+  const activeTopBarConfig = showHistory ? undefined : topBarConfig;
+  usePageTopBar(activeTopBarConfig, [activeTopBarConfig]);
 
   if (showHistory) {
     return <TerminalHistoryPage onBack={() => setShowHistory(false)} />;
