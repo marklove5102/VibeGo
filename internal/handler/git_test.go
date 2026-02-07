@@ -84,6 +84,16 @@ func TestGitStatus(t *testing.T) {
 func TestGitLog(t *testing.T) {
 	repoDir := setupGitRepo(t)
 	defer os.RemoveAll(repoDir)
+	wGit, _ := git.PlainOpen(repoDir)
+	wt, _ := wGit.Worktree()
+	err := os.WriteFile(filepath.Join(repoDir, "log2.txt"), []byte("log2"), 0644)
+	assert.NoError(t, err)
+	_, err = wt.Add("log2.txt")
+	assert.NoError(t, err)
+	_, err = wt.Commit("second", &git.CommitOptions{
+		Author: &object.Signature{Name: "Test", Email: "test@example.com", When: time.Now()},
+	})
+	assert.NoError(t, err)
 
 	h := NewGitHandler(nil)
 	gin.SetMode(gin.TestMode)
@@ -98,6 +108,14 @@ func TestGitLog(t *testing.T) {
 	r.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
+	var resp struct {
+		Commits []CommitInfo `json:"commits"`
+	}
+	err = json.Unmarshal(w.Body.Bytes(), &resp)
+	assert.NoError(t, err)
+	assert.Len(t, resp.Commits, 2)
+	assert.Equal(t, 1, resp.Commits[0].ParentCount)
+	assert.Equal(t, 0, resp.Commits[1].ParentCount)
 }
 
 func TestGitInit(t *testing.T) {

@@ -86,10 +86,11 @@ func collectCommitLog(repo *git.Repository, limit int) []CommitInfo {
 			return io.EOF
 		}
 		commits = append(commits, CommitInfo{
-			Hash:    c.Hash.String(),
-			Message: c.Message,
-			Author:  c.Author.Name,
-			Date:    c.Author.When.Format(time.RFC3339),
+			Hash:        c.Hash.String(),
+			Message:     c.Message,
+			Author:      c.Author.Name,
+			Date:        c.Author.When.Format(time.RFC3339),
+			ParentCount: c.NumParents(),
 		})
 		count++
 		return nil

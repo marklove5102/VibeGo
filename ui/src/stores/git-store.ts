@@ -43,8 +43,6 @@ interface GitState {
   activeTab: "changes" | "history";
   stashes: StashEntry[];
   conflicts: string[];
-  lastCommitHash: string | null;
-  showPostCommit: boolean;
   isLoading: boolean;
   error: string | null;
 
@@ -57,7 +55,6 @@ interface GitState {
   toggleFile: (path: string) => void;
   toggleAllFiles: () => void;
   setPartialSelection: (path: string, selectedRowIds: string[], selectableRowIds: string[]) => void;
-  dismissPostCommit: () => void;
   reset: () => void;
 
   fetchStatus: () => Promise<void>;
@@ -202,8 +199,6 @@ export const useGitStore = create<GitState>((set, get) => ({
   activeTab: "changes",
   stashes: [],
   conflicts: [],
-  lastCommitHash: null,
-  showPostCommit: false,
   isLoading: false,
   error: null,
 
@@ -214,7 +209,6 @@ export const useGitStore = create<GitState>((set, get) => ({
   setIsAmend: (isAmend) => set({ isAmend }),
   setActiveTab: (activeTab) => set({ activeTab }),
   setSelectedCommit: (selectedCommit) => set({ selectedCommit }),
-  dismissPostCommit: () => set({ showPostCommit: false }),
 
   toggleFile: (path) => {
     const { checkedFiles, partialSelections } = get();
@@ -289,8 +283,6 @@ export const useGitStore = create<GitState>((set, get) => ({
       hasRemote: false,
       stashes: [],
       conflicts: [],
-      lastCommitHash: null,
-      showPostCommit: false,
     }),
 
   applyStatusUpdate: (files) => {
@@ -462,22 +454,22 @@ export const useGitStore = create<GitState>((set, get) => ({
           partialSelections: {},
           workingDiffs: {},
           commits: res.commits ?? get().commits,
+          selectedCommit: null,
+          selectedCommitFiles: [],
           summary: nextSummary,
           description: "",
           isAmend: false,
-          lastCommitHash: res.hash ?? null,
-          showPostCommit: true,
         });
       } else {
         set({
           checkedFiles: new Set<string>(),
           partialSelections: {},
           workingDiffs: {},
+          selectedCommit: null,
+          selectedCommitFiles: [],
           summary: nextSummary,
           description: "",
           isAmend: false,
-          lastCommitHash: res.hash ?? null,
-          showPostCommit: true,
         });
         void Promise.allSettled([
           gitApi.status(currentPath),
@@ -553,20 +545,22 @@ export const useGitStore = create<GitState>((set, get) => ({
           partialSelections: {},
           workingDiffs: {},
           commits: res.commits ?? get().commits,
+          selectedCommit: null,
+          selectedCommitFiles: [],
           summary: nextSummary,
           description: "",
           isAmend: false,
-          showPostCommit: false,
         });
       } else {
         set({
           checkedFiles: new Set<string>(),
           partialSelections: {},
           workingDiffs: {},
+          selectedCommit: null,
+          selectedCommitFiles: [],
           summary: nextSummary,
           description: "",
           isAmend: false,
-          showPostCommit: false,
         });
         void Promise.allSettled([
           gitApi.status(currentPath),
@@ -631,8 +625,8 @@ export const useGitStore = create<GitState>((set, get) => ({
         partialSelections: {},
         workingDiffs: {},
         commits: res.commits,
-        showPostCommit: false,
-        lastCommitHash: null,
+        selectedCommit: null,
+        selectedCommitFiles: [],
       });
       return true;
     } catch (err) {

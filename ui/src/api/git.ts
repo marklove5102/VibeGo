@@ -23,6 +23,7 @@ export interface GitCommit {
   message: string;
   author: string;
   date: string;
+  parentCount: number;
 }
 
 export interface GitDiff {

@@ -1,5 +1,6 @@
 import { ArrowDown, ArrowUp, CloudUpload, FileText, GitBranch, GitGraph, History, RefreshCw } from "lucide-react";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useDialog } from "@/components/common";
 import type { GitCommit } from "@/api/git";
 import { gitApi } from "@/api/git";
 import { usePageTopBar } from "@/hooks/use-page-top-bar";
@@ -29,6 +30,7 @@ interface GitViewProps {
 
 const GitView: React.FC<GitViewProps> = ({ path, locale, onFileDiff, onConflict, isActive = true }) => {
   const t = (key: string) => getTranslation(locale, key);
+  const dialog = useDialog();
   const [showBranchSelector, setShowBranchSelector] = useState(false);
 
   const {
@@ -75,6 +77,7 @@ const GitView: React.FC<GitViewProps> = ({ path, locale, onFileDiff, onConflict,
     toggleFile,
     toggleAllFiles,
     discardFile,
+    undoLastCommit,
     applyStatusUpdate,
     applyBranchStatus,
   } = useGitStore();
@@ -238,6 +241,34 @@ const GitView: React.FC<GitViewProps> = ({ path, locale, onFileDiff, onConflict,
     [getCommitDiff, onFileDiff, path]
   );
 
+  const handleHistoryUndoCommit = useCallback(
+    async (commitInfo: GitCommit) => {
+      if (isLoading || commits[0]?.hash !== commitInfo.hash || commitInfo.parentCount === 0) {
+        return;
+      }
+
+      if (allFiles.length > 0 || conflicts.length > 0) {
+        const confirmed = await dialog.confirm(t("git.undoCommitConfirmTitle"), t("git.undoCommitConfirmMessage"), {
+          confirmText: t("git.undoCommit"),
+          confirmVariant: "danger",
+        });
+
+        if (!confirmed) {
+          return;
+        }
+      }
+
+      const ok = await undoLastCommit();
+      if (!ok) {
+        await dialog.alert(t("git.undoCommitFailed"), useGitStore.getState().error || undefined);
+        return;
+      }
+
+      setActiveTab("changes");
+    },
+    [allFiles.length, commits, conflicts.length, dialog, isLoading, setActiveTab, t, undoLastCommit]
+  );
+
   const handleConflictClick = useCallback(
     (conflictPath: string) => {
       onConflict?.(path, conflictPath);
@@ -297,7 +328,6 @@ const GitView: React.FC<GitViewProps> = ({ path, locale, onFileDiff, onConflict,
               currentBranch={currentBranch}
               stashes={stashes}
               conflicts={conflicts}
-              aheadCount={aheadCount}
               onFileClick={handleFileClick}
               onToggleFile={toggleFile}
               onToggleAll={toggleAllFiles}
@@ -313,6 +343,7 @@ const GitView: React.FC<GitViewProps> = ({ path, locale, onFileDiff, onConflict,
               isLoading={isLoading}
               locale={locale}
               onCommitSelect={handleCommitSelect}
+              onUndoCommit={handleHistoryUndoCommit}
               onFileClick={handleHistoryFileClick}
               selectedCommitFiles={selectedCommitFiles}
               selectedCommitHash={selectedCommit?.hash || null}

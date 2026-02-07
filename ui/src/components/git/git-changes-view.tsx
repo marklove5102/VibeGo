@@ -1,7 +1,6 @@
 import {
   AlertTriangle,
   Archive,
-  ArrowUp,
   Check,
   ChevronDown,
   ChevronRight,
@@ -9,7 +8,6 @@ import {
   Square,
   SquareCheck,
   SquareMinus,
-  Undo2,
   X,
 } from "lucide-react";
 import React, { useCallback, useEffect, useRef, useState } from "react";
@@ -29,7 +27,6 @@ interface GitChangesViewProps {
   currentBranch: string;
   stashes: StashEntry[];
   conflicts: string[];
-  aheadCount: number;
   onFileClick: (path: string) => void;
   onToggleFile: (path: string) => void;
   onToggleAll: () => void;
@@ -154,7 +151,6 @@ const GitChangesView: React.FC<GitChangesViewProps> = ({
   currentBranch,
   stashes,
   conflicts,
-  aheadCount,
   onFileClick,
   onToggleFile,
   onToggleAll,
@@ -165,21 +161,8 @@ const GitChangesView: React.FC<GitChangesViewProps> = ({
   onStashDrop,
 }) => {
   const t = useCallback((key: string) => getTranslation(locale, key), [locale]);
-  const {
-    summary,
-    description,
-    isAmend,
-    showPostCommit,
-    lastCommitHash,
-    setSummary,
-    setDescription,
-    setIsAmend,
-    commitSelected,
-    amendCommit,
-    undoLastCommit,
-    gitPush,
-    dismissPostCommit,
-  } = useGitStore();
+  const { summary, description, isAmend, setSummary, setDescription, setIsAmend, commitSelected, amendCommit } =
+    useGitStore();
 
   const [showStashes, setShowStashes] = useState(false);
   const [showDescription, setShowDescription] = useState(false);
@@ -378,32 +361,6 @@ const GitChangesView: React.FC<GitChangesViewProps> = ({
       )}
 
       <div className="shrink-0 border-t border-ide-border bg-ide-panel/30 p-3 space-y-2">
-        {showPostCommit && lastCommitHash && (
-          <div className="flex items-center gap-2 bg-green-500/10 border border-green-500/30 rounded px-3 py-1.5">
-            <Check size={14} className="text-green-400 shrink-0" />
-            <span className="text-xs text-green-400 flex-1 truncate">{lastCommitHash.substring(0, 7)}</span>
-            <button
-              className="px-2 py-0.5 text-[10px] bg-ide-accent/20 text-ide-accent rounded hover:bg-ide-accent/30 flex items-center gap-1"
-              onClick={undoLastCommit}
-            >
-              <Undo2 size={10} />
-              {t("git.undo")}
-            </button>
-            {aheadCount > 0 && (
-              <button
-                className="px-2 py-0.5 text-[10px] bg-blue-500/20 text-blue-400 rounded hover:bg-blue-500/30 flex items-center gap-1"
-                onClick={gitPush}
-              >
-                <ArrowUp size={10} />
-                {t("git.push")} ({aheadCount})
-              </button>
-            )}
-            <button className="text-ide-mute hover:text-ide-text" onClick={dismissPostCommit}>
-              <X size={12} />
-            </button>
-          </div>
-        )}
-
         <input
           ref={summaryRef}
           type="text"

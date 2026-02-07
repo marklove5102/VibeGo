@@ -251,10 +251,11 @@ type GitLogRequest struct {
 }
 
 type CommitInfo struct {
-	Hash    string `json:"hash"`
-	Message string `json:"message"`
-	Author  string `json:"author"`
-	Date    string `json:"date"`
+	Hash        string `json:"hash"`
+	Message     string `json:"message"`
+	Author      string `json:"author"`
+	Date        string `json:"date"`
+	ParentCount int    `json:"parentCount"`
 }
 
 // Log godoc
@@ -305,10 +306,11 @@ func (h *GitHandler) Log(c *gin.Context) {
 			return io.EOF
 		}
 		commits = append(commits, CommitInfo{
-			Hash:    commit.Hash.String(),
-			Message: commit.Message,
-			Author:  commit.Author.Name,
-			Date:    commit.Author.When.Format(time.RFC3339),
+			Hash:        commit.Hash.String(),
+			Message:     commit.Message,
+			Author:      commit.Author.Name,
+			Date:        commit.Author.When.Format(time.RFC3339),
+			ParentCount: commit.NumParents(),
 		})
 		count++
 		return nil

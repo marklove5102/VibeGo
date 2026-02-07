@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronRight, Clock, GitCommit as GitCommitIcon } from "lucide-react";
+import { ChevronDown, ChevronRight, Clock, GitCommit as GitCommitIcon, Undo2 } from "lucide-react";
 import React, { useCallback, useState } from "react";
 import type { CommitFileInfo, GitCommit } from "@/api/git";
 import { getIntlLocale, getTranslation, type Locale } from "@/lib/i18n";
@@ -8,6 +8,7 @@ interface GitHistoryViewProps {
   isLoading: boolean;
   locale: Locale;
   onCommitSelect: (commit: GitCommit) => void;
+  onUndoCommit: (commit: GitCommit) => void;
   onFileClick: (commit: GitCommit, filePath: string) => void;
   selectedCommitFiles: CommitFileInfo[];
   selectedCommitHash: string | null;
@@ -62,7 +63,10 @@ interface CommitItemProps {
   isExpanded: boolean;
   isSelected: boolean;
   locale: Locale;
+  canUndoCommit: boolean;
+  isLoading: boolean;
   onToggle: () => void;
+  onUndoCommit: () => void;
   onFileClick: (filePath: string) => void;
   files: CommitFileInfo[];
 }
@@ -72,7 +76,10 @@ const CommitItem: React.FC<CommitItemProps> = ({
   isExpanded,
   isSelected,
   locale,
+  canUndoCommit,
+  isLoading,
   onToggle,
+  onUndoCommit,
   onFileClick,
   files,
 }) => {
@@ -114,10 +121,25 @@ const CommitItem: React.FC<CommitItemProps> = ({
         </div>
       </div>
 
-      {isExpanded && files.length > 0 && (
+      {isExpanded && (files.length > 0 || canUndoCommit) && (
         <div className="bg-ide-panel/30 border-t border-ide-border/30">
-          <div className="px-3 py-1 text-[10px] text-ide-mute">
-            {files.length} {t("git.filesChanged")}
+          <div className="px-3 py-1 flex items-center justify-between gap-2 text-[10px] text-ide-mute">
+            <span>
+              {files.length} {t("git.filesChanged")}
+            </span>
+            {canUndoCommit && (
+              <button
+                className="px-2 py-0.5 rounded flex items-center gap-1 text-ide-accent hover:bg-ide-accent/10 disabled:opacity-50"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onUndoCommit();
+                }}
+                disabled={isLoading}
+              >
+                <Undo2 size={10} />
+                {t("git.undoCommit")}
+              </button>
+            )}
           </div>
           {files.map((file) => (
             <div
@@ -145,6 +167,7 @@ const GitHistoryView: React.FC<GitHistoryViewProps> = ({
   isLoading,
   locale,
   onCommitSelect,
+  onUndoCommit,
   onFileClick,
   selectedCommitFiles,
   selectedCommitHash,
@@ -174,14 +197,17 @@ const GitHistoryView: React.FC<GitHistoryViewProps> = ({
 
   return (
     <div className="h-full overflow-y-auto bg-ide-bg">
-      {commits.map((commit) => (
+      {commits.map((commit, index) => (
         <CommitItem
           key={commit.hash}
           commit={commit}
           isExpanded={expandedHash === commit.hash}
           isSelected={selectedCommitHash === commit.hash}
           locale={locale}
+          canUndoCommit={index === 0 && commit.parentCount > 0}
+          isLoading={isLoading}
           onToggle={() => handleToggle(commit)}
+          onUndoCommit={() => onUndoCommit(commit)}
           onFileClick={(path) => onFileClick(commit, path)}
           files={expandedHash === commit.hash ? selectedCommitFiles : []}
         />
