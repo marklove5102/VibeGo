@@ -17,6 +17,7 @@ clean-code:
 
 format:
 	gofmt -w .
+	cd $(UI_DIR) && pnpm run check:fix
 
 dev-server:
 	air

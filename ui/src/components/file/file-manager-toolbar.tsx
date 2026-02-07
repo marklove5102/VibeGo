@@ -14,15 +14,18 @@ import {
   X,
 } from "lucide-react";
 import React, { useState } from "react";
+import { useStore } from "zustand";
 import { useTranslation } from "@/lib/i18n";
 import { useAppStore } from "@/stores";
-import { type SortField, useFileManagerStore } from "@/stores/file-manager-store";
+import { type FileManagerStoreApi, fileManagerStore, type SortField } from "@/stores/file-manager-store";
 
 interface FileManagerToolbarProps {
   onRefresh: () => void;
   onNewFile: () => void;
   onNewFolder: () => void;
   onDeleteSelected: () => void;
+  mode?: "default" | "directory-picker";
+  store?: FileManagerStoreApi;
 }
 
 const FileManagerToolbar: React.FC<FileManagerToolbarProps> = ({
@@ -30,9 +33,12 @@ const FileManagerToolbar: React.FC<FileManagerToolbarProps> = ({
   onNewFile,
   onNewFolder,
   onDeleteSelected,
+  mode = "default",
+  store,
 }) => {
   const locale = useAppStore((s) => s.locale);
   const t = useTranslation(locale);
+  const storeApi = store ?? fileManagerStore;
   const {
     searchQuery,
     searchActive,
@@ -49,7 +55,7 @@ const FileManagerToolbar: React.FC<FileManagerToolbarProps> = ({
     clearSelection,
     sortField,
     toggleSort,
-  } = useFileManagerStore();
+  } = useStore(storeApi);
 
   const [showSortMenu, setShowSortMenu] = useState(false);
 
@@ -179,28 +185,32 @@ const FileManagerToolbar: React.FC<FileManagerToolbarProps> = ({
                   <RefreshCw size={18} />
                 </button>
 
-                <button
-                  onClick={toggleSelectionMode}
-                  className="p-2 rounded-md text-ide-mute hover:bg-ide-bg hover:text-ide-text"
-                >
-                  <CheckSquare size={18} />
-                </button>
+                {mode === "default" && (
+                  <>
+                    <button
+                      onClick={toggleSelectionMode}
+                      className="p-2 rounded-md text-ide-mute hover:bg-ide-bg hover:text-ide-text"
+                    >
+                      <CheckSquare size={18} />
+                    </button>
 
-                <div className="w-px h-5 bg-ide-border mx-1" />
+                    <div className="w-px h-5 bg-ide-border mx-1" />
 
-                <button
-                  onClick={onNewFile}
-                  className="p-2 rounded-md text-ide-mute hover:bg-ide-bg hover:text-ide-text"
-                >
-                  <FilePlus size={18} />
-                </button>
+                    <button
+                      onClick={onNewFile}
+                      className="p-2 rounded-md text-ide-mute hover:bg-ide-bg hover:text-ide-text"
+                    >
+                      <FilePlus size={18} />
+                    </button>
 
-                <button
-                  onClick={onNewFolder}
-                  className="p-2 rounded-md text-ide-mute hover:bg-ide-bg hover:text-ide-text"
-                >
-                  <FolderPlus size={18} />
-                </button>
+                    <button
+                      onClick={onNewFolder}
+                      className="p-2 rounded-md text-ide-mute hover:bg-ide-bg hover:text-ide-text"
+                    >
+                      <FolderPlus size={18} />
+                    </button>
+                  </>
+                )}
               </>
             )}
           </>

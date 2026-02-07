@@ -15,12 +15,13 @@ import {
   Music,
 } from "lucide-react";
 import React, { useCallback, useEffect, useRef } from "react";
+import { useStore } from "zustand";
 import { fileApi } from "@/api/file";
 import { useDialog } from "@/components/common";
 import { useFrameController } from "@/framework/frame/controller";
 import { getIntlLocale, type Locale, useTranslation } from "@/lib/i18n";
 import { useSettingsStore } from "@/lib/settings";
-import { type FileItem, useFileManagerStore } from "@/stores/file-manager-store";
+import { type FileItem, type FileManagerStoreApi, fileManagerStore } from "@/stores/file-manager-store";
 import FileDetailSheet from "./file-detail-sheet";
 import FileManagerBreadcrumb from "./file-manager-breadcrumb";
 import FileManagerToolbar from "./file-manager-toolbar";
@@ -100,11 +101,15 @@ function getFileIcon(file: FileItem) {
 interface FileManagerProps {
   initialPath?: string;
   onFileOpen?: (file: FileItem) => void;
+  mode?: "default" | "directory-picker";
+  store?: FileManagerStoreApi;
 }
 
-const FileManager: React.FC<FileManagerProps> = ({ initialPath = ".", onFileOpen }) => {
+const FileManager: React.FC<FileManagerProps> = ({ initialPath = ".", onFileOpen, mode = "default", store }) => {
+  const storeApi = store ?? fileManagerStore;
   const {
     currentPath,
+    initialized,
     setFiles,
     goToPath,
     loading,
@@ -121,7 +126,7 @@ const FileManager: React.FC<FileManagerProps> = ({ initialPath = ".", onFileOpen
     detailFile,
     setDetailFile,
     viewMode,
-  } = useFileManagerStore();
+  } = useStore(storeApi);
 
   const { setPageMenuItems } = useFrameController();
   const locale = (useSettingsStore((s) => s.settings.locale) || "zh") as Locale;
@@ -129,6 +134,7 @@ const FileManager: React.FC<FileManagerProps> = ({ initialPath = ".", onFileOpen
   const dialog = useDialog();
 
   const listRef = useRef<HTMLDivElement>(null);
+  const skipLoadPathRef = useRef<string | null>(null);
 
   const loadFiles = useCallback(
     async (path: string, initialize = false) => {
@@ -137,9 +143,10 @@ const FileManager: React.FC<FileManagerProps> = ({ initialPath = ".", onFileOpen
       try {
         const res = await fileApi.list(path);
         if (initialize && res.path) {
-          useFileManagerStore.getState().setCurrentPath(res.path);
-          useFileManagerStore.getState().setRootPath(res.path);
-          useFileManagerStore.setState({
+          skipLoadPathRef.current = res.path;
+          storeApi.setState({
+            currentPath: res.path,
+            rootPath: res.path,
             pathHistory: [res.path],
             historyIndex: 0,
             initialized: true,
@@ -164,19 +171,20 @@ const FileManager: React.FC<FileManagerProps> = ({ initialPath = ".", onFileOpen
         setLoading(false);
       }
     },
-    [setFiles, setLoading, setError, t]
+    [setFiles, setLoading, setError, storeApi, t]
   );
 
   useEffect(() => {
-    const { initialized } = useFileManagerStore.getState();
     if (!initialized) {
       loadFiles(initialPath, true);
+      return;
     }
-  }, []);
-
-  useEffect(() => {
+    if (skipLoadPathRef.current === currentPath) {
+      skipLoadPathRef.current = null;
+      return;
+    }
     loadFiles(currentPath);
-  }, [currentPath, loadFiles]);
+  }, [currentPath, initialPath, initialized, loadFiles]);
 
   const handleShowNewFileDialog = useCallback(async () => {
     const name = await dialog.prompt(t("fileManager.newFile"), { placeholder: t("fileManager.enterName") });
@@ -224,6 +232,10 @@ const FileManager: React.FC<FileManagerProps> = ({ initialPath = ".", onFileOpen
   );
 
   useEffect(() => {
+    if (mode !== "default") {
+      setPageMenuItems([]);
+      return;
+    }
     setPageMenuItems([
       {
         id: "new-file",
@@ -239,11 +251,18 @@ const FileManager: React.FC<FileManagerProps> = ({ initialPath = ".", onFileOpen
       },
     ]);
     return () => setPageMenuItems([]);
-  }, [t, setPageMenuItems, handleShowNewFileDialog, handleShowNewFolderDialog]);
+  }, [mode, t, setPageMenuItems, handleShowNewFileDialog, handleShowNewFolderDialog]);
 
   const sortedFiles = getSortedFiles();
+  const visibleFiles = mode === "directory-picker" ? sortedFiles.filter((file) => file.isDir) : sortedFiles;
 
   const handleFileClick = (file: FileItem) => {
+    if (mode === "directory-picker") {
+      if (file.isDir) {
+        goToPath(file.path);
+      }
+      return;
+    }
     if (selectionMode) {
       toggleSelectFile(file.path);
     } else if (file.isDir) {
@@ -254,6 +273,7 @@ const FileManager: React.FC<FileManagerProps> = ({ initialPath = ".", onFileOpen
   };
 
   const handleFileLongPress = (file: FileItem) => {
+    if (mode !== "default") return;
     setDetailFile(file);
   };
 
@@ -292,6 +312,12 @@ const FileManager: React.FC<FileManagerProps> = ({ initialPath = ".", onFileOpen
   };
 
   useEffect(() => {
+    if (focusIndex > Math.max(visibleFiles.length - 1, 0)) {
+      setFocusIndex(Math.max(visibleFiles.length - 1, 0));
+    }
+  }, [focusIndex, visibleFiles.length, setFocusIndex]);
+
+  useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement;
       if (target.tagName === "INPUT" || target.tagName === "TEXTAREA") return;
@@ -302,32 +328,34 @@ const FileManager: React.FC<FileManagerProps> = ({ initialPath = ".", onFileOpen
           break;
         case "ArrowDown":
           e.preventDefault();
-          setFocusIndex(Math.min(sortedFiles.length - 1, focusIndex + 1));
+          setFocusIndex(Math.max(0, Math.min(visibleFiles.length - 1, focusIndex + 1)));
           break;
         case "Enter":
           e.preventDefault();
-          if (sortedFiles[focusIndex]) handleFileClick(sortedFiles[focusIndex]);
+          if (visibleFiles[focusIndex]) handleFileClick(visibleFiles[focusIndex]);
           break;
         case "Backspace":
           if (!e.metaKey && !e.ctrlKey) {
             e.preventDefault();
-            useFileManagerStore.getState().goParent();
+            storeApi.getState().goParent();
           }
           break;
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [focusIndex, sortedFiles]);
+  }, [focusIndex, handleFileClick, setFocusIndex, storeApi, visibleFiles]);
 
   return (
     <div className="h-full flex flex-col bg-ide-bg">
-      <FileManagerBreadcrumb />
+      <FileManagerBreadcrumb store={storeApi} />
       <FileManagerToolbar
         onRefresh={handleRefresh}
         onNewFile={handleShowNewFileDialog}
         onNewFolder={handleShowNewFolderDialog}
         onDeleteSelected={handleDeleteSelected}
+        mode={mode}
+        store={storeApi}
       />
 
       {error && (
@@ -342,14 +370,16 @@ const FileManager: React.FC<FileManagerProps> = ({ initialPath = ".", onFileOpen
           <div className="flex items-center justify-center h-32">
             <Loader2 size={24} className="animate-spin text-ide-accent" />
           </div>
-        ) : sortedFiles.length === 0 ? (
+        ) : visibleFiles.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-32 text-ide-mute">
             <Folder size={32} className="mb-2 opacity-50" />
-            <span className="text-xs">{t("fileManager.emptyFolder")}</span>
+            <span className="text-xs">
+              {mode === "directory-picker" ? t("directoryPicker.noSubdirectories") : t("fileManager.emptyFolder")}
+            </span>
           </div>
         ) : viewMode === "list" ? (
           <div className="divide-y divide-ide-border">
-            {sortedFiles.map((file, index) => (
+            {visibleFiles.map((file, index) => (
               <FileListItem
                 key={file.path}
                 file={file}
@@ -364,7 +394,7 @@ const FileManager: React.FC<FileManagerProps> = ({ initialPath = ".", onFileOpen
           </div>
         ) : (
           <div className="grid grid-cols-3 gap-2 p-2">
-            {sortedFiles.map((file, index) => (
+            {visibleFiles.map((file, index) => (
               <FileGridItem
                 key={file.path}
                 file={file}
@@ -379,13 +409,15 @@ const FileManager: React.FC<FileManagerProps> = ({ initialPath = ".", onFileOpen
         )}
       </div>
 
-      <FileDetailSheet
-        file={detailFile}
-        open={!!detailFile}
-        onClose={() => setDetailFile(null)}
-        onDelete={handleDelete}
-        onRename={handleShowRenameDialog}
-      />
+      {mode === "default" && (
+        <FileDetailSheet
+          file={detailFile}
+          open={!!detailFile}
+          onClose={() => setDetailFile(null)}
+          onDelete={handleDelete}
+          onRename={handleShowRenameDialog}
+        />
+      )}
     </div>
   );
 };

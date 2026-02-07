@@ -8,6 +8,7 @@ import { useSettingsStore } from "@/lib/settings";
 import { pageRegistry } from "@/pages/registry";
 import { initTerminalCleanup } from "@/services/terminal-cleanup-service";
 import {
+  fileManagerStore,
   type Locale,
   type Theme,
   useAppStore,
@@ -25,7 +26,7 @@ const App: React.FC = () => {
   const t = useTranslation(locale);
 
   const resetPreview = usePreviewStore((s) => s.reset);
-  const { currentPath } = useFileManagerStore();
+  const currentPath = useFileManagerStore((s) => s.currentPath);
   const initSettings = useSettingsStore((s) => s.init);
   const themeSetting = useSettingsStore((s) => s.settings.theme);
   const localeSetting = useSettingsStore((s) => s.settings.locale);
@@ -119,8 +120,8 @@ const App: React.FC = () => {
       switch (pageType) {
         case "files":
           if (activeTabId === null) {
-            useFileManagerStore.getState().setLoading(true);
-            const path = useFileManagerStore.getState().currentPath;
+            fileManagerStore.getState().setLoading(true);
+            const path = fileManagerStore.getState().currentPath;
             try {
               const res = await fileApi.list(path);
               const files = res.files.map((f) => ({
@@ -135,9 +136,9 @@ const App: React.FC = () => {
                 modTime: f.modTime,
                 extension: f.extension,
               }));
-              useFileManagerStore.getState().setFiles(files);
+              fileManagerStore.getState().setFiles(files);
             } finally {
-              useFileManagerStore.getState().setLoading(false);
+              fileManagerStore.getState().setLoading(false);
             }
           } else {
             const newPath = await dialog.prompt(t("dialog.newFileName"), { placeholder: t("dialog.enterFileName") });

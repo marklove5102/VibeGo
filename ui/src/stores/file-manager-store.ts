@@ -1,4 +1,5 @@
-import { create } from "zustand";
+import { useStore } from "zustand";
+import { createStore, type StateCreator } from "zustand/vanilla";
 
 export interface FileItem {
   path: string;
@@ -67,7 +68,7 @@ interface FileManagerState {
   reset: () => void;
 }
 
-export const useFileManagerStore = create<FileManagerState>((set, get) => ({
+const createFileManagerState: StateCreator<FileManagerState> = (set, get) => ({
   currentPath: ".",
   rootPath: ".",
   initialized: false,
@@ -253,4 +254,14 @@ export const useFileManagerStore = create<FileManagerState>((set, get) => ({
       error: null,
       detailFile: null,
     }),
-}));
+});
+
+export const createFileManagerStore = () => createStore<FileManagerState>(createFileManagerState);
+
+export type FileManagerStoreApi = ReturnType<typeof createFileManagerStore>;
+
+export const fileManagerStore = createFileManagerStore();
+
+export function useFileManagerStore<T>(selector: (state: FileManagerState) => T) {
+  return useStore(fileManagerStore, selector);
+}

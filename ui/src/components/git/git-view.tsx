@@ -1,8 +1,8 @@
 import { ArrowDown, ArrowUp, CloudUpload, FileText, GitBranch, GitGraph, History, RefreshCw } from "lucide-react";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useDialog } from "@/components/common";
 import type { GitCommit } from "@/api/git";
 import { gitApi } from "@/api/git";
+import { useDialog } from "@/components/common";
 import { usePageTopBar } from "@/hooks/use-page-top-bar";
 import { getTranslation, type Locale } from "@/lib/i18n";
 import { useGitStore } from "@/stores";

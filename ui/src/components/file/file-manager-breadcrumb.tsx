@@ -1,14 +1,17 @@
 import { Check, ChevronLeft, ChevronRight, ChevronUp, ChevronRight as Forward, Home, X } from "lucide-react";
 import React, { useEffect, useRef, useState } from "react";
-import { useFileManagerStore } from "@/stores/file-manager-store";
+import { useStore } from "zustand";
+import { type FileManagerStoreApi, fileManagerStore } from "@/stores/file-manager-store";
 
 interface FileManagerBreadcrumbProps {
   className?: string;
+  store?: FileManagerStoreApi;
 }
 
-const FileManagerBreadcrumb: React.FC<FileManagerBreadcrumbProps> = ({ className = "" }) => {
+const FileManagerBreadcrumb: React.FC<FileManagerBreadcrumbProps> = ({ className = "", store }) => {
+  const storeApi = store ?? fileManagerStore;
   const { currentPath, rootPath, historyIndex, pathHistory, goToPath, goBack, goForward, goParent } =
-    useFileManagerStore();
+    useStore(storeApi);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);

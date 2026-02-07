@@ -2,7 +2,7 @@ import { create } from "zustand";
 import { type SessionInfo, sessionApi } from "../api/session";
 import { terminalApi } from "../api/terminal";
 import { cleanupAllTerminals } from "../services/terminal-cleanup-service";
-import { useFileManagerStore } from "./file-manager-store";
+import { fileManagerStore } from "./file-manager-store";
 import { type GenericGroup, type GroupPage, type ToolGroup, useFrameStore } from "./frame-store";
 import { type TerminalSession, useTerminalStore } from "./terminal-store";
 
@@ -149,7 +149,7 @@ function normalizeFileManagerSnapshot(
 
 function buildSessionState(): SessionState {
   const frameState = useFrameStore.getState();
-  const fileManagerState = useFileManagerStore.getState();
+  const fileManagerState = fileManagerStore.getState();
   const terminalState = useTerminalStore.getState();
   const genericGroups = frameState.groups.filter((g): g is GenericGroup => g.type === "group");
   const toolGroups = frameState.groups.filter((g): g is ToolGroup => g.type === "tool");
@@ -234,7 +234,7 @@ function parseSessionState(rawState: string): SessionState {
 function restoreSessionState(state: SessionState): void {
   const frameStore = useFrameStore.getState();
   frameStore.initDefaultGroups();
-  useFileManagerStore.getState().reset();
+  fileManagerStore.getState().reset();
   useTerminalStore.getState().reset();
 
   state.openGroups.forEach((group) => {
@@ -288,7 +288,7 @@ function restoreSessionState(state: SessionState): void {
       state.fileManagerByGroup?.[activeGroup.id],
       filesPagePath
     );
-    useFileManagerStore.setState({
+    fileManagerStore.setState({
       currentPath: restoredFileManagerState.currentPath,
       rootPath: restoredFileManagerState.rootPath,
       pathHistory: restoredFileManagerState.pathHistory,
@@ -368,14 +368,14 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
   createSessionFromFolder: async (folderPath: string) => {
     const folderName = folderPath.split("/").pop() || folderPath;
     const frameStore = useFrameStore.getState();
-    const fileManagerStore = useFileManagerStore.getState();
+    const fileManagerState = fileManagerStore.getState();
 
     try {
       const res = await sessionApi.create(folderName);
       await get().loadSessions();
 
       frameStore.initDefaultGroups();
-      fileManagerStore.reset();
+      fileManagerState.reset();
       const groupId = frameStore.addFolderGroup(folderPath, folderName);
 
       const state: SessionState = {

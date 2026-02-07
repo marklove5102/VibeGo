@@ -1,7 +1,10 @@
 export { type Locale, type Theme, useAppStore } from "./app-store";
 export { type EditorTab, useEditorStore } from "./editor-store";
 export {
+  createFileManagerStore,
   type FileItem,
+  type FileManagerStoreApi,
+  fileManagerStore,
   type SortField,
   type SortOrder,
   useFileManagerStore,
