@@ -1,6 +1,6 @@
 */node_modules/*
 *.db
 ui/dist/index.html
-/tmp
+/temp
 ui/CLAUDE.md
 /ui/.vite
