@@ -148,7 +148,7 @@ const GitView: React.FC<GitViewProps> = ({ path, locale, onFileDiff, onConflict,
     if (!isActive) return null;
     return {
       show: true,
-      leftButtons: [{ icon: <GitGraph size={18} /> }],
+      leftButtons: [{ icon: <GitGraph size={18} />, active: true }],
       centerContent: (
         <div className="flex items-center gap-1 h-full">
           <div
