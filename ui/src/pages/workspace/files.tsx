@@ -60,4 +60,3 @@ registerPage({
 });
 
 export default FilesView;
-

@@ -1,6 +1,6 @@
 import { create } from "zustand";
-import { terminalApi } from "../api/terminal";
 import { type SessionInfo, sessionApi } from "../api/session";
+import { terminalApi } from "../api/terminal";
 import { cleanupAllTerminals } from "../services/terminal-cleanup-service";
 import { useFileManagerStore } from "./file-manager-store";
 import { type GenericGroup, type GroupPage, type ToolGroup, useFrameStore } from "./frame-store";

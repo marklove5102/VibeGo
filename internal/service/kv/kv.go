@@ -5,6 +5,7 @@ import (
 
 	"github.com/xxnuo/vibego/internal/model"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type Store struct {
@@ -22,7 +23,10 @@ func NewWithUser(db *gorm.DB, userID string) *Store {
 
 func (s *Store) Set(key, value string) error {
 	kv := model.KV{Key: key, Value: value, UserID: s.userID}
-	return s.db.Save(&kv).Error
+	return s.db.Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "user_id"}, {Name: "key"}},
+		DoUpdates: clause.AssignmentColumns([]string{"value"}),
+	}).Create(&kv).Error
 }
 
 func (s *Store) Get(key string) (string, error) {

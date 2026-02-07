@@ -21,4 +21,3 @@ registerPage({
 });
 
 export default HomeView;
-

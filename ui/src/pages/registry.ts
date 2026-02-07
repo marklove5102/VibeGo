@@ -29,4 +29,3 @@ export function registerPage(page: PageDefinition): void {
 export function unregisterPage(id: PageId): void {
   pageRegistry.unregister(id);
 }
-

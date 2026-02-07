@@ -25,4 +25,3 @@ export interface PageDefinition {
   order?: number;
   View: React.ComponentType<PageViewProps>;
 }
-

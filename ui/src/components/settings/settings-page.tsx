@@ -1,8 +1,8 @@
 import { AlignLeft, Clock, Eye, EyeOff, Grid, List, Mail, Settings, User, WrapText, X } from "lucide-react";
 import React, { useEffect, useState } from "react";
+import { useFrameController } from "@/framework/frame/controller";
 import { type Locale, useTranslation } from "@/lib/i18n";
 import { getSettingsByCategory, SETTING_CATEGORIES, type SettingSchema, useSettingsStore } from "@/lib/settings";
-import { useFrameController } from "@/framework/frame/controller";
 import { useFrameStore } from "@/stores/frame-store";
 
 const SettingItem: React.FC<{

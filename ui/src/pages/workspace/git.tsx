@@ -1,8 +1,8 @@
 import { GitGraph } from "lucide-react";
 import React, { useCallback } from "react";
 import { ConflictView, DiffView, GitView } from "@/components/git";
-import { useAppStore } from "@/stores/app-store";
 import { useFrameStore, useGitStore } from "@/stores";
+import { useAppStore } from "@/stores/app-store";
 import { registerPage } from "../registry";
 import type { PageViewProps } from "../types";
 
@@ -52,13 +52,7 @@ const GitViewPage: React.FC<PageViewProps> = ({ context }) => {
 
   if (activeTabId === null) {
     return (
-      <GitView
-        path={pagePath}
-        locale={locale}
-        onFileDiff={handleGitDiff}
-        onConflict={handleConflict}
-        isActive={true}
-      />
+      <GitView path={pagePath} locale={locale} onFileDiff={handleGitDiff} onConflict={handleConflict} isActive={true} />
     );
   }
 
@@ -102,4 +96,3 @@ registerPage({
 });
 
 export default GitViewPage;
-

@@ -19,4 +19,3 @@ registerPage({
 });
 
 export default SettingsView;
-

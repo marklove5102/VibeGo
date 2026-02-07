@@ -17,10 +17,10 @@ import {
 import React, { useCallback, useEffect, useRef } from "react";
 import { fileApi } from "@/api/file";
 import { useDialog } from "@/components/common";
+import { useFrameController } from "@/framework/frame/controller";
 import { type Locale, useTranslation } from "@/lib/i18n";
 import { useSettingsStore } from "@/lib/settings";
 import { type FileItem, useFileManagerStore } from "@/stores/file-manager-store";
-import { useFrameController } from "@/framework/frame/controller";
 import FileDetailSheet from "./file-detail-sheet";
 import FileManagerBreadcrumb from "./file-manager-breadcrumb";
 import FileManagerToolbar from "./file-manager-toolbar";

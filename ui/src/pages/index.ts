@@ -1,5 +1,5 @@
-export type { PageCategory, PageContext, PageDefinition, PageId, PageViewProps } from "./types";
 export { pageRegistry, registerPage, unregisterPage } from "./registry";
+export type { PageCategory, PageContext, PageDefinition, PageId, PageViewProps } from "./types";
 
 import "./system/home";
 import "./system/settings";

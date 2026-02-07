@@ -36,7 +36,7 @@ func setupTestSessionHandler(t *testing.T) (*SessionHandler, *gin.Engine) {
 func TestSessionNew(t *testing.T) {
 	_, r := setupTestSessionHandler(t)
 
-	body := `{"device_name":"Test Device"}`
+	body := `{"name":"Test Device"}`
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("POST", "/api/session", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -52,13 +52,13 @@ func TestSessionNew(t *testing.T) {
 func TestSessionNewGeneratesUUID(t *testing.T) {
 	_, r := setupTestSessionHandler(t)
 
-	body := `{"device_name":"First"}`
+	body := `{"name":"First"}`
 	w1 := httptest.NewRecorder()
 	req1, _ := http.NewRequest("POST", "/api/session", bytes.NewBufferString(body))
 	req1.Header.Set("Content-Type", "application/json")
 	r.ServeHTTP(w1, req1)
 
-	body = `{"device_name":"Second"}`
+	body = `{"name":"Second"}`
 	w2 := httptest.NewRecorder()
 	req2, _ := http.NewRequest("POST", "/api/session", bytes.NewBufferString(body))
 	req2.Header.Set("Content-Type", "application/json")
@@ -151,7 +151,7 @@ func TestSessionSaveState(t *testing.T) {
 
 	body := `{"state":"{\"key\":\"value\"}"}`
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("PUT", "/api/session/save1/state", bytes.NewBufferString(body))
+	req, _ := http.NewRequest("PUT", "/api/session/save1", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	r.ServeHTTP(w, req)
 
@@ -168,7 +168,7 @@ func TestSessionSaveStateNotFound(t *testing.T) {
 
 	body := `{"state":"{}"}`
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("PUT", "/api/session/notexist/state", bytes.NewBufferString(body))
+	req, _ := http.NewRequest("PUT", "/api/session/notexist", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	r.ServeHTTP(w, req)
 
@@ -204,7 +204,7 @@ func TestSessionRemoveNotFound(t *testing.T) {
 func TestSessionIntegration(t *testing.T) {
 	_, r := setupTestSessionHandler(t)
 
-	newBody := `{"device_name":"Integration Test"}`
+	newBody := `{"name":"Integration Test"}`
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("POST", "/api/session", bytes.NewBufferString(newBody))
 	req.Header.Set("Content-Type", "application/json")
@@ -225,7 +225,7 @@ func TestSessionIntegration(t *testing.T) {
 
 	saveBody := `{"state":"{\"test\":true}"}`
 	w = httptest.NewRecorder()
-	req, _ = http.NewRequest("PUT", "/api/session/"+sessionID+"/state", bytes.NewBufferString(saveBody))
+	req, _ = http.NewRequest("PUT", "/api/session/"+sessionID, bytes.NewBufferString(saveBody))
 	req.Header.Set("Content-Type", "application/json")
 	r.ServeHTTP(w, req)
 	assert.Equal(t, http.StatusOK, w.Code)
