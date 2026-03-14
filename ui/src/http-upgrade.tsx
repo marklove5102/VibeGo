@@ -1,13 +1,14 @@
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, Languages, Moon, Sun } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "@fontsource-variable/jetbrains-mono";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import "@/index.css";
 import { getTranslation, type Locale } from "@/lib/i18n";
 
-const REDIRECT_DELAY_SECONDS = 7;
+const REDIRECT_DELAY_SECONDS = 30;
 const DISABLE_FLAG = "--no-tls";
 
 function detectLocale(): Locale {
@@ -42,11 +43,32 @@ function formatTemplate(template: string, values: Record<string, string | number
 }
 
 function HttpUpgradePage() {
-  const [locale] = useState<Locale>(detectLocale);
+  const [locale, setLocale] = useState<Locale>(detectLocale);
+  const [theme, setTheme] = useState<"light" | "dark">(() =>
+    typeof window !== "undefined" && window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"
+  );
+  const [autoRedirect, setAutoRedirect] = useState(true);
   const [secondsRemaining, setSecondsRemaining] = useState(REDIRECT_DELAY_SECONDS);
   const redirectTarget = useMemo(buildRedirectTarget, []);
 
   const t = (key: string) => getTranslation(locale, key);
+
+  useEffect(() => {
+    const handleLanguageChange = () => setLocale(detectLocale());
+    window.addEventListener("languagechange", handleLanguageChange);
+    return () => window.removeEventListener("languagechange", handleLanguageChange);
+  }, []);
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+    const handleChange = (e: MediaQueryListEvent) => setTheme(e.matches ? "dark" : "light");
+    if (mediaQuery.addEventListener) mediaQuery.addEventListener("change", handleChange);
+    else mediaQuery.addListener(handleChange);
+    return () => {
+      if (mediaQuery.removeEventListener) mediaQuery.removeEventListener("change", handleChange);
+      else mediaQuery.removeListener(handleChange);
+    };
+  }, []);
 
   useEffect(() => {
     document.documentElement.lang = locale === "zh" ? "zh-CN" : "en";
@@ -54,6 +76,13 @@ function HttpUpgradePage() {
   }, [locale, t]);
 
   useEffect(() => {
+    if (theme === "dark") document.documentElement.classList.add("dark");
+    else document.documentElement.classList.remove("dark");
+  }, [theme]);
+
+  useEffect(() => {
+    if (!autoRedirect) return;
+
     const timer = window.setInterval(() => {
       setSecondsRemaining((current) => {
         if (current <= 1) {
@@ -66,61 +95,71 @@ function HttpUpgradePage() {
     }, 1000);
 
     return () => window.clearInterval(timer);
-  }, [redirectTarget]);
+  }, [redirectTarget, autoRedirect]);
 
   return (
-    <div className="min-h-dvh bg-ide-bg text-ide-text">
-      <div className="mx-auto flex min-h-dvh w-full max-w-4xl items-center justify-center px-3 py-3 sm:px-6 sm:py-6">
-        <Card className="w-full max-w-2xl border-ide-border bg-ide-panel py-0 shadow-none">
-          <CardHeader className="gap-2 border-b border-ide-border px-4 py-4 sm:px-5 sm:py-5">
-            <div className="text-[11px] tracking-[0.22em] text-ide-mute uppercase">VibeGo</div>
-            <CardTitle className="text-lg leading-6 font-semibold text-ide-text sm:text-xl">
-              {t("httpUpgrade.heading")}
-            </CardTitle>
-            <p className="text-xs leading-5 text-ide-mute sm:text-sm">{t("httpUpgrade.description")}</p>
+    <div className="min-h-dvh bg-ide-bg text-ide-text relative">
+      <div className="mx-auto flex min-h-dvh w-full max-w-4xl items-center justify-center px-4 py-6 sm:px-6 sm:py-10">
+        <Card className="w-full max-w-2xl border-ide-border bg-ide-panel py-0 shadow-sm sm:shadow-md">
+          <CardHeader className="gap-3 border-b border-ide-border px-5 py-6 sm:px-8 sm:py-8">
+            <div className="flex items-start justify-between gap-4">
+              <div className="space-y-2">
+                <div className="text-xs tracking-[0.2em] text-ide-mute uppercase sm:text-sm">VibeGo</div>
+                <CardTitle className="text-xl font-semibold text-ide-text sm:text-2xl">
+                  {t("httpUpgrade.heading")}
+                </CardTitle>
+              </div>
+              <div className="flex shrink-0 items-center gap-1">
+                <Button variant="ghost" size="icon" onClick={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}>
+                  {theme === "dark" ? <Sun size={20} /> : <Moon size={20} />}
+                </Button>
+                <Button variant="ghost" size="icon" onClick={() => setLocale((l) => (l === "zh" ? "en" : "zh"))}>
+                  <Languages size={20} />
+                </Button>
+              </div>
+            </div>
+            <p className="text-sm leading-relaxed text-ide-mute sm:text-base">{t("httpUpgrade.description")}</p>
           </CardHeader>
 
-          <CardContent className="space-y-3 px-4 py-4 sm:px-5 sm:py-5">
-            <div className="space-y-2 text-xs leading-5 text-ide-mute sm:text-sm">
+          <CardContent className="space-y-6 px-5 py-6 sm:px-8 sm:py-8">
+            <div className="space-y-4 text-sm leading-relaxed text-ide-mute sm:text-base">
               <p>
-                <span className="text-ide-text">{t("httpUpgrade.secureContextTitle")}：</span>
+                <span className="font-medium text-ide-text">{t("httpUpgrade.secureContextTitle")}：</span>
                 {t("httpUpgrade.secureContextDescription")}
               </p>
               <p>
-                <span className="text-ide-text">{t("httpUpgrade.certificateTitle")}：</span>
+                <span className="font-medium text-ide-text">{t("httpUpgrade.certificateTitle")}：</span>
                 {t("httpUpgrade.certificateDescription")}
               </p>
               <p>
-                <span className="text-ide-text">{t("httpUpgrade.trustTitle")}：</span>
+                <span className="font-medium text-ide-text">{t("httpUpgrade.trustTitle")}：</span>
                 {t("httpUpgrade.trustDescription")}
               </p>
             </div>
 
-            <div className="border border-ide-border bg-ide-bg px-3 py-3">
-              <div className="text-[11px] tracking-[0.18em] text-ide-mute uppercase">
-                {t("httpUpgrade.targetLabel")}
-              </div>
-              <div className="mt-1 break-all font-mono text-[11px] leading-5 text-ide-text sm:text-xs">
-                {redirectTarget}
-              </div>
-            </div>
-
-            <div className="text-[11px] leading-5 text-ide-mute sm:text-xs">
+            <div className="text-xs leading-relaxed text-ide-mute sm:text-sm">
               {formatTemplate(t("httpUpgrade.disableHint"), { flag: DISABLE_FLAG })}
             </div>
           </CardContent>
 
-          <CardFooter className="flex items-center justify-between gap-3 border-t border-ide-border px-4 py-4 sm:px-5 sm:py-5">
-            <div className="text-xs text-ide-mute sm:text-sm">
-              {formatTemplate(t("httpUpgrade.countdown"), { seconds: secondsRemaining })}
+          <CardFooter className="flex flex-col-reverse items-stretch justify-between gap-4 border-t border-ide-border px-5 py-6 sm:flex-row sm:items-center sm:px-8 sm:py-8">
+            <div className="flex items-center justify-center gap-2 text-sm text-ide-mute sm:justify-start sm:text-base">
+              <Checkbox
+                id="auto-redirect"
+                checked={autoRedirect}
+                onCheckedChange={(checked) => setAutoRedirect(!!checked)}
+              />
+              <label htmlFor="auto-redirect" className="cursor-pointer select-none">
+                {formatTemplate(t("httpUpgrade.countdown"), { seconds: secondsRemaining })}
+              </label>
             </div>
             <Button
               asChild
-              className="h-8 rounded-none bg-ide-accent px-3 text-xs text-ide-on-accent hover:opacity-90 sm:h-9 sm:px-4 sm:text-sm"
+              className="flex h-11 w-full items-center justify-center gap-2 bg-ide-accent px-6 text-sm text-ide-on-accent hover:opacity-90 sm:h-10 sm:w-auto sm:text-base"
             >
               <a href={redirectTarget}>
                 <span>{t("httpUpgrade.openNow")}</span>
-                <ArrowRight size={14} />
+                <ArrowRight size={16} />
               </a>
             </Button>
           </CardFooter>
