@@ -22,6 +22,7 @@ const Keyboard: React.FC<KeyboardProps> = ({ onKeyEvent, layout = KEYBOARD_QWERT
     shift: { ...INITIAL_MOD },
     meta: { ...INITIAL_MOD },
     select: { ...INITIAL_MOD },
+    fn: { ...INITIAL_MOD },
   });
 
   const [asrStatus, setAsrStatus] = useState<SherpaStatus>("idle");
@@ -31,7 +32,7 @@ const Keyboard: React.FC<KeyboardProps> = ({ onKeyEvent, layout = KEYBOARD_QWERT
   const emitText = useCallback(
     (text: string) => {
       for (const ch of text) {
-        onKeyEvent({ type: "char", value: ch, ctrl: false, alt: false, shift: false, meta: false, select: false });
+        onKeyEvent({ type: "char", value: ch, ctrl: false, alt: false, shift: false, meta: false, select: false, fn: false });
       }
     },
     [onKeyEvent]
@@ -63,6 +64,7 @@ const Keyboard: React.FC<KeyboardProps> = ({ onKeyEvent, layout = KEYBOARD_QWERT
       Shift: "shift",
       Meta: "meta",
       Select: "select",
+      Fn: "fn",
     };
     return map[value] ?? null;
   }, []);
@@ -71,7 +73,7 @@ const Keyboard: React.FC<KeyboardProps> = ({ onKeyEvent, layout = KEYBOARD_QWERT
     setModifiers((prev) => {
       const next = { ...prev };
       let changed = false;
-      for (const k of ["ctrl", "alt", "shift", "meta", "select"] as const) {
+      for (const k of ["ctrl", "alt", "shift", "meta", "select", "fn"] as const) {
         if (prev[k].active && !prev[k].locked) {
           next[k] = { active: false, locked: false };
           changed = true;
@@ -115,6 +117,7 @@ const Keyboard: React.FC<KeyboardProps> = ({ onKeyEvent, layout = KEYBOARD_QWERT
         shift: modifiers.shift.active,
         meta: modifiers.meta.active,
         select: modifiers.select.active,
+        fn: modifiers.fn.active,
       };
       onKeyEvent(event);
       clearLatched();
@@ -132,6 +135,7 @@ const Keyboard: React.FC<KeyboardProps> = ({ onKeyEvent, layout = KEYBOARD_QWERT
         shift: modifiers.shift.active,
         meta: modifiers.meta.active,
         select: modifiers.select.active,
+        fn: modifiers.fn.active,
       };
       onKeyEvent(event);
     },
@@ -145,6 +149,12 @@ const Keyboard: React.FC<KeyboardProps> = ({ onKeyEvent, layout = KEYBOARD_QWERT
       let m = modifiers[name];
       if (name === "shift" && (modifiers.select.active || modifiers.select.locked)) {
         m = modifiers.select;
+      }
+      if (name === "ctrl" && (modifiers.meta.active || modifiers.meta.locked)) {
+        m = modifiers.meta;
+      }
+      if (name === "alt" && (modifiers.fn.active || modifiers.fn.locked)) {
+        m = modifiers.fn;
       }
       if (m.locked) return "locked";
       if (m.active) return "latched";
@@ -167,7 +177,11 @@ const Keyboard: React.FC<KeyboardProps> = ({ onKeyEvent, layout = KEYBOARD_QWERT
   const showLoadingBar = asrStatus === "loading" || asrStatus === "error";
 
   return (
-    <div className="tk-keyboard">
+    <div
+      className="tk-keyboard"
+      onPointerDown={(e) => e.preventDefault()}
+      onContextMenu={(e) => e.preventDefault()}
+    >
       {showLoadingBar && (
         <div className="tk-speech-indicator">
           <span className="tk-speech-dot" />
