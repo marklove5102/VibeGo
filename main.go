@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/fs"
 	"net"
+	"os"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -21,6 +22,7 @@ import (
 	"github.com/xxnuo/vibego/internal/config"
 
 	"github.com/xxnuo/vibego/internal/docs"
+	"github.com/xxnuo/vibego/internal/svcctl"
 	"github.com/xxnuo/vibego/internal/handler"
 	"github.com/xxnuo/vibego/internal/logger"
 	"github.com/xxnuo/vibego/internal/middleware"
@@ -76,6 +78,10 @@ func printAccessibleAddresses(host, port, scheme string) {
 // @host localhost:1984
 // @BasePath /api
 func main() {
+	if svcctl.Run(os.Args) {
+		return
+	}
+
 	cfg := config.GetConfig()
 
 	logger.Setup(cfg.LogLevel)
