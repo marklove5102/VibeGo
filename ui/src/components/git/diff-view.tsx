@@ -183,32 +183,37 @@ const DiffView: React.FC<DiffViewProps> = ({
   const diffContentWrapperStyle = isMobile ? { minWidth: `calc(${maxMobileContentColumns}ch + 60px)` } : undefined;
   const diffRowClassName = isMobile
     ? `w-full flex items-stretch transition-colors ${interactive ? "text-left" : "select-text"}`
-    : `w-full grid grid-cols-[26px_56px_56px_minmax(0,1fr)] items-start gap-2 px-2 py-0.5 transition-colors ${interactive ? "text-left" : "select-text"}`;
-  const diffLeftPaneClassName = isMobile
-    ? "sticky left-0 z-10 flex shrink-0 self-stretch items-center gap-0 border-r border-ide-border bg-inherit px-0.5"
-    : "contents";
+    : `w-full flex items-stretch transition-colors ${interactive ? "text-left" : "select-text"}`;
+  const diffLeftPaneOuterClassName = isMobile
+    ? "sticky left-0 z-10 flex shrink-0 self-stretch border-r border-ide-border bg-ide-bg bg-opacity-100"
+    : "sticky left-0 z-10 flex shrink-0 self-stretch border-r border-ide-border/50 bg-ide-bg bg-opacity-100";
+  const diffLeftPaneInnerClassName = isMobile
+    ? "flex items-center gap-0 w-full px-0.5"
+    : "flex items-start gap-2 w-full pl-2 pr-2 py-0.5";
   const diffCheckboxClassName = isMobile
-    ? "h-5 w-3 flex items-center justify-center"
-    : "h-5 flex items-center justify-center";
+    ? "h-5 w-3 flex items-center justify-center shrink-0"
+    : "h-5 w-[26px] flex items-center justify-center shrink-0";
   const diffLineNumberClassName = isMobile
-    ? "h-5 w-[26px] flex items-center justify-end text-[8px] text-ide-mute/60 tabular-nums"
-    : "h-5 flex items-center justify-end text-ide-mute/70 tabular-nums";
+    ? "h-5 w-[26px] flex items-center justify-end text-[8px] text-ide-mute/60 tabular-nums shrink-0"
+    : "h-5 w-[56px] flex items-center justify-end text-ide-mute/70 tabular-nums shrink-0";
   const diffPrefixClassName = isMobile
     ? "inline-block w-2 shrink-0 text-ide-mute/70"
     : "inline-block w-3 shrink-0 text-ide-mute/70";
   const diffContentClassName = isMobile
     ? "flex-1 min-w-0 px-2 leading-5 whitespace-pre"
-    : "leading-5 whitespace-pre-wrap break-words min-w-0";
+    : "flex-1 min-w-0 pr-2 pl-2 py-0.5 leading-5 whitespace-pre-wrap break-words";
   const diffBodyClassName = isMobile
     ? "flex-1 overflow-auto font-mono text-[11px]"
     : "flex-1 overflow-auto font-mono text-xs";
   const hunkHeaderClassName = isMobile
-    ? `w-full flex items-stretch bg-ide-panel border-b border-ide-border sticky top-0 z-10 ${interactive ? "cursor-pointer" : ""}`
-    : "flex items-center gap-2 bg-ide-panel/40 border-b border-ide-border/50 sticky top-0 z-10 px-2 py-1";
+    ? `w-full flex items-stretch bg-ide-panel border-b border-ide-border sticky top-0 z-20 ${interactive ? "cursor-pointer" : ""}`
+    : `w-full flex items-stretch bg-ide-panel border-b border-ide-border/50 sticky top-0 z-20 ${interactive && !isMobile ? "cursor-pointer hover:bg-ide-panel/80" : ""}`;
   const hunkHeaderLeftClassName = isMobile
-    ? "sticky left-0 z-10 flex shrink-0 self-stretch items-center gap-0 border-r border-ide-border bg-ide-panel px-0.5"
-    : "flex items-center gap-2";
-  const hunkHeaderTextClassName = isMobile ? "px-2 py-0.75 text-[11px] text-ide-accent" : "text-[11px] text-ide-accent";
+    ? "sticky left-0 z-20 flex shrink-0 self-stretch items-center gap-0 border-r border-ide-border bg-ide-panel px-0.5"
+    : "sticky left-0 z-20 flex shrink-0 self-stretch items-center gap-2 border-r border-ide-border/50 bg-ide-panel pl-2 pr-2 py-1";
+  const hunkHeaderTextClassName = isMobile 
+    ? "px-2 py-0.75 text-[11px] text-ide-accent flex items-center" 
+    : "px-2 py-1 text-[11px] text-ide-accent flex items-center";
 
   const handleRowToggle = (rowId: string) => {
     if (!interactive || !filePath) {
@@ -291,7 +296,7 @@ const DiffView: React.FC<DiffViewProps> = ({
                 <div
                   className={hunkHeaderClassName}
                   onClick={() => {
-                    if (isMobile && interactive) {
+                    if (interactive) {
                       handleHunkToggle(hunk);
                     }
                   }}
@@ -311,16 +316,18 @@ const DiffView: React.FC<DiffViewProps> = ({
                     const selected = rowSelectionType === "all";
                     const rowContent = (
                       <>
-                        <div
-                          className={`${diffLeftPaneClassName} ${getSelectionSurfaceClassName(row, selected, interactive)}`}
-                        >
-                          <span className={diffCheckboxClassName}>
-                            {interactive && row.selectable
-                              ? getSelectionIcon(rowSelectionType, 13, selected ? "text-ide-accent" : "text-ide-mute")
-                              : null}
-                          </span>
-                          <span className={diffLineNumberClassName}>{row.oldLineNumber ?? ""}</span>
-                          <span className={diffLineNumberClassName}>{row.newLineNumber ?? ""}</span>
+                        <div className={diffLeftPaneOuterClassName}>
+                          <div
+                            className={`${diffLeftPaneInnerClassName} ${getSelectionSurfaceClassName(row, selected, interactive)}`}
+                          >
+                            <span className={diffCheckboxClassName}>
+                              {interactive && row.selectable
+                                ? getSelectionIcon(rowSelectionType, 13, selected ? "text-ide-accent" : "text-ide-mute")
+                                : null}
+                            </span>
+                            <span className={diffLineNumberClassName}>{row.oldLineNumber ?? ""}</span>
+                            <span className={diffLineNumberClassName}>{row.newLineNumber ?? ""}</span>
+                          </div>
                         </div>
                         <span className={diffContentClassName}>
                           <span className={diffPrefixClassName}>
