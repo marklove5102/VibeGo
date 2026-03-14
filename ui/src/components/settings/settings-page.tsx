@@ -1,4 +1,18 @@
-import { AlignLeft, Bell, Clock, Eye, EyeOff, Grid, List, Mail, Settings, User, WrapText, X } from "lucide-react";
+import {
+  AlignLeft,
+  Bell,
+  Clock,
+  Eye,
+  EyeOff,
+  Grid,
+  List,
+  Mail,
+  RefreshCw,
+  Settings,
+  User,
+  WrapText,
+  X,
+} from "lucide-react";
 import React, { useEffect, useState } from "react";
 import { useFrameController } from "@/framework/frame/controller";
 import { type Locale, useTranslation } from "@/lib/i18n";
@@ -164,7 +178,10 @@ const SettingsPage: React.FC = () => {
   useEffect(() => {
     setTopBarConfig({
       show: true,
-      leftButtons: [{ icon: <Settings size={18} />, active: true }],
+      leftButtons: [
+        { icon: <X size={18} />, title: t("common.closePage"), onClick: () => removeGroup("settings") },
+        { icon: <Settings size={18} />, active: true },
+      ],
       centerContent: (
         <div className="flex items-center gap-2 overflow-x-auto custom-scrollbar touch-pan-x h-full">
           {SETTING_CATEGORIES.map((cat) => (
@@ -184,8 +201,9 @@ const SettingsPage: React.FC = () => {
       ),
       rightButtons: [
         {
-          icon: <X size={18} />,
-          onClick: () => removeGroup("settings"),
+          icon: <RefreshCw size={18} />,
+          title: t("common.refresh"),
+          onClick: () => init(),
         },
       ],
     });
