@@ -8,10 +8,60 @@ import {
   Loader2,
   Undo2,
 } from "lucide-react";
-import React, { useCallback, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import type { CommitFileInfo, GitCommit } from "@/api/git";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { getIntlLocale, getTranslation, type Locale } from "@/lib/i18n";
+
+const avatarCache = new Map<string, string>();
+const avatarLoading = new Map<string, Promise<string | null>>();
+
+const fetchAndCacheAvatar = (email: string): Promise<string | null> => {
+  const cached = avatarCache.get(email);
+  if (cached) return Promise.resolve(cached);
+
+  const inflight = avatarLoading.get(email);
+  if (inflight) return inflight;
+
+  const url = `https://avatars.githubusercontent.com/u/e?email=${encodeURIComponent(email)}&s=64`;
+  const promise = fetch(url)
+    .then((res) => {
+      if (!res.ok) return null;
+      return res.blob();
+    })
+    .then((blob) => {
+      if (!blob || blob.size < 100) return null;
+      const objectUrl = URL.createObjectURL(blob);
+      avatarCache.set(email, objectUrl);
+      return objectUrl;
+    })
+    .catch(() => null)
+    .finally(() => avatarLoading.delete(email));
+
+  avatarLoading.set(email, promise);
+  return promise;
+};
+
+const useCachedAvatarUrl = (email: string): string | undefined => {
+  const trimmed = email.trim();
+  const [url, setUrl] = useState<string | undefined>(() => avatarCache.get(trimmed));
+
+  useEffect(() => {
+    if (!trimmed) return;
+    const cached = avatarCache.get(trimmed);
+    if (cached) {
+      setUrl(cached);
+      return;
+    }
+    let cancelled = false;
+    fetchAndCacheAvatar(trimmed).then((result) => {
+      if (!cancelled && result) setUrl(result);
+    });
+    return () => { cancelled = true; };
+  }, [trimmed]);
+
+  return url;
+};
 
 interface GitHistoryViewProps {
   commits: GitCommit[];
@@ -69,11 +119,7 @@ const hashColor = (name: string) => {
   return colors[Math.abs(h) % colors.length];
 };
 
-const getAuthorAvatarUrl = (email: string) => {
-  const trimmedEmail = email.trim();
-  if (!trimmedEmail) return undefined;
-  return `https://avatars.githubusercontent.com/u/e?email=${encodeURIComponent(trimmedEmail)}&s=64`;
-};
+
 
 const CopyHashButton: React.FC<{ hash: string; locale: Locale }> = ({ hash, locale }) => {
   const [copied, setCopied] = useState(false);
@@ -125,7 +171,7 @@ const CommitItem: React.FC<CommitItemProps> = ({
   const t = useCallback((key: string) => getTranslation(locale, key), [locale]);
   const shortHash = commit.hash.substring(0, 7);
   const firstLine = commit.message.split("\n")[0];
-  const authorAvatarUrl = getAuthorAvatarUrl(commit.authorEmail);
+  const authorAvatarUrl = useCachedAvatarUrl(commit.authorEmail);
 
   return (
     <div className={`border-b border-ide-border/50 ${isSelected ? "bg-ide-accent/5" : ""}`}>
