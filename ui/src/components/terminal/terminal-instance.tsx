@@ -633,6 +633,58 @@ const TerminalInstance: React.FC<TerminalInstanceProps> = ({
     return () => observer.disconnect();
   }, [isActive]);
 
+  const touchStartRef = useRef<{ y: number } | null>(null);
+  const touchAccumRef = useRef(0);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const onTouchStart = (e: TouchEvent) => {
+      if (e.touches.length === 2) {
+        const y = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+        touchStartRef.current = { y };
+        touchAccumRef.current = 0;
+      } else {
+        touchStartRef.current = null;
+      }
+    };
+
+    const onTouchMove = (e: TouchEvent) => {
+      if (e.touches.length !== 2 || !touchStartRef.current) return;
+      e.preventDefault();
+      const y = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+      const delta = touchStartRef.current.y - y;
+      touchAccumRef.current += delta;
+      touchStartRef.current.y = y;
+      const fontSize = terminalRef.current?.options.fontSize ?? 14;
+      const lineHeight = terminalRef.current?.options.lineHeight ?? 1;
+      const linePixels = fontSize * lineHeight;
+      const lines = Math.round(touchAccumRef.current / linePixels);
+      if (lines !== 0 && terminalRef.current) {
+        terminalRef.current.scrollLines(lines);
+        touchAccumRef.current -= lines * linePixels;
+      }
+    };
+
+    const onTouchEnd = (e: TouchEvent) => {
+      if (e.touches.length < 2) {
+        touchStartRef.current = null;
+        touchAccumRef.current = 0;
+      }
+    };
+
+    container.addEventListener("touchstart", onTouchStart, { passive: true });
+    container.addEventListener("touchmove", onTouchMove, { passive: false });
+    container.addEventListener("touchend", onTouchEnd, { passive: true });
+
+    return () => {
+      container.removeEventListener("touchstart", onTouchStart);
+      container.removeEventListener("touchmove", onTouchMove);
+      container.removeEventListener("touchend", onTouchEnd);
+    };
+  }, []);
+
   return (
     <div
       ref={containerRef}
