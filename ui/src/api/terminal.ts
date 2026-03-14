@@ -2,19 +2,35 @@ import { request } from "@/api/request";
 
 export type TerminalStatus = "running" | "exited" | "closed";
 
+export interface TerminalCapabilities {
+  resume: boolean;
+  snapshot: boolean;
+  shell_integration: boolean;
+  durable: boolean;
+}
+
 export interface TerminalInfo {
   id: string;
   name: string;
   shell: string;
   cwd: string;
+  current_cwd: string;
   cols: number;
   rows: number;
+  runtime_type: string;
+  readonly: boolean;
+  capabilities: TerminalCapabilities;
   status: TerminalStatus;
   workspace_session_id: string;
   group_id: string;
   parent_id: string;
   exit_code: number;
   history_size: number;
+  shell_type: string;
+  shell_state: string;
+  shell_integration: boolean;
+  last_command: string;
+  last_command_exit_code?: number | null;
   created_at: number;
   updated_at: number;
 }
@@ -73,6 +89,22 @@ export const terminalApi = {
     request<{ ok: boolean }>("/terminal/rename", {
       method: "POST",
       body: JSON.stringify({ id, name }),
+    }),
+
+  updateRuntimeInfo: (
+    id: string,
+    patch: {
+      current_cwd?: string;
+      shell_type?: string;
+      shell_state?: string;
+      shell_integration?: boolean;
+      last_command?: string;
+      last_command_exit_code?: number | null;
+    }
+  ) =>
+    request<{ ok: boolean }>("/terminal/runtime-info", {
+      method: "POST",
+      body: JSON.stringify({ id, ...patch }),
     }),
 
   close: (id: string) =>

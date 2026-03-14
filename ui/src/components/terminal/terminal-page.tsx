@@ -6,6 +6,7 @@ import { useDialog } from "@/components/common";
 import TerminalHistoryPage from "@/components/terminal/terminal-history-page";
 import TerminalInstance from "@/components/terminal/terminal-instance";
 import type { TerminalInstanceHandle } from "@/components/terminal/terminal-instance";
+import type { TerminalInstanceStateUpdate } from "@/components/terminal/terminal-instance";
 import TerminalListManager from "@/components/terminal/terminal-list-manager";
 import TerminalSplitView from "@/components/terminal/terminal-split-view";
 import { translateKeyEvent } from "@/components/keyboard";
@@ -25,6 +26,14 @@ interface TerminalPageProps {
 }
 
 const EMPTY_TERMINALS: TerminalSession[] = [];
+
+function getCompactTerminalLocation(value?: string): string {
+  if (!value) return "";
+  const normalized = value.replace(/[\\/]+$/, "");
+  if (!normalized) return value;
+  const segments = normalized.split(/[\\/]/).filter(Boolean);
+  return segments[segments.length - 1] || normalized;
+}
 
 function collectLayoutTerminalIds(layout: LayoutNode | null): string[] {
   if (!layout) {
@@ -268,6 +277,38 @@ const TerminalPage: React.FC<TerminalPageProps> = ({ groupId, cwd }) => {
     [groupId, setFocusedId]
   );
 
+  const handleTerminalStateChange = useCallback(
+    (terminalId: string, state: TerminalInstanceStateUpdate) => {
+      const updates: Partial<TerminalSession> = {};
+      if (state.capabilities) updates.capabilities = state.capabilities;
+      if (state.currentCwd !== undefined) updates.currentCwd = state.currentCwd;
+      if (state.lastCommand !== undefined) updates.lastCommand = state.lastCommand;
+      if (state.lastCommandExitCode !== undefined) updates.lastCommandExitCode = state.lastCommandExitCode;
+      if (state.readonly !== undefined) updates.readonly = state.readonly;
+      if (state.runtimeType !== undefined) updates.runtimeType = state.runtimeType;
+      if (state.shellIntegration !== undefined) updates.shellIntegration = state.shellIntegration;
+      if (state.shellState !== undefined) updates.shellState = state.shellState;
+      if (state.shellType !== undefined) updates.shellType = state.shellType;
+      if (state.status === "running" || state.status === "exited" || state.status === "closed") {
+        updates.status = state.status;
+      }
+      if (Object.keys(updates).length > 0) {
+        useTerminalStore.getState().updateTerminal(groupId, terminalId, updates);
+      }
+    },
+    [groupId]
+  );
+
+  const makeTerminalExitedHandler = useCallback(
+    (terminalId: string) => () => handleTerminalExited(terminalId),
+    [handleTerminalExited]
+  );
+
+  const makeTerminalStateChangeHandler = useCallback(
+    (terminalId: string) => (state: TerminalInstanceStateUpdate) => handleTerminalStateChange(terminalId, state),
+    [handleTerminalStateChange]
+  );
+
   useEffect(() => {
     if (!currentSessionId) {
       return;
@@ -386,6 +427,14 @@ const TerminalPage: React.FC<TerminalPageProps> = ({ groupId, cwd }) => {
                   <span className={`max-w-[80px] truncate font-medium ${!terminal.pinned ? "italic" : ""}`}>
                     {terminal.name}
                   </span>
+                  {isActive && terminal.currentCwd && (
+                    <span
+                      className="hidden max-w-[88px] truncate text-[11px] text-ide-mute md:inline"
+                      title={terminal.currentCwd}
+                    >
+                      /{getCompactTerminalLocation(terminal.currentCwd)}
+                    </span>
+                  )}
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
@@ -526,6 +575,7 @@ const TerminalPage: React.FC<TerminalPageProps> = ({ groupId, cwd }) => {
               terminals={terminals}
               onFocus={handleFocusPane}
               onExited={handleTerminalExited}
+              onStateChange={handleTerminalStateChange}
               onRatioChange={handleRatioChange}
             />
           ) : (
@@ -537,7 +587,8 @@ const TerminalPage: React.FC<TerminalPageProps> = ({ groupId, cwd }) => {
                 terminalName={terminal.name}
                 isActive={terminal.id === activeTerminalId}
                 isExited={terminal.status !== "running"}
-                onExited={() => handleTerminalExited(terminal.id)}
+                onExited={makeTerminalExitedHandler(terminal.id)}
+                onStateChange={makeTerminalStateChangeHandler(terminal.id)}
               />
             ))
           )
@@ -550,7 +601,8 @@ const TerminalPage: React.FC<TerminalPageProps> = ({ groupId, cwd }) => {
               terminalName={terminal.name}
               isActive={terminal.id === activeTerminalId}
               isExited={terminal.status !== "running"}
-              onExited={() => handleTerminalExited(terminal.id)}
+              onExited={makeTerminalExitedHandler(terminal.id)}
+              onStateChange={makeTerminalStateChangeHandler(terminal.id)}
             />
           ))
         )}

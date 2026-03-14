@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import type { TerminalCapabilities } from "@/api/terminal";
 
 export type TerminalStatus = "running" | "exited" | "closed";
 
@@ -8,6 +9,16 @@ export interface TerminalSession {
   pinned?: boolean;
   status?: TerminalStatus;
   parentId?: string;
+  runtimeType?: string;
+  readonly?: boolean;
+  capabilities?: TerminalCapabilities;
+  cwd?: string;
+  currentCwd?: string;
+  shellType?: string;
+  shellState?: string;
+  shellIntegration?: boolean;
+  lastCommand?: string;
+  lastCommandExitCode?: number | null;
 }
 
 export type SplitDirection = "horizontal" | "vertical";

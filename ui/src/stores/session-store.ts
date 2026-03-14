@@ -409,7 +409,16 @@ function reconcileRemoteTerminals(
       if (remote) {
         return {
           ...terminal,
+          capabilities: remote.capabilities || terminal.capabilities,
+          currentCwd: remote.current_cwd || terminal.currentCwd,
           name: remote.name || terminal.name,
+          readonly: remote.readonly ?? terminal.readonly,
+          runtimeType: remote.runtime_type || terminal.runtimeType,
+          shellIntegration: remote.shell_integration ?? terminal.shellIntegration,
+          shellState: remote.shell_state || terminal.shellState,
+          shellType: remote.shell_type || terminal.shellType,
+          lastCommand: remote.last_command || terminal.lastCommand,
+          lastCommandExitCode: remote.last_command_exit_code ?? terminal.lastCommandExitCode,
           status: remote.status || terminal.status,
           parentId: remote.parent_id || terminal.parentId,
         };
@@ -435,8 +444,17 @@ function reconcileRemoteTerminals(
       result[remote.group_id] = [];
     }
     result[remote.group_id].push({
+      capabilities: remote.capabilities,
+      currentCwd: remote.current_cwd,
       id: remote.id,
       name: remote.name,
+      readonly: remote.readonly,
+      runtimeType: remote.runtime_type,
+      shellIntegration: remote.shell_integration,
+      shellState: remote.shell_state,
+      shellType: remote.shell_type,
+      lastCommand: remote.last_command,
+      lastCommandExitCode: remote.last_command_exit_code ?? null,
       status: remote.status,
       parentId: remote.parent_id || undefined,
     });

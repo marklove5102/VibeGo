@@ -12,7 +12,7 @@ import { type ITheme, Terminal } from "@xterm/xterm";
 import { Check, ChevronDown, ChevronUp, Copy, X } from "lucide-react";
 import React, { useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
 import "@xterm/xterm/css/xterm.css";
-import { terminalApi } from "@/api/terminal";
+import { terminalApi, type TerminalCapabilities } from "@/api/terminal";
 import TerminalSelectionMenu from "@/components/terminal/terminal-selection-menu";
 import { useTranslation } from "@/lib/i18n";
 import {
@@ -20,6 +20,11 @@ import {
   setTerminalBrowserShortcutFocus,
 } from "@/services/terminal-browser-shortcut-guard";
 import { notifyTerminal } from "@/services/terminal-notification-service";
+import {
+  readTerminalSessionCache,
+  type TerminalLifecycleState,
+  writeTerminalSessionCache,
+} from "@/services/terminal-session-cache";
 import { type Theme, useAppStore } from "@/stores";
 
 export interface TerminalInstanceHandle {
@@ -31,6 +36,19 @@ export interface TerminalInstanceHandle {
   focus: () => void;
 }
 
+export interface TerminalInstanceStateUpdate {
+  capabilities?: TerminalCapabilities;
+  currentCwd?: string;
+  lastCommand?: string;
+  lastCommandExitCode?: number | null;
+  readonly?: boolean;
+  runtimeType?: string;
+  shellIntegration?: boolean;
+  shellState?: string;
+  shellType?: string;
+  status?: string;
+}
+
 interface TerminalInstanceProps {
   terminalId: string;
   terminalName: string;
@@ -38,12 +56,14 @@ interface TerminalInstanceProps {
   isFocused?: boolean;
   isExited?: boolean;
   onExited?: () => void;
+  onStateChange?: (state: TerminalInstanceStateUpdate) => void;
 }
 
 interface CallbackRefs {
   isActive: boolean;
   isFocused: boolean;
   isExited: boolean;
+  isReadonly: boolean;
   onExited?: () => void;
   terminalName: string;
   t: (key: string) => string;
@@ -72,6 +92,12 @@ const TERMINAL_FUNCTION_SHORTCUT_KEYS = new Set(["F5"]);
 const SELECTION_MENU_WIDTH = 216;
 const SELECTION_MENU_HEIGHT = 44;
 const SELECTION_MENU_MARGIN = 8;
+const DEFAULT_TERMINAL_CAPABILITIES: TerminalCapabilities = {
+  durable: false,
+  resume: true,
+  shell_integration: false,
+  snapshot: true,
+};
 
 const normalizeShortcutKey = (key: string): string => (key.length === 1 ? key.toLowerCase() : key);
 const clamp = (value: number, min: number, max: number): number => Math.min(Math.max(value, min), max);
@@ -397,8 +423,39 @@ const parseOsc777Notification = (data: string): ParsedTerminalNotification | nul
   return { title: normalizedTitle, body };
 };
 
+const decodeBase64Utf8 = (value: string): string => {
+  const binary = atob(value);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return new TextDecoder().decode(bytes);
+};
+
+const parseOsc7Path = (value: string): string | null => {
+  try {
+    const url = new URL(value);
+    if (url.protocol !== "file:") {
+      return null;
+    }
+    let path = decodeURIComponent(url.pathname);
+    if (path.startsWith("//")) {
+      path = path.slice(1);
+    }
+    if (/^\/[a-zA-Z]:[\\/]/.test(path)) {
+      path = path.slice(1).replace(/\\/g, "/");
+    }
+    if (path.startsWith("/\\\\")) {
+      path = path.slice(1);
+    }
+    return path || null;
+  } catch {
+    return null;
+  }
+};
+
 const TerminalInstance = React.forwardRef<TerminalInstanceHandle, TerminalInstanceProps>(
-  ({ terminalId, terminalName, isActive, isFocused = isActive, isExited = false, onExited }, ref) => {
+  ({ terminalId, terminalName, isActive, isFocused = isActive, isExited = false, onExited, onStateChange }, ref) => {
     const wrapperRef = useRef<HTMLDivElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     const terminalRef = useRef<Terminal | null>(null);
@@ -417,10 +474,18 @@ const TerminalInstance = React.forwardRef<TerminalInstanceHandle, TerminalInstan
     const replayServerDoneRef = useRef(false);
     const pendingReplayWritesRef = useRef(0);
     const inputReadyRef = useRef(false);
+    const lifecycleRef = useRef<TerminalLifecycleState>(isExited ? "exited" : "hydrating");
+    const cacheHydratedRef = useRef(false);
+    const cacheSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const lastSavedCursorRef = useRef(0);
+    const readonlyRef = useRef(isExited);
+    const capabilitiesRef = useRef<TerminalCapabilities>(DEFAULT_TERMINAL_CAPABILITIES);
+    const onStateChangeRef = useRef<TerminalInstanceProps["onStateChange"]>(onStateChange);
     const callbacksRef = useRef<CallbackRefs>({
       isActive,
       isFocused,
       isExited,
+      isReadonly: isExited,
       onExited,
       terminalName,
       t: (key: string) => key,
@@ -440,16 +505,92 @@ const TerminalInstance = React.forwardRef<TerminalInstanceHandle, TerminalInstan
 
     const [progress, setProgress] = useState<{ value: number; state: 0 | 1 | 2 | 3 | 4 } | null>(null);
     const [copySuccess, setCopySuccess] = useState(false);
+    const [lifecycleState, setLifecycleState] = useState<TerminalLifecycleState>(isExited ? "exited" : "hydrating");
     const progressAddonRef = useRef<ProgressAddon | null>(null);
 
     const theme = useAppStore((s) => s.theme);
     const locale = useAppStore((s) => s.locale);
     const t = useTranslation(locale);
 
+    useEffect(() => {
+      onStateChangeRef.current = onStateChange;
+    }, [onStateChange]);
+
     const disposeOscHandlers = () => {
       oscHandlersRef.current.forEach((handler) => handler.dispose());
       oscHandlersRef.current = [];
     };
+
+    const updateRuntimeInfo = useCallback(
+      (patch: Parameters<typeof terminalApi.updateRuntimeInfo>[1]) => {
+        void terminalApi.updateRuntimeInfo(terminalId, patch).catch(() => {});
+      },
+      [terminalId]
+    );
+
+    const emitStateChange = useCallback((state: TerminalInstanceStateUpdate) => {
+      onStateChangeRef.current?.(state);
+    }, []);
+
+    const setLifecycle = useCallback((next: TerminalLifecycleState) => {
+      lifecycleRef.current = next;
+      setLifecycleState(next);
+    }, []);
+
+    const clearCacheSaveTimer = useCallback(() => {
+      if (cacheSaveTimerRef.current) {
+        clearTimeout(cacheSaveTimerRef.current);
+        cacheSaveTimerRef.current = null;
+      }
+    }, []);
+
+    const persistTerminalCache = useCallback(async () => {
+      const terminal = terminalRef.current;
+      const serializeAddon = serializeAddonRef.current;
+      if (!terminal || !serializeAddon || !cacheHydratedRef.current) {
+        return;
+      }
+      if (capabilitiesRef.current.snapshot === false) {
+        return;
+      }
+      const serialized = serializeAddon.serialize();
+      if (!serialized) {
+        return;
+      }
+      await writeTerminalSessionCache({
+        terminalId,
+        serialized,
+        cursor: lastCursorRef.current,
+        cols: terminal.cols,
+        rows: terminal.rows,
+        status: callbacksRef.current.isExited ? "exited" : "running",
+        updatedAt: Date.now(),
+      });
+      lastSavedCursorRef.current = lastCursorRef.current;
+    }, [terminalId]);
+
+    const scheduleCacheSave = useCallback(
+      (force = false) => {
+        if (!cacheHydratedRef.current) {
+          return;
+        }
+        if (capabilitiesRef.current.snapshot === false) {
+          return;
+        }
+        if (!force && Math.max(0, lastCursorRef.current - lastSavedCursorRef.current) < 64 * 1024) {
+          return;
+        }
+        clearCacheSaveTimer();
+        cacheSaveTimerRef.current = setTimeout(
+          () => {
+            cacheSaveTimerRef.current = null;
+            void persistTerminalCache();
+          },
+          force ? 0 : 5000
+        );
+      },
+      [clearCacheSaveTimer, persistTerminalCache]
+    );
 
     const handleOscNotification = useCallback(
       (data: string, parser: (value: string) => ParsedTerminalNotification | null) => {
@@ -463,7 +604,7 @@ const TerminalInstance = React.forwardRef<TerminalInstanceHandle, TerminalInstan
         }
 
         const currentCallbacks = callbacksRef.current;
-        if (currentCallbacks.isExited) {
+        if (currentCallbacks.isExited || currentCallbacks.isReadonly) {
           return true;
         }
 
@@ -622,6 +763,7 @@ const TerminalInstance = React.forwardRef<TerminalInstanceHandle, TerminalInstan
     const connectWebSocket = useCallback(
       (terminal: Terminal) => {
         clearReconnectTimer();
+        setLifecycle(cacheHydratedRef.current ? "replaying" : "hydrating");
 
         if (wsRef.current) {
           const prev = wsRef.current;
@@ -664,10 +806,12 @@ const TerminalInstance = React.forwardRef<TerminalInstanceHandle, TerminalInstan
           if (!replayServerDoneRef.current) return;
           if (pendingReplayWritesRef.current > 0) return;
           if (callbacksRef.current.isExited) return;
+          if (readonlyRef.current) return;
           if (inputReadyRef.current) return;
           inputReadyRef.current = true;
           terminal.options.cursorBlink = true;
           terminal.options.disableStdin = false;
+          setLifecycle("live");
           if (callbacksRef.current.isFocused) {
             terminal.focus();
           }
@@ -698,6 +842,7 @@ const TerminalInstance = React.forwardRef<TerminalInstanceHandle, TerminalInstan
                 terminal.reset();
                 decoder = new TextDecoder("utf-8", { fatal: false });
                 pendingReplayWritesRef.current = 0;
+                lastSavedCursorRef.current = 0;
               }
 
               let hasOutput = false;
@@ -717,6 +862,7 @@ const TerminalInstance = React.forwardRef<TerminalInstanceHandle, TerminalInstan
                     if (cursorValue !== undefined) {
                       lastCursorRef.current = cursorValue;
                       sendAck(cursorValue);
+                      scheduleCacheSave();
                     }
                     if (hasOutput && msg.type === "replay") {
                       pendingReplayWritesRef.current = Math.max(0, pendingReplayWritesRef.current - 1);
@@ -730,19 +876,38 @@ const TerminalInstance = React.forwardRef<TerminalInstanceHandle, TerminalInstan
               if (!hasOutput && cursorValue !== undefined) {
                 lastCursorRef.current = cursorValue;
                 sendAck(cursorValue);
+                scheduleCacheSave();
               }
             } else if (msg.type === "replay_done") {
               replayServerDoneRef.current = true;
+              cacheHydratedRef.current = true;
               tryEnableInput();
+              scheduleCacheSave(true);
             } else if (msg.type === "state") {
               if (typeof msg.cursor === "number" && Number.isFinite(msg.cursor) && msg.cursor > lastCursorRef.current) {
                 lastCursorRef.current = msg.cursor;
               }
+              readonlyRef.current = !!msg.readonly || msg.status !== "running";
+              capabilitiesRef.current = (msg.capabilities || capabilitiesRef.current) as TerminalCapabilities;
+              emitStateChange({
+                capabilities: capabilitiesRef.current,
+                currentCwd: typeof msg.current_cwd === "string" ? msg.current_cwd : undefined,
+                lastCommand: typeof msg.last_command === "string" ? msg.last_command : undefined,
+                lastCommandExitCode: typeof msg.last_command_exit_code === "number" ? msg.last_command_exit_code : null,
+                readonly: readonlyRef.current,
+                runtimeType: typeof msg.runtime_type === "string" ? msg.runtime_type : undefined,
+                shellIntegration: typeof msg.shell_integration === "boolean" ? msg.shell_integration : undefined,
+                shellState: typeof msg.shell_state === "string" ? msg.shell_state : undefined,
+                shellType: typeof msg.shell_type === "string" ? msg.shell_type : undefined,
+                status: typeof msg.status === "string" ? msg.status : undefined,
+              });
               if (typeof msg.status === "string" && msg.status !== "running") {
                 terminal.options.cursorBlink = false;
                 terminal.options.disableStdin = true;
                 callbacksRef.current.isExited = true;
                 inputReadyRef.current = false;
+                setLifecycle("exited");
+                scheduleCacheSave(true);
               }
             } else if (msg.type === "pty_exited") {
               const { t: translate, onExited: exitCallback } = callbacksRef.current;
@@ -750,7 +915,10 @@ const TerminalInstance = React.forwardRef<TerminalInstanceHandle, TerminalInstan
               terminal.options.cursorBlink = false;
               terminal.options.disableStdin = true;
               callbacksRef.current.isExited = true;
+              readonlyRef.current = true;
               inputReadyRef.current = false;
+              setLifecycle("exited");
+              scheduleCacheSave(true);
               clearReconnectTimer();
               try {
                 ws.close();
@@ -777,6 +945,7 @@ const TerminalInstance = React.forwardRef<TerminalInstanceHandle, TerminalInstan
 
           terminal.options.cursorBlink = false;
           terminal.options.disableStdin = true;
+          setLifecycle("reconnecting");
 
           const attempt = reconnectAttemptsRef.current;
           reconnectAttemptsRef.current = attempt + 1;
@@ -799,7 +968,7 @@ const TerminalInstance = React.forwardRef<TerminalInstanceHandle, TerminalInstan
           } catch {}
         };
       },
-      [terminalId]
+      [scheduleCacheSave, setLifecycle, terminalId]
     );
 
     const openSearch = useCallback(() => {
@@ -839,7 +1008,7 @@ const TerminalInstance = React.forwardRef<TerminalInstanceHandle, TerminalInstan
 
     const sendTerminalInput = useCallback(
       (data: string) => {
-        if (callbacksRef.current.isExited) return;
+        if (callbacksRef.current.isExited || callbacksRef.current.isReadonly) return;
         if (!inputReadyRef.current) return;
         if (wsRef.current?.readyState !== WebSocket.OPEN) return;
         hideSelectionMenu();
@@ -962,10 +1131,20 @@ const TerminalInstance = React.forwardRef<TerminalInstanceHandle, TerminalInstan
     }, [hideSelectionMenu, queueSelectionMenuUpdate, selectionMenu]);
 
     useEffect(() => {
-      callbacksRef.current = { isActive, isFocused, isExited, onExited, terminalName, t };
+      callbacksRef.current = {
+        isActive,
+        isFocused,
+        isExited,
+        isReadonly: readonlyRef.current,
+        onExited,
+        terminalName,
+        t,
+      };
       if (isExited && terminalRef.current) {
         terminalRef.current.options.cursorBlink = false;
         terminalRef.current.options.disableStdin = true;
+        readonlyRef.current = true;
+        setLifecycle("exited");
       }
       if (isExited) {
         inputReadyRef.current = false;
@@ -982,7 +1161,7 @@ const TerminalInstance = React.forwardRef<TerminalInstanceHandle, TerminalInstan
           } catch {}
         }
       }
-    }, [isActive, isFocused, isExited, onExited, t, terminalName]);
+    }, [isActive, isFocused, isExited, onExited, setLifecycle, t, terminalName]);
 
     useEffect(() => {
       if (terminalRef.current) {
@@ -1005,6 +1184,11 @@ const TerminalInstance = React.forwardRef<TerminalInstanceHandle, TerminalInstan
       replayServerDoneRef.current = false;
       pendingReplayWritesRef.current = 0;
       inputReadyRef.current = false;
+      lastSavedCursorRef.current = 0;
+      cacheHydratedRef.current = false;
+      readonlyRef.current = isExited;
+      capabilitiesRef.current = DEFAULT_TERMINAL_CAPABILITIES;
+      setLifecycle(isExited ? "exited" : "hydrating");
 
       const terminal = new Terminal({
         cursorBlink: true,
@@ -1066,7 +1250,105 @@ const TerminalInstance = React.forwardRef<TerminalInstanceHandle, TerminalInstan
       serializeAddonRef.current = serializeAddon;
       progressAddonRef.current = progressAddon;
 
+      void readTerminalSessionCache(terminalId).then((cache) => {
+        if (isUnmountingRef.current) {
+          return;
+        }
+        if (!cache?.serialized) {
+          cacheHydratedRef.current = true;
+          connectWebSocket(terminal);
+          return;
+        }
+        terminal.write(cache.serialized, () => {
+          lastCursorRef.current = cache.cursor;
+          lastAckCursorRef.current = cache.cursor;
+          lastSavedCursorRef.current = cache.cursor;
+          cacheHydratedRef.current = true;
+          setLifecycle("replaying");
+          connectWebSocket(terminal);
+        });
+      });
+
       oscHandlersRef.current = [
+        terminal.parser.registerOscHandler(7, (data) => {
+          const cwd = parseOsc7Path(data);
+          if (cwd) {
+            updateRuntimeInfo({ current_cwd: cwd });
+            emitStateChange({ currentCwd: cwd });
+          }
+          return true;
+        }),
+        terminal.parser.registerOscHandler(52, (data) => {
+          if (!document.hasFocus()) {
+            return true;
+          }
+          const separatorIndex = data.indexOf(";");
+          if (separatorIndex === -1) {
+            return true;
+          }
+          const base64Data = data.slice(separatorIndex + 1).replace(/\s+/g, "");
+          if (!base64Data || base64Data === "?" || base64Data.length > 128 * 1024) {
+            return true;
+          }
+          try {
+            const text = decodeBase64Utf8(base64Data);
+            if (new TextEncoder().encode(text).length > 75 * 1024) {
+              return true;
+            }
+            void navigator.clipboard.writeText(text).catch(() => {});
+          } catch {}
+          return true;
+        }),
+        terminal.parser.registerOscHandler(16162, (data) => {
+          const [command = "", ...rest] = data.split(";");
+          let payload: Record<string, unknown> = {};
+          if (rest.length > 0) {
+            try {
+              payload = JSON.parse(rest.join(";")) as Record<string, unknown>;
+            } catch {}
+          }
+          if (command === "A") {
+            updateRuntimeInfo({ shell_state: "ready", shell_integration: true });
+            emitStateChange({ shellIntegration: true, shellState: "ready" });
+          } else if (command === "C") {
+            let lastCommand: string | undefined;
+            if (typeof payload.cmd64 === "string") {
+              try {
+                lastCommand = decodeBase64Utf8(payload.cmd64);
+              } catch {}
+            }
+            updateRuntimeInfo({
+              shell_state: "running-command",
+              shell_integration: true,
+              last_command: lastCommand,
+            });
+            emitStateChange({
+              lastCommand,
+              shellIntegration: true,
+              shellState: "running-command",
+            });
+          } else if (command === "M") {
+            const shellType = typeof payload.shell === "string" ? payload.shell : undefined;
+            const shellIntegration = typeof payload.integration === "boolean" ? payload.integration : true;
+            updateRuntimeInfo({
+              shell_type: shellType,
+              shell_integration: shellIntegration,
+            });
+            emitStateChange({ shellIntegration, shellType });
+          } else if (command === "D") {
+            const lastCommandExitCode =
+              typeof payload.exitcode === "number" && Number.isFinite(payload.exitcode) ? payload.exitcode : null;
+            updateRuntimeInfo({
+              shell_state: "ready",
+              last_command_exit_code: lastCommandExitCode,
+            });
+            emitStateChange({ lastCommandExitCode, shellState: "ready" });
+          } else if (command === "R") {
+            updateRuntimeInfo({ shell_state: "", shell_integration: false });
+            emitStateChange({ shellIntegration: false, shellState: "" });
+          }
+          return true;
+        }),
         terminal.parser.registerOscHandler(9, (data) => {
           const defaultTitle = callbacksRef.current.terminalName.trim() || callbacksRef.current.t("sidebar.terminal");
           return handleOscNotification(data, (value) => parseOsc9Notification(value, defaultTitle));
@@ -1147,13 +1429,13 @@ const TerminalInstance = React.forwardRef<TerminalInstanceHandle, TerminalInstan
         }
       });
 
-      connectWebSocket(terminal);
-
       return () => {
         isUnmountingRef.current = true;
         inputReadyRef.current = false;
         cancelSelectionMenuFrame();
         clearReconnectTimer();
+        clearCacheSaveTimer();
+        void persistTerminalCache();
         if (wsRef.current) {
           const ws = wsRef.current;
           wsRef.current = null;
@@ -1176,11 +1458,15 @@ const TerminalInstance = React.forwardRef<TerminalInstanceHandle, TerminalInstan
       };
     }, [
       cancelSelectionMenuFrame,
+      clearCacheSaveTimer,
       connectWebSocket,
       handleOscNotification,
       hideSelectionMenu,
+      persistTerminalCache,
       queueSelectionMenuUpdate,
+      setLifecycle,
       terminalId,
+      isExited,
     ]);
 
     useEffect(() => {
@@ -1195,6 +1481,21 @@ const TerminalInstance = React.forwardRef<TerminalInstanceHandle, TerminalInstan
         }, 50);
       }
     }, [isActive]);
+
+    useEffect(() => {
+      const handlePersist = () => {
+        if (document.visibilityState && document.visibilityState !== "hidden") {
+          return;
+        }
+        void persistTerminalCache();
+      };
+      window.addEventListener("beforeunload", handlePersist);
+      document.addEventListener("visibilitychange", handlePersist);
+      return () => {
+        window.removeEventListener("beforeunload", handlePersist);
+        document.removeEventListener("visibilitychange", handlePersist);
+      };
+    }, [persistTerminalCache]);
 
     useEffect(() => {
       if (!isActive || !isFocused || !terminalRef.current) {
@@ -1333,6 +1634,11 @@ const TerminalInstance = React.forwardRef<TerminalInstanceHandle, TerminalInstan
                 animation: progress.state === 3 ? "pulse 1.5s ease-in-out infinite" : undefined,
               }}
             />
+          </div>
+        )}
+        {lifecycleState !== "live" && (
+          <div className="absolute left-2 bottom-2 z-10 rounded bg-ide-panel/90 px-2 py-1 text-[10px] text-ide-mute shadow-sm backdrop-blur-sm">
+            {lifecycleState}
           </div>
         )}
         {searchVisible && (
