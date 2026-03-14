@@ -14,6 +14,10 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import "@xterm/xterm/css/xterm.css";
 import { terminalApi } from "@/api/terminal";
 import { useTranslation } from "@/lib/i18n";
+import {
+  armTerminalBrowserUnloadGuard,
+  setTerminalBrowserShortcutFocus,
+} from "@/services/terminal-browser-shortcut-guard";
 import { notifyTerminal } from "@/services/terminal-notification-service";
 import { type Theme, useAppStore } from "@/stores";
 
@@ -65,6 +69,44 @@ const shouldPreventTerminalBrowserShortcut = (
     return true;
   }
   return false;
+};
+
+const shouldArmTerminalUnloadGuard = (
+  event: Pick<KeyboardEvent, "altKey" | "ctrlKey" | "key" | "metaKey">
+): boolean => {
+  const key = normalizeShortcutKey(event.key);
+  if ((event.ctrlKey || event.metaKey) && !event.altKey && (key === "w" || key === "r")) {
+    return true;
+  }
+  if (!event.ctrlKey && !event.metaKey && !event.altKey && key === "F5") {
+    return true;
+  }
+  if (!event.ctrlKey && !event.metaKey && event.altKey && (key === "ArrowLeft" || key === "ArrowRight")) {
+    return true;
+  }
+  return false;
+};
+
+const getTerminalShortcutInput = (
+  event: Pick<KeyboardEvent, "altKey" | "ctrlKey" | "key" | "metaKey">
+): string | null => {
+  const key = normalizeShortcutKey(event.key);
+  if (!event.metaKey && event.ctrlKey && !event.altKey && key.length === 1 && key >= "a" && key <= "z") {
+    if (key === "f") {
+      return null;
+    }
+    return String.fromCharCode(key.charCodeAt(0) - 96);
+  }
+  if (!event.ctrlKey && !event.metaKey && event.altKey && key === "ArrowLeft") {
+    return "\u001b[1;3D";
+  }
+  if (!event.ctrlKey && !event.metaKey && event.altKey && key === "ArrowRight") {
+    return "\u001b[1;3C";
+  }
+  if (!event.ctrlKey && !event.metaKey && !event.altKey && key === "F5") {
+    return "\u001b[15~";
+  }
+  return null;
 };
 
 const encodeUtf8Base64 = (data: string): string => {
@@ -572,6 +614,27 @@ const TerminalInstance: React.FC<TerminalInstanceProps> = ({
     searchAddonRef.current.findPrevious(searchTerm, { caseSensitive: searchCaseSensitive, regex: searchRegex });
   }, [searchTerm, searchCaseSensitive, searchRegex]);
 
+  const syncBrowserShortcutFocus = useCallback(() => {
+    const isFocused =
+      isActive &&
+      !!wrapperRef.current &&
+      document.activeElement instanceof Node &&
+      wrapperRef.current.contains(document.activeElement);
+    setTerminalBrowserShortcutFocus(terminalId, isFocused);
+  }, [isActive, terminalId]);
+
+  const sendTerminalInput = useCallback((data: string) => {
+    if (callbacksRef.current.isExited) return;
+    if (!inputReadyRef.current) return;
+    if (wsRef.current?.readyState !== WebSocket.OPEN) return;
+    wsRef.current.send(
+      JSON.stringify({
+        type: "input",
+        data: encodeUtf8Base64(data),
+      })
+    );
+  }, []);
+
   const isFocusInsideInstance = useCallback(
     (target: EventTarget | null) => {
       if (!isActive || !wrapperRef.current) {
@@ -596,6 +659,9 @@ const TerminalInstance: React.FC<TerminalInstanceProps> = ({
         event.preventDefault();
         return;
       }
+      if (shouldArmTerminalUnloadGuard(event)) {
+        armTerminalBrowserUnloadGuard();
+      }
       if (shouldPreventTerminalBrowserShortcut(event)) {
         event.preventDefault();
       }
@@ -604,6 +670,11 @@ const TerminalInstance: React.FC<TerminalInstanceProps> = ({
     window.addEventListener("keydown", handleWindowKeyDown, true);
     return () => window.removeEventListener("keydown", handleWindowKeyDown, true);
   }, [isFocusInsideInstance]);
+
+  useEffect(() => {
+    syncBrowserShortcutFocus();
+    return () => setTerminalBrowserShortcutFocus(terminalId, false);
+  }, [syncBrowserShortcutFocus, terminalId]);
 
   useEffect(() => {
     callbacksRef.current = { isActive, isExited, onExited, terminalName, t };
@@ -723,6 +794,15 @@ const TerminalInstance: React.FC<TerminalInstanceProps> = ({
       if ((event.ctrlKey || event.metaKey) && key === "f" && event.type === "keydown") {
         event.preventDefault();
         openSearchRef.current();
+        return false;
+      }
+      if (event.type === "keydown" && shouldArmTerminalUnloadGuard(event)) {
+        armTerminalBrowserUnloadGuard();
+      }
+      const manualInput = event.type === "keydown" ? getTerminalShortcutInput(event) : null;
+      if (manualInput) {
+        event.preventDefault();
+        sendTerminalInput(manualInput);
         return false;
       }
       if (shouldPreventTerminalBrowserShortcut(event as TerminalShortcutEvent)) {
@@ -875,10 +955,15 @@ const TerminalInstance: React.FC<TerminalInstanceProps> = ({
           openSearchRef.current();
           return;
         }
+        if (shouldArmTerminalUnloadGuard(e.nativeEvent)) {
+          armTerminalBrowserUnloadGuard();
+        }
         if (shouldPreventTerminalBrowserShortcut(e.nativeEvent)) {
           e.preventDefault();
         }
       }}
+      onFocusCapture={() => setTerminalBrowserShortcutFocus(terminalId, true)}
+      onBlurCapture={() => setTimeout(syncBrowserShortcutFocus, 0)}
     >
       <div
         ref={containerRef}

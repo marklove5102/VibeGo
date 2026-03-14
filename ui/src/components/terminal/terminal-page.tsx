@@ -13,7 +13,7 @@ import { useTranslation } from "@/lib/i18n";
 import { useAppStore } from "@/stores";
 import { useFrameStore } from "@/stores/frame-store";
 import { syncTerminalWorkspaceState, useSessionStore } from "@/stores/session-store";
-import { type SplitDirection, type TerminalSession, useTerminalStore } from "@/stores/terminal-store";
+import { type LayoutNode, type SplitDirection, type TerminalSession, useTerminalStore } from "@/stores/terminal-store";
 
 interface TerminalPageProps {
   groupId: string;
@@ -21,6 +21,16 @@ interface TerminalPageProps {
 }
 
 const EMPTY_TERMINALS: TerminalSession[] = [];
+
+function collectLayoutTerminalIds(layout: LayoutNode | null): string[] {
+  if (!layout) {
+    return [];
+  }
+  if (layout.type === "terminal") {
+    return [layout.terminalId];
+  }
+  return [...collectLayoutTerminalIds(layout.first), ...collectLayoutTerminalIds(layout.second)];
+}
 
 const TerminalPage: React.FC<TerminalPageProps> = ({ groupId, cwd }) => {
   const dialog = useDialog();
@@ -36,9 +46,7 @@ const TerminalPage: React.FC<TerminalPageProps> = ({ groupId, cwd }) => {
   const focusedIdByGroup = useTerminalStore((s) => s.focusedIdByGroup);
   const activeTerminalId = useTerminalStore((s) => s.activeIdByGroup[groupId] ?? null);
   const listManagerOpen = useTerminalStore((s) => s.listManagerOpenByGroup[groupId] ?? true);
-  const activeLayout = useTerminalStore((s) => s.getActiveLayout(groupId));
   const focusedId = useTerminalStore((s) => s.focusedIdByGroup[groupId] ?? null);
-  const hasSplit = useTerminalStore((s) => s.isSplit(groupId));
   const [showHistory, setShowHistory] = useState(false);
   const syncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -63,12 +71,21 @@ const TerminalPage: React.FC<TerminalPageProps> = ({ groupId, cwd }) => {
     () => new Map(terminals.map((terminal) => [terminal.id, terminal.status])),
     [terminals]
   );
+  const activeLayout = useMemo(() => {
+    if (!activeTerminalId) {
+      return null;
+    }
+    return terminalLayouts[activeTerminalId] ?? null;
+  }, [activeTerminalId, terminalLayouts]);
+  const activeLayoutTerminalIds = useMemo(() => collectLayoutTerminalIds(activeLayout), [activeLayout]);
+  const hasSplit = activeLayout?.type === "split";
 
   const handleTerminalExited = useCallback(
     (terminalId: string) => {
       setTerminalStatus(groupId, terminalId, "exited");
+      void queryClient.invalidateQueries({ queryKey: terminalKeys.list() });
     },
-    [groupId, setTerminalStatus]
+    [groupId, queryClient, setTerminalStatus]
   );
 
   const closeTerminalIds = useCallback(
@@ -273,9 +290,21 @@ const TerminalPage: React.FC<TerminalPageProps> = ({ groupId, cwd }) => {
   }, [currentSessionId, terminalsByGroup, activeIdByGroup, listManagerOpenByGroup, terminalLayouts, focusedIdByGroup]);
 
   useEffect(() => {
-    if (showHistory || listManagerOpen || !focusedTerminal) {
-      setPageMenuItems([]);
+    if (activeLayoutTerminalIds.length <= 1) {
       return;
+    }
+    const exitedIds = activeLayoutTerminalIds.filter((terminalId) => terminalStatusMap.get(terminalId) !== "running");
+    if (exitedIds.length === 0) {
+      return;
+    }
+    exitedIds.forEach((terminalId) => {
+      removeTerminal(groupId, terminalId);
+    });
+  }, [activeLayoutTerminalIds, groupId, removeTerminal, terminalStatusMap]);
+
+  const pageMenuItems = useMemo(() => {
+    if (showHistory || listManagerOpen || !focusedTerminal) {
+      return [];
     }
     const items = [
       {
@@ -283,7 +312,7 @@ const TerminalPage: React.FC<TerminalPageProps> = ({ groupId, cwd }) => {
         icon: <Edit2 size={18} />,
         label: t("common.rename"),
         onClick: () => {
-          handleRenameTerminal(focusedTerminal.id, focusedTerminal.name);
+          void handleRenameTerminal(focusedTerminal.id, focusedTerminal.name);
         },
       },
       {
@@ -291,7 +320,7 @@ const TerminalPage: React.FC<TerminalPageProps> = ({ groupId, cwd }) => {
         icon: <Rows size={18} />,
         label: t("terminal.splitDown"),
         onClick: () => {
-          handleSplit("vertical");
+          void handleSplit("vertical");
         },
       },
       {
@@ -299,7 +328,7 @@ const TerminalPage: React.FC<TerminalPageProps> = ({ groupId, cwd }) => {
         icon: <Columns size={18} />,
         label: t("terminal.splitRight"),
         onClick: () => {
-          handleSplit("horizontal");
+          void handleSplit("horizontal");
         },
       },
     ];
@@ -313,19 +342,18 @@ const TerminalPage: React.FC<TerminalPageProps> = ({ groupId, cwd }) => {
         },
       });
     }
-    setPageMenuItems(items);
-    return () => setPageMenuItems([]);
-  }, [
-    focusedTerminal,
-    handleRenameTerminal,
-    handleSplit,
-    handleCloseSplit,
-    hasSplit,
-    listManagerOpen,
-    setPageMenuItems,
-    showHistory,
-    t,
-  ]);
+    return items;
+  }, [focusedTerminal, handleRenameTerminal, handleSplit, handleCloseSplit, hasSplit, listManagerOpen, showHistory, t]);
+
+  useEffect(() => {
+    setPageMenuItems(pageMenuItems);
+  }, [pageMenuItems, setPageMenuItems]);
+
+  useEffect(() => {
+    return () => {
+      setPageMenuItems([]);
+    };
+  }, [setPageMenuItems]);
 
   const topBarConfig = useMemo(() => {
     return {

@@ -1,13 +1,14 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { authApi } from "@/api/auth";
-import { getStoredAuthKey, LoginPage, setStoredAuthKey } from "@/components/login-page";
 import { fileApi } from "@/api/file";
 import { DirectoryPicker, NewPageMenu, ProjectMenu } from "@/components/common";
 import { AppFrame, NewGroupMenu } from "@/components/frame";
+import { getStoredAuthKey, LoginPage, setStoredAuthKey } from "@/components/login-page";
 import { Toaster } from "@/components/ui/sonner";
 import { useTranslation } from "@/lib/i18n";
 import { useSettingsStore } from "@/lib/settings";
 import { pageRegistry } from "@/pages/registry";
+import { shouldBlockTerminalBrowserUnload } from "@/services/terminal-browser-shortcut-guard";
 import { initTerminalCleanup } from "@/services/terminal-cleanup-service";
 import {
   getOrCreateFileManagerStore,
@@ -18,8 +19,8 @@ import {
   usePreviewStore,
   useSessionStore,
 } from "@/stores";
-import * as gitStoreModule from "@/stores/git-store";
 import type { GenericGroup, ToolGroup } from "@/stores/frame-store";
+import * as gitStoreModule from "@/stores/git-store";
 import "@/pages";
 
 const App: React.FC = () => {
@@ -100,8 +101,12 @@ const App: React.FC = () => {
   }, [initSession, initDefaultGroups, authChecked, needLogin]);
 
   useEffect(() => {
-    const handleBeforeUnload = () => {
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
       saveCurrentSession();
+      if (shouldBlockTerminalBrowserUnload()) {
+        event.preventDefault();
+        event.returnValue = "";
+      }
     };
     window.addEventListener("beforeunload", handleBeforeUnload);
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);

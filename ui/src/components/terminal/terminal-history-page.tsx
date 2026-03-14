@@ -33,7 +33,7 @@ const TerminalHistoryPage: React.FC<TerminalHistoryPageProps> = ({ onBack }) => 
   const [viewingTerminal, setViewingTerminal] = useState<TerminalInfo | null>(null);
 
   const terminals = data?.terminals || [];
-  const closedTerminals = terminals.filter((t) => t.status !== "running" && !t.parent_id);
+  const closedTerminals = terminals.filter((t) => t.status !== "running");
 
   const toggleSelect = useCallback((id: string) => {
     setSelectedIds((prev) => {
