@@ -44,11 +44,11 @@ func discover(cfg Config) Info {
 	}
 	wasmURL := strings.TrimSpace(cfg.WasmURL)
 	if wasmURL == "" {
-		wasmURL = defaultOfficialBaseURL + "sherpa-onnx-wasm-main-vad-asr.wasm"
+		wasmURL = BaseURL + "sherpa-onnx-wasm-main-vad-asr.wasm"
 	}
 	dataURL := strings.TrimSpace(cfg.DataURL)
 	if dataURL == "" {
-		dataURL = defaultOfficialBaseURL + "sherpa-onnx-wasm-main-vad-asr.data"
+		dataURL = BaseURL + "sherpa-onnx-wasm-main-vad-asr.data"
 	}
 
 	return Info{

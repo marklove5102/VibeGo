@@ -1,4 +1,5 @@
 import { asrApi } from "@/api/asr";
+import { fetchBinaryAsset } from "./sherpa-asset";
 
 export type SherpaStatus = "idle" | "loading" | "recording" | "recognizing" | "error";
 export type SherpaResultCallback = (text: string) => void;
@@ -81,102 +82,17 @@ function assignGlobals(code: string) {
   document.head.removeChild(script);
 }
 
-function formatMegabytes(value: number): string {
-  return (value / 1048576).toFixed(1);
-}
-
-async function readResponseBuffer(
-  response: Response,
-  onProgress?: (loaded: number, total: number) => void
-): Promise<ArrayBuffer> {
-  if (!response.body) {
-    const buffer = await response.arrayBuffer();
-    onProgress?.(buffer.byteLength, buffer.byteLength);
-    return buffer;
-  }
-  const reader = response.body.getReader();
-  const chunks: Uint8Array[] = [];
-  const total = Number(response.headers.get("content-length") || 0);
-  let loaded = 0;
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    if (!value) continue;
-    chunks.push(value);
-    loaded += value.byteLength;
-    onProgress?.(loaded, total);
-  }
-
-  const merged = new Uint8Array(loaded);
-  let offset = 0;
-  for (const chunk of chunks) {
-    merged.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  onProgress?.(loaded, total || loaded);
-  return merged.buffer;
-}
-
-async function loadBinaryAsset(
-  url: string,
-  label: string,
-  onStatus?: (status: SherpaStatus, progress?: string) => void
-): Promise<ArrayBuffer> {
-  const assetUrl = withVersion(url);
-  const cacheName = `vibego-speech-assets-${encodeURIComponent(sherpaVersion || "dev")}`;
-  if (typeof caches !== "undefined") {
-    try {
-      const cache = await caches.open(cacheName);
-      const cached = await cache.match(assetUrl);
-      if (cached) {
-        onStatus?.("loading", `Loading ${label} from local cache...`);
-        return cached.arrayBuffer();
-      }
-
-      onStatus?.("loading", `Downloading ${label}...`);
-      const response = await fetch(assetUrl, { mode: "cors" });
-      if (!response.ok) {
-        throw new Error(`Failed to download ${label}`);
-      }
-      const cacheWrite = cache.put(assetUrl, response.clone());
-      const buffer = await readResponseBuffer(response, (loaded, total) => {
-        if (total > 0) {
-          const pct = (loaded / total) * 100;
-          onStatus?.("loading", `${label} ${pct.toFixed(0)}% (${formatMegabytes(loaded)}/${formatMegabytes(total)}MB)`);
-        }
-      });
-      try {
-        await cacheWrite;
-      } catch {}
-      return buffer;
-    } catch {
-      onStatus?.("loading", `Downloading ${label}...`);
-    }
-  }
-
-  onStatus?.("loading", `Downloading ${label}...`);
-  const response = await fetch(assetUrl, { mode: "cors" });
-  if (!response.ok) {
-    throw new Error(`Failed to download ${label}`);
-  }
-  return readResponseBuffer(response, (loaded, total) => {
-    if (total > 0) {
-      const pct = (loaded / total) * 100;
-      onStatus?.("loading", `${label} ${pct.toFixed(0)}% (${formatMegabytes(loaded)}/${formatMegabytes(total)}MB)`);
-    }
-  });
-}
-
 async function ensureBinaryAssets(
   onStatus?: (status: SherpaStatus, progress?: string) => void
 ): Promise<{ wasmBinary: ArrayBuffer; dataPackage: ArrayBuffer }> {
   if (binaryAssetsPromise) return binaryAssetsPromise;
+  
   binaryAssetsPromise = (async () => {
-    const wasmBinary = await loadBinaryAsset(sherpaWasmUrl, "speech engine", onStatus);
-    const dataPackage = await loadBinaryAsset(sherpaDataUrl, "speech model", onStatus);
+    const wasmBinary = await fetchBinaryAsset(sherpaWasmUrl, sherpaVersion, "speech-engine", onStatus);
+    const dataPackage = await fetchBinaryAsset(sherpaDataUrl, sherpaVersion, "speech-model", onStatus);
     return { wasmBinary, dataPackage };
   })();
+
   try {
     return await binaryAssetsPromise;
   } finally {

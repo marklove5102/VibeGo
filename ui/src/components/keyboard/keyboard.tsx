@@ -193,7 +193,6 @@ const KeyboardCore: React.FC<KeyboardProps> = ({ onKeyEvent, layout = KEYBOARD_Q
     <div
       className="tk-keyboard"
       onPointerDown={(e) => e.preventDefault()}
-      onTouchStart={(e) => e.preventDefault()}
       onMouseDown={(e) => e.preventDefault()}
       onContextMenu={(e) => e.preventDefault()}
     >
@@ -514,7 +513,6 @@ export const Keyboard: React.FC = () => {
         boxShadow: "0 -4px 12px rgba(0,0,0,0.08)",
       }}
       onPointerDown={(e) => e.preventDefault()}
-      onTouchStart={(e) => e.preventDefault()}
       onMouseDown={(e) => e.preventDefault()}
       onContextMenu={(e) => e.preventDefault()}
     >

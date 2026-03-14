@@ -1,4 +1,4 @@
-.PHONY: generate-docs clean-code format dev-server dev-ui build build-frontend build-backend package-backend build-release prepare-test test
+.PHONY: generate-docs clean-code format dev-server dev-ui build build-frontend build-backend package-backend build-release prepare-test test download-sherpa
 
 VERSION ?= $(shell git describe --tags --match 'v*' 2>/dev/null || echo v0.0.0-dev)
 DIST_DIR ?= dist
@@ -31,7 +31,10 @@ build:
 	if [ "$$(go env GOOS)" = "windows" ]; then ext=".exe"; fi; \
 	CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X github.com/xxnuo/vibego/internal/version.Version=$(VERSION)" -o "$(DIST_DIR)/$(BINARY_NAME)$${ext}" ./
 
-build-frontend:
+download-sherpa:
+	@bash scripts/download-sherpa.sh
+
+build-frontend: download-sherpa
 	cd $(UI_DIR) && pnpm install --frozen-lockfile
 	cd $(UI_DIR) && pnpm run build
 
