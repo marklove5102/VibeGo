@@ -47,6 +47,7 @@ const GitView: React.FC<GitViewProps> = ({ groupId, path, locale, onFileDiff, on
     remoteBranches,
     activeTab,
     hasRemote,
+    remoteUrls,
     aheadCount,
     behindCount,
     stashes,
@@ -352,6 +353,7 @@ const GitView: React.FC<GitViewProps> = ({ groupId, path, locale, onFileDiff, on
               commits={commits}
               isLoading={isLoading}
               locale={locale}
+              remoteUrls={remoteUrls}
               onCommitSelect={handleCommitSelect}
               onUndoCommit={handleHistoryUndoCommit}
               onFileClick={handleHistoryFileClick}

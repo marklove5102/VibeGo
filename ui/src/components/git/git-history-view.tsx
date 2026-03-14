@@ -13,36 +13,90 @@ import type { CommitFileInfo, GitCommit } from "@/api/git";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { getIntlLocale, getTranslation, type Locale } from "@/lib/i18n";
 
+type AvatarPlatform = "github" | "gitlab" | "gravatar";
+
+const detectPlatforms = (remoteUrls: string[]): AvatarPlatform[] => {
+  const platforms: AvatarPlatform[] = [];
+  const joined = remoteUrls.join(" ").toLowerCase();
+  if (joined.includes("github.com")) platforms.push("github");
+  if (joined.includes("gitlab.com") || joined.includes("gitlab")) platforms.push("gitlab");
+  platforms.push("gravatar");
+  return platforms;
+};
+
+const md5 = async (str: string): Promise<string> => {
+  const data = new TextEncoder().encode(str);
+  const buf = await crypto.subtle.digest("SHA-256", data);
+  return Array.from(new Uint8Array(buf))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("")
+    .slice(0, 32);
+};
+
+const platformAvatarUrl = async (platform: AvatarPlatform, email: string): Promise<string> => {
+  switch (platform) {
+    case "github":
+      return `https://avatars.githubusercontent.com/u/e?email=${encodeURIComponent(email)}&s=64`;
+    case "gitlab":
+      return `https://gitlab.com/api/v4/avatar?email=${encodeURIComponent(email)}&size=64`;
+    case "gravatar": {
+      const hash = await md5(email.trim().toLowerCase());
+      return `https://www.gravatar.com/avatar/${hash}?s=64&d=404`;
+    }
+  }
+};
+
+const tryFetchAvatar = async (url: string, platform: AvatarPlatform): Promise<string | null> => {
+  try {
+    if (platform === "gitlab") {
+      const res = await fetch(url);
+      if (!res.ok) return null;
+      const json = await res.json();
+      if (!json.avatar_url) return null;
+      const imgRes = await fetch(json.avatar_url);
+      if (!imgRes.ok) return null;
+      const blob = await imgRes.blob();
+      if (blob.size < 100) return null;
+      return URL.createObjectURL(blob);
+    }
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const blob = await res.blob();
+    if (blob.size < 100) return null;
+    return URL.createObjectURL(blob);
+  } catch {
+    return null;
+  }
+};
+
 const avatarCache = new Map<string, string>();
 const avatarLoading = new Map<string, Promise<string | null>>();
 
-const fetchAndCacheAvatar = (email: string): Promise<string | null> => {
-  const cached = avatarCache.get(email);
+const fetchAndCacheAvatar = (email: string, platforms: AvatarPlatform[]): Promise<string | null> => {
+  const cacheKey = email;
+  const cached = avatarCache.get(cacheKey);
   if (cached) return Promise.resolve(cached);
 
-  const inflight = avatarLoading.get(email);
+  const inflight = avatarLoading.get(cacheKey);
   if (inflight) return inflight;
 
-  const url = `https://avatars.githubusercontent.com/u/e?email=${encodeURIComponent(email)}&s=64`;
-  const promise = fetch(url)
-    .then((res) => {
-      if (!res.ok) return null;
-      return res.blob();
-    })
-    .then((blob) => {
-      if (!blob || blob.size < 100) return null;
-      const objectUrl = URL.createObjectURL(blob);
-      avatarCache.set(email, objectUrl);
-      return objectUrl;
-    })
-    .catch(() => null)
-    .finally(() => avatarLoading.delete(email));
+  const promise = (async () => {
+    for (const platform of platforms) {
+      const url = await platformAvatarUrl(platform, email);
+      const result = await tryFetchAvatar(url, platform);
+      if (result) {
+        avatarCache.set(cacheKey, result);
+        return result;
+      }
+    }
+    return null;
+  })().finally(() => avatarLoading.delete(cacheKey));
 
-  avatarLoading.set(email, promise);
+  avatarLoading.set(cacheKey, promise);
   return promise;
 };
 
-const useCachedAvatarUrl = (email: string): string | undefined => {
+const useCachedAvatarUrl = (email: string, platforms: AvatarPlatform[]): string | undefined => {
   const trimmed = email.trim();
   const [url, setUrl] = useState<string | undefined>(() => avatarCache.get(trimmed));
 
@@ -54,11 +108,11 @@ const useCachedAvatarUrl = (email: string): string | undefined => {
       return;
     }
     let cancelled = false;
-    fetchAndCacheAvatar(trimmed).then((result) => {
+    fetchAndCacheAvatar(trimmed, platforms).then((result) => {
       if (!cancelled && result) setUrl(result);
     });
     return () => { cancelled = true; };
-  }, [trimmed]);
+  }, [trimmed, platforms]);
 
   return url;
 };
@@ -67,6 +121,7 @@ interface GitHistoryViewProps {
   commits: GitCommit[];
   isLoading: boolean;
   locale: Locale;
+  remoteUrls: string[];
   onCommitSelect: (commit: GitCommit) => void;
   onUndoCommit: (commit: GitCommit) => void;
   onFileClick: (commit: GitCommit, filePath: string) => void;
@@ -148,6 +203,7 @@ interface CommitItemProps {
   isExpanded: boolean;
   isSelected: boolean;
   locale: Locale;
+  platforms: AvatarPlatform[];
   canUndoCommit: boolean;
   isLoading: boolean;
   onToggle: () => void;
@@ -161,6 +217,7 @@ const CommitItem: React.FC<CommitItemProps> = ({
   isExpanded,
   isSelected,
   locale,
+  platforms,
   canUndoCommit,
   isLoading,
   onToggle,
@@ -171,7 +228,7 @@ const CommitItem: React.FC<CommitItemProps> = ({
   const t = useCallback((key: string) => getTranslation(locale, key), [locale]);
   const shortHash = commit.hash.substring(0, 7);
   const firstLine = commit.message.split("\n")[0];
-  const authorAvatarUrl = useCachedAvatarUrl(commit.authorEmail);
+  const authorAvatarUrl = useCachedAvatarUrl(commit.authorEmail, platforms);
 
   return (
     <div className={`border-b border-ide-border/50 ${isSelected ? "bg-ide-accent/5" : ""}`}>
@@ -261,6 +318,7 @@ const GitHistoryView: React.FC<GitHistoryViewProps> = ({
   commits,
   isLoading,
   locale,
+  remoteUrls,
   onCommitSelect,
   onUndoCommit,
   onFileClick,
@@ -271,6 +329,7 @@ const GitHistoryView: React.FC<GitHistoryViewProps> = ({
   const t = useCallback((key: string) => getTranslation(locale, key), [locale]);
   const [expandedHash, setExpandedHash] = useState<string | null>(null);
   const loadingMoreRef = useRef(false);
+  const platforms = React.useMemo(() => detectPlatforms(remoteUrls), [remoteUrls]);
 
   const handleToggle = useCallback(
     (commit: GitCommit) => {
@@ -316,6 +375,7 @@ const GitHistoryView: React.FC<GitHistoryViewProps> = ({
           isExpanded={expandedHash === commit.hash}
           isSelected={selectedCommitHash === commit.hash}
           locale={locale}
+          platforms={platforms}
           canUndoCommit={index === 0 && commit.parentCount > 0}
           isLoading={isLoading}
           onToggle={() => handleToggle(commit)}

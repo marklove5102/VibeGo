@@ -38,6 +38,7 @@ export interface GitState {
   behindCount: number;
   upstreamBranch: string | null;
   hasRemote: boolean;
+  remoteUrls: string[];
   commits: GitCommit[];
   selectedCommit: GitCommit | null;
   selectedCommitFiles: CommitFileInfo[];
@@ -199,6 +200,7 @@ const createInitialGitSnapshot = () => ({
   behindCount: 0,
   upstreamBranch: null as string | null,
   hasRemote: false,
+  remoteUrls: [] as string[],
   commits: [] as GitCommit[],
   selectedCommit: null as GitCommit | null,
   selectedCommitFiles: [] as CommitFileInfo[],
@@ -389,9 +391,10 @@ const createGitState: StateCreator<GitState> = (set, get) => ({
 
     try {
       const res = await gitApi.remotes(currentPath);
-      set({ hasRemote: res.remotes.length > 0 });
+      const urls = res.remotes.flatMap((r) => r.urls);
+      set({ hasRemote: res.remotes.length > 0, remoteUrls: urls });
     } catch {
-      set({ hasRemote: false });
+      set({ hasRemote: false, remoteUrls: [] });
     }
   },
 
