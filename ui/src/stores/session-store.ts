@@ -423,7 +423,11 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
     const { currentSessionId, sessions, switchSession } = get();
     if (currentSessionId && sessions.some((session) => session.id === currentSessionId)) {
       await switchSession(currentSessionId);
-      return true;
+      return get().currentSessionId !== null;
+    }
+    if (currentSessionId) {
+      set({ currentSessionId: null });
+      setStoredSessionId(null);
     }
     return false;
   },
@@ -560,17 +564,42 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
 
       await cleanupAllTerminals();
 
-      const detail = await sessionApi.get(id);
+      let remoteState: SessionState | null = null;
+      try {
+        const detail = await sessionApi.get(id);
+        if (detail.state && detail.state !== "{}") {
+          try {
+            const parsed = parseSessionState(detail.state);
+            if (hasRestorableSessionContent(parsed)) {
+              remoteState = parsed;
+            }
+          } catch {}
+        }
+      } catch {
+        const backupState = getStoredSessionStateBackup(id);
+        if (backupState && hasRestorableSessionContent(backupState)) {
+          try {
+            restoreSessionState(backupState);
+            set({ currentSessionId: id, loading: false });
+            setStoredSessionId(id);
+            return;
+          } catch {}
+        }
+
+        removeStoredSessionStateBackup(id);
+        set({ currentSessionId: null, loading: false });
+        setStoredSessionId(null);
+        useFrameStore.getState().initDefaultGroups();
+        resetWorkspaceRuntimeState();
+        await get().loadSessions();
+        return;
+      }
+
       const backupState = getStoredSessionStateBackup(id);
       const restoreCandidates: SessionState[] = [];
 
-      if (detail.state && detail.state !== "{}") {
-        try {
-          const remoteState = parseSessionState(detail.state);
-          if (hasRestorableSessionContent(remoteState)) {
-            restoreCandidates.push(remoteState);
-          }
-        } catch {}
+      if (remoteState) {
+        restoreCandidates.push(remoteState);
       }
 
       if (backupState) {
@@ -625,7 +654,10 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
       set({ currentSessionId: id, loading: false });
       setStoredSessionId(id);
     } catch (e) {
-      set({ error: (e as Error).message, loading: false });
+      set({ currentSessionId: null, error: (e as Error).message, loading: false });
+      setStoredSessionId(null);
+      useFrameStore.getState().initDefaultGroups();
+      resetWorkspaceRuntimeState();
     }
   },
 
@@ -652,15 +684,21 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
               return;
             }
           }
-        } catch {}
+        } catch {
+          return;
+        }
       } else {
         setStoredSessionStateBackup(currentSessionId, state);
       }
 
-      await sessionApi.update(currentSessionId, {
-        name: sessionName,
-        state: JSON.stringify(state),
-      });
+      try {
+        await sessionApi.update(currentSessionId, {
+          name: sessionName,
+          state: JSON.stringify(state),
+        });
+      } catch {
+        return;
+      }
 
       if (sessionName) {
         set((store) => ({
