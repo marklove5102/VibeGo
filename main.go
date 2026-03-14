@@ -2,10 +2,13 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"io/fs"
 	"net"
 	"net/http"
+	"net/http/httputil"
+	"net/url"
 	"os/signal"
 	"strings"
 	"syscall"
@@ -22,14 +25,15 @@ import (
 	"github.com/xxnuo/vibego/internal/logger"
 	"github.com/xxnuo/vibego/internal/middleware"
 	"github.com/xxnuo/vibego/internal/model"
+	vibegoTls "github.com/xxnuo/vibego/internal/tls"
 	"github.com/xxnuo/vibego/internal/version"
 	"github.com/xxnuo/vibego/ui"
 )
 
-func printAccessibleAddresses(host, port string) {
+func printAccessibleAddresses(host, port, scheme string) {
 	if host == "0.0.0.0" || host == "::" || host == "" {
 		fmt.Printf("VibeGo server listening on:\n")
-		fmt.Printf("  -> http://localhost:%s\n", port)
+		// fmt.Printf("  -> %s://localhost:%s\n", scheme, port)
 		ifaces, err := net.Interfaces()
 		if err == nil {
 			for _, iface := range ifaces {
@@ -52,16 +56,16 @@ func printAccessibleAddresses(host, port string) {
 						continue
 					}
 					if ip.To4() != nil {
-						fmt.Printf("  -> http://%s:%s\n", ip.String(), port)
+						fmt.Printf("  -> %s://%s:%s\n", scheme, ip.String(), port)
 					} else {
-						fmt.Printf("  -> http://[%s]:%s\n", ip.String(), port)
+						fmt.Printf("  -> %s://[%s]:%s\n", scheme, ip.String(), port)
 					}
 				}
 			}
 		}
 	} else {
 		fmt.Printf("VibeGo server listening on:\n")
-		fmt.Printf("  -> http://%s:%s\n", host, port)
+		fmt.Printf("  -> %s://%s:%s\n", scheme, host, port)
 	}
 }
 
@@ -76,7 +80,11 @@ func main() {
 	logger.Setup(cfg.LogLevel)
 	logger.SetLogFile(cfg.LogDir, cfg.DisableLogToFile)
 
-	printAccessibleAddresses(cfg.Host, cfg.Port)
+	scheme := "https"
+	if cfg.NoTLS {
+		scheme = "http"
+	}
+	printAccessibleAddresses(cfg.Host, cfg.Port, scheme)
 
 	log.Info().
 		Str("host", cfg.Host).
@@ -84,6 +92,7 @@ func main() {
 		Str("version", version.Version).
 		Str("cors-origins", cfg.CORSOrigins).
 		Bool("allow-wan", cfg.AllowWAN).
+		Bool("tls", !cfg.NoTLS).
 		Msg("Starting VibeGo server")
 
 	gin.SetMode(gin.ReleaseMode)
@@ -144,20 +153,37 @@ func main() {
 	handler.NewPortHandler().Register(api)
 	handler.NewRemoteHandler().Register(api)
 
-	distFS, err := ui.GetDistFS()
-	if err == nil {
-		fileServer := http.FileServer(http.FS(distFS))
+	if cfg.DevUI != "" {
+		devTarget, err := url.Parse(cfg.DevUI)
+		if err != nil {
+			log.Fatal().Err(err).Msg("Invalid dev-ui URL")
+		}
+		proxy := httputil.NewSingleHostReverseProxy(devTarget)
+		proxy.Director = func(req *http.Request) {
+			req.URL.Scheme = devTarget.Scheme
+			req.URL.Host = devTarget.Host
+			req.Host = devTarget.Host
+		}
 		r.NoRoute(func(c *gin.Context) {
-			path := strings.TrimPrefix(c.Request.URL.Path, "/")
-			if path == "" {
-				path = "index.html"
-			}
-			if _, err := fs.Stat(distFS, path); err == nil {
-				fileServer.ServeHTTP(c.Writer, c.Request)
-				return
-			}
-			c.Status(http.StatusNotFound)
+			proxy.ServeHTTP(c.Writer, c.Request)
 		})
+		log.Info().Str("target", cfg.DevUI).Msg("Dev UI proxy enabled")
+	} else {
+		distFS, err := ui.GetDistFS()
+		if err == nil {
+			fileServer := http.FileServer(http.FS(distFS))
+			r.NoRoute(func(c *gin.Context) {
+				path := strings.TrimPrefix(c.Request.URL.Path, "/")
+				if path == "" {
+					path = "index.html"
+				}
+				if _, err := fs.Stat(distFS, path); err == nil {
+					fileServer.ServeHTTP(c.Writer, c.Request)
+					return
+				}
+				c.Status(http.StatusNotFound)
+			})
+		}
 	}
 
 	srv := &http.Server{
@@ -169,7 +195,18 @@ func main() {
 	defer stop()
 
 	go func() {
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		var err error
+		if cfg.NoTLS {
+			err = srv.ListenAndServe()
+		} else {
+			certFile, keyFile, tlsErr := resolveTLSCert(cfg)
+			if tlsErr != nil {
+				log.Fatal().Err(tlsErr).Msg("Failed to setup TLS certificate")
+			}
+			srv.TLSConfig = &tls.Config{MinVersion: tls.VersionTLS12}
+			err = srv.ListenAndServeTLS(certFile, keyFile)
+		}
+		if err != nil && err != http.ErrServerClosed {
 			log.Fatal().Err(err).Msg("Server error")
 		}
 	}()
@@ -183,4 +220,16 @@ func main() {
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		log.Error().Err(err).Msg("Server shutdown error")
 	}
+}
+
+func resolveTLSCert(cfg *config.Config) (certFile, keyFile string, err error) {
+	if cfg.TlsCert != "" && cfg.TlsKey != "" {
+		return cfg.TlsCert, cfg.TlsKey, nil
+	}
+	certFile, keyFile, err = vibegoTls.EnsureCert(cfg.ConfigDir)
+	if err != nil {
+		return "", "", fmt.Errorf("auto-generate self-signed cert: %w", err)
+	}
+	log.Info().Str("cert", certFile).Str("key", keyFile).Msg("Using self-signed TLS certificate")
+	return
 }

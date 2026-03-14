@@ -19,13 +19,15 @@ export default defineConfig({
     allowedHosts: true,
     proxy: {
       "/api": {
-        target: "http://127.0.0.1:1984",
+        target: "https://127.0.0.1:1984",
         changeOrigin: true,
+        secure: false,
         ws: true,
       },
       "/version": {
-        target: "http://127.0.0.1:1984",
+        target: "https://127.0.0.1:1984",
         changeOrigin: true,
+        secure: false,
       },
     },
   },
@@ -34,13 +36,15 @@ export default defineConfig({
     port: 4173,
     proxy: {
       "/api": {
-        target: "http://127.0.0.1:1984",
+        target: "https://127.0.0.1:1984",
         changeOrigin: true,
+        secure: false,
         ws: true,
       },
       "/version": {
-        target: "http://127.0.0.1:1984",
+        target: "https://127.0.0.1:1984",
         changeOrigin: true,
+        secure: false,
       },
     },
   },

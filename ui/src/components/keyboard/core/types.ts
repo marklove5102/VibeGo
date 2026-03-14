@@ -58,6 +58,7 @@ export const SPECIAL_KEYS = new Set([
   'Home', 'End', 'PageUp', 'PageDown',
   'F1', 'F2', 'F3', 'F4', 'F5', 'F6', 'F7', 'F8', 'F9', 'F10', 'F11', 'F12',
   'Ctrl', 'Alt', 'Shift', 'Meta',
+  'Mic', 'Keyboard', 'Emoji', 'Clipboard', 'Select', 'Undo', 'Cut', 'Copy', 'Paste', 'Fn', 'Caps',
 ])
 
 export const MODIFIER_KEYS = new Set(['Ctrl', 'Alt', 'Shift', 'Meta'])

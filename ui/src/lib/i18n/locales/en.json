@@ -228,6 +228,7 @@
       "fileManager": "File Manager",
       "editor": "Editor",
       "terminal": "Terminal",
+      "keyboard": "Keyboard",
       "git": "Git"
     },
     "theme": {
@@ -291,6 +292,14 @@
     "gitDefaultCommitMessage": {
       "label": "Default Commit Message",
       "description": "Auto-fill the commit title when opening Git view or after each commit"
+    },
+    "keyboardHaptic": {
+      "label": "Key Haptic",
+      "description": "Vibrate when pressing virtual keyboard keys"
+    },
+    "keyboardSound": {
+      "label": "Key Sound",
+      "description": "Play iOS-style key press sound when typing"
     },
     "option": {
       "light": "Light",

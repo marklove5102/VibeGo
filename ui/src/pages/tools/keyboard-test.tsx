@@ -54,22 +54,44 @@ const KeyboardTestView: React.FC<PageViewProps> = () => {
         const copy = [...prev];
         const lastIdx = copy.length - 1;
 
-        if (e.type === "key" && e.value === "Enter") {
+        if (e.value === "Enter") {
           return [...copy, "$ "];
         }
 
-        if (e.type === "key" && e.value === "Backspace") {
+        if (e.value === "Backspace") {
           if (copy[lastIdx].length > 2) {
             copy[lastIdx] = copy[lastIdx].slice(0, -1);
           }
           return copy;
         }
 
-        if (e.type === "key") {
-          copy[lastIdx] += `[${formatEvent(e)}]`;
-        } else {
-          copy[lastIdx] += e.value;
+        if (e.value === "Delete") {
+          return copy;
         }
+
+        if (e.value === "Tab") {
+          copy[lastIdx] += "    ";
+          return copy;
+        }
+
+        if (e.value === "Escape") {
+          copy[lastIdx] += "^[";
+          return copy;
+        }
+
+        if (e.type === "char") {
+          copy[lastIdx] += e.value;
+          return copy;
+        }
+
+        if (e.value.startsWith("Arrow") || e.value.startsWith("F") ||
+            e.value === "Home" || e.value === "End" ||
+            e.value === "PageUp" || e.value === "PageDown" ||
+            e.value === "Insert") {
+          copy[lastIdx] += `[${formatEvent(e)}]`;
+          return copy;
+        }
+
         return copy;
       });
       scrollBottom(termRef);

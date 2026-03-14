@@ -1,4 +1,4 @@
-import { AlignLeft, Bell, Eye, EyeOff, Grid, List, Mail, RefreshCw, Settings, User, WrapText, X } from "lucide-react";
+import { AlignLeft, Bell, Eye, EyeOff, Grid, List, Mail, RefreshCw, Settings, User, Vibrate, Volume2, WrapText, X } from "lucide-react";
 import React, { useEffect, useState } from "react";
 import { useFrameController } from "@/framework/frame/controller";
 import { type Locale, useTranslation } from "@/lib/i18n";
@@ -28,6 +28,10 @@ const SettingItem: React.FC<{
         return <Mail size={18} />;
       case "gitDefaultCommitMessage":
         return <AlignLeft size={18} />;
+      case "keyboardHaptic":
+        return <Vibrate size={18} />;
+      case "keyboardSound":
+        return <Volume2 size={18} />;
       default:
         return <Settings size={18} />;
     }

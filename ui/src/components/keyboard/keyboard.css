@@ -235,3 +235,33 @@
 .tk-row--tall .tk-key {
   height: calc(var(--tk-row-height) * 1.05);
 }
+
+.tk-speech-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.tk-speech-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ef4444;
+  animation: tk-pulse 1.2s ease-in-out infinite;
+  flex-shrink: 0;
+}
+
+.tk-speech-text {
+  font-size: 12px;
+  color: #ef4444;
+  font-weight: 500;
+}
+
+@keyframes tk-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.8); }
+}

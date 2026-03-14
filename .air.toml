@@ -6,7 +6,7 @@ testdata_dir = "testdata"
 tmp_dir = "temp"
 
 [build]
-  args_bin = ["--log-level", "debug"]
+  args_bin = ["--log-level", "debug", "--dev-ui", "http://localhost:5173"]
   bin = "./temp/main"
   cmd = "go build -o ./temp/main ."
   delay = 1000

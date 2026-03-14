@@ -1,7 +1,10 @@
-import React, { useState, useCallback, useMemo } from 'react'
+import React, { useState, useCallback, useMemo, useRef } from 'react'
 import type { KeyEvent, ModifiersState, LayoutDef } from '@/components/keyboard/core/types'
 import { MODIFIER_KEYS } from '@/components/keyboard/core/types'
 import { KEYBOARD_QWERTY } from '@/components/keyboard/core/layouts'
+import { keyFeedback } from '@/components/keyboard/core/key-feedback'
+import { startRecording, stopAndRecognize, ensureLoaded } from '@/components/keyboard/core/sherpa-asr'
+import type { SherpaStatus } from '@/components/keyboard/core/sherpa-asr'
 import KeyButton from '@/components/keyboard/key-button'
 import '@/components/keyboard/keyboard.css'
 
@@ -22,6 +25,33 @@ const Keyboard: React.FC<KeyboardProps> = ({
     shift: { ...INITIAL_MOD },
     meta: { ...INITIAL_MOD },
   })
+
+  const [asrStatus, setAsrStatus] = useState<SherpaStatus>('idle')
+  const [asrProgress, setAsrProgress] = useState('')
+  const recordingRef = useRef(false)
+
+  const emitText = useCallback((text: string) => {
+    for (const ch of text) {
+      onKeyEvent({ type: 'char', value: ch, ctrl: false, alt: false, shift: false, meta: false })
+    }
+  }, [onKeyEvent])
+
+  const handleMicToggle = useCallback(() => {
+    if (recordingRef.current) {
+      recordingRef.current = false
+      const text = stopAndRecognize()
+      setAsrStatus('idle')
+      setAsrProgress('')
+      if (text) emitText(text)
+    } else {
+      recordingRef.current = true
+      startRecording((status, progress) => {
+        setAsrStatus(status)
+        if (progress) setAsrProgress(progress)
+        if (status === 'error') recordingRef.current = false
+      })
+    }
+  }, [emitText])
 
   const modName = useCallback((value: string): keyof ModifiersState | null => {
     const map: Record<string, keyof ModifiersState> = {
@@ -45,6 +75,7 @@ const Keyboard: React.FC<KeyboardProps> = ({
   }, [])
 
   const handleKeyOutput = useCallback((value: string, special: boolean) => {
+    keyFeedback(value, special ? 'modifier' : 'char')
     if (MODIFIER_KEYS.has(value)) {
       const name = modName(value)
       if (!name) return
@@ -63,6 +94,11 @@ const Keyboard: React.FC<KeyboardProps> = ({
       return
     }
 
+    if (value === 'Mic') {
+      handleMicToggle()
+      return
+    }
+
     const event: KeyEvent = {
       type: special ? 'key' : 'char',
       value,
@@ -73,7 +109,7 @@ const Keyboard: React.FC<KeyboardProps> = ({
     }
     onKeyEvent(event)
     clearLatched()
-  }, [modifiers, onKeyEvent, clearLatched, modName])
+  }, [modifiers, onKeyEvent, clearLatched, modName, handleMicToggle])
 
   const handleSlide = useCallback((dir: 'left' | 'right') => {
     const event: KeyEvent = {
@@ -107,8 +143,16 @@ const Keyboard: React.FC<KeyboardProps> = ({
     })
   }, [layout])
 
+  const showLoadingBar = asrStatus === 'loading'
+
   return (
     <div className="tk-keyboard">
+      {showLoadingBar && (
+        <div className="tk-speech-indicator">
+          <span className="tk-speech-dot" />
+          <span className="tk-speech-text">{asrProgress}</span>
+        </div>
+      )}
       {layout.rows.map((row, ri) => (
         <div key={ri} className={rowClasses[ri]}>
           {row.keys.map((keyDef, ki) => {
@@ -120,7 +164,11 @@ const Keyboard: React.FC<KeyboardProps> = ({
               <KeyButton
                 key={keyDef.id}
                 keyDef={keyDef}
-                modState={keyDef.type === 'modifier' ? getModState(keyDef.value) : undefined}
+                modState={
+                  keyDef.type === 'modifier' ? getModState(keyDef.value)
+                  : keyDef.value === 'Mic' && asrStatus === 'recording' ? 'latched'
+                  : undefined
+                }
                 shiftActive={shiftActive}
                 onKeyOutput={handleKeyOutput}
                 onSlide={handleSlide}

@@ -63,7 +63,7 @@ const MAIN_LABELS: Record<string, React.ReactNode> = {
   '⇧': <ArrowBigUp size={18} strokeWidth={2} />,
   '⌫': <Delete size={18} strokeWidth={2} />,
   '↵': <CornerDownLeft size={18} strokeWidth={2} />,
-  '⌨': <Keyboard size={18} strokeWidth={2} />,
+  'Mic': <Mic size={18} strokeWidth={2} />,
 }
 
 interface KeyButtonProps {
@@ -155,8 +155,18 @@ const KeyButton: React.FC<KeyButtonProps> = ({ keyDef, modState, shiftActive, on
 
     if (!keyDef.slider) {
       startLongPress(null)
+    } else if (keyDef.sub) {
+      clearTimers()
+      const subVal = keyDef.sub.s
+      if (subVal) {
+        timersRef.current.delay = setTimeout(() => {
+          if (stateRef.current.isSliding || stateRef.current.didSlide) return
+          stateRef.current.firedByRepeat = true
+          onKeyOutput(subVal, isSpecialKey(subVal) || true)
+        }, LONG_PRESS_DELAY)
+      }
     }
-  }, [keyDef, startLongPress])
+  }, [keyDef, startLongPress, onKeyOutput, clearTimers])
 
   const handlePointerMove = useCallback((e: React.PointerEvent) => {
     const s = stateRef.current
@@ -171,7 +181,6 @@ const KeyButton: React.FC<KeyButtonProps> = ({ keyDef, modState, shiftActive, on
         if (!s.isSliding) {
           s.isSliding = true
           setSliding(true)
-          clearTimers()
         }
         const moveDelta = e.clientX - s.lastX
         s.slideAccum += moveDelta
@@ -211,7 +220,7 @@ const KeyButton: React.FC<KeyButtonProps> = ({ keyDef, modState, shiftActive, on
     clearTimers()
 
     if (keyDef.slider === 'horizontal') {
-      if (!s.didSlide) fireKey(null)
+      if (!s.didSlide && !s.firedByRepeat) fireKey(null)
       setSliding(false)
       setPressed(false)
       return

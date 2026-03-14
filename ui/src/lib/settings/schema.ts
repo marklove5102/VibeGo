@@ -144,6 +144,22 @@ export const SETTINGS_SCHEMA: SettingSchema[] = [
     descriptionKey: "settings.gitDefaultCommitMessage.description",
     defaultValue: "",
   },
+  {
+    key: "keyboardHaptic",
+    type: "toggle",
+    category: "keyboard",
+    labelKey: "settings.keyboardHaptic.label",
+    descriptionKey: "settings.keyboardHaptic.description",
+    defaultValue: "true",
+  },
+  {
+    key: "keyboardSound",
+    type: "toggle",
+    category: "keyboard",
+    labelKey: "settings.keyboardSound.label",
+    descriptionKey: "settings.keyboardSound.description",
+    defaultValue: "true",
+  },
 ];
 
 export const SETTING_CATEGORIES = [
@@ -151,6 +167,7 @@ export const SETTING_CATEGORIES = [
   { key: "fileManager", labelKey: "settings.category.fileManager" },
   { key: "editor", labelKey: "settings.category.editor" },
   { key: "terminal", labelKey: "settings.category.terminal" },
+  { key: "keyboard", labelKey: "settings.category.keyboard" },
   { key: "git", labelKey: "settings.category.git" },
 ];
 

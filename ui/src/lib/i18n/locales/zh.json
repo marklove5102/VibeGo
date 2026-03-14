@@ -237,6 +237,7 @@
       "fileManager": "文件管理器",
       "editor": "编辑器",
       "terminal": "终端",
+      "keyboard": "键盘",
       "git": "Git"
     },
     "theme": {
@@ -300,6 +301,14 @@
     "gitDefaultCommitMessage": {
       "label": "默认提交信息",
       "description": "打开 Git 页面或提交完成后自动填入的提交标题"
+    },
+    "keyboardHaptic": {
+      "label": "按键震动",
+      "description": "按下虚拟键盘按键时触发震动反馈"
+    },
+    "keyboardSound": {
+      "label": "按键声音",
+      "description": "按下虚拟键盘按键时播放仿 iOS 键盘按键音"
     },
     "option": {
       "light": "浅色",

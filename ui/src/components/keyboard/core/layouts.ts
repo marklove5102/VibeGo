@@ -47,7 +47,7 @@ export const KEYBOARD_QWERTY: LayoutDef = {
       keys: [
         { id: 'ctrl', label: 'Ctrl', value: 'Ctrl', type: 'modifier', width: 1.5, sub: { nw: 'Meta', sw: 'Clipboard' } },
         { id: 'alt', label: 'Alt', value: 'Alt', type: 'modifier', width: 1, sub: { nw: 'Fn', sw: 'Emoji' } },
-        { id: 'kbd', label: '⌨', value: 'Keyboard', type: 'action', width: 1 },
+        { id: 'mic', label: 'Mic', value: 'Mic', type: 'action', width: 1 },
         { id: 'space', label: ' ', value: ' ', type: 'char', width: 3.5, slider: 'horizontal', sub: { s: 'Mic' } },
         { id: 'arrows', label: ' ', value: '', type: 'action', width: 1.5, sub: { n: 'ArrowUp', s: 'ArrowDown', w: 'ArrowLeft', e: 'ArrowRight' } },
         { id: 'enter', label: '↵', value: 'Enter', type: 'action', width: 1.5 },

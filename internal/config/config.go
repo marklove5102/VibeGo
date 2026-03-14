@@ -26,6 +26,11 @@ type Config struct {
 	AllowWAN         bool
 	NeedKey          bool
 	DisableLogToFile bool
+	NoTLS            bool
+
+	TlsCert string
+	TlsKey  string
+	DevUI   string
 
 	OS           string
 	DefaultShell string
@@ -61,6 +66,10 @@ func GetConfig() *Config {
 	flag.StringVar(&cfg.CORSOrigins, "cors-origins", utils.GetEnv("VG_CORS_ORIGINS", "*"), "CORS origins")
 	flag.BoolVar(&cfg.DisableLogToFile, "disable-log-to-file", utils.GetBoolEnv("VG_DISABLE_LOG_TO_FILE", false), "Disable log to file")
 	flag.BoolVar(&cfg.NeedKey, "need-key", utils.GetBoolEnv("VG_NEED_KEY", false), "Require key authentication (auto-enabled when allow-wan and key are both set)")
+	flag.StringVar(&cfg.TlsCert, "tls-cert", utils.GetEnv("VG_TLS_CERT", ""), "TLS certificate file path (uses self-signed if empty)")
+	flag.StringVar(&cfg.TlsKey, "tls-key", utils.GetEnv("VG_TLS_KEY", ""), "TLS private key file path (uses self-signed if empty)")
+	flag.BoolVar(&cfg.NoTLS, "no-tls", utils.GetBoolEnv("VG_NO_TLS", false), "Disable TLS and use plain HTTP")
+	flag.StringVar(&cfg.DevUI, "dev-ui", utils.GetEnv("VG_DEV_UI", ""), "Dev UI proxy target (e.g. http://localhost:5173)")
 
 	defaultShell := ""
 	switch runtime.GOOS {
