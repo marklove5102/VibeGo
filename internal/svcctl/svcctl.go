@@ -1,33 +1,55 @@
 package svcctl
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
+	"os/user"
 	"path/filepath"
 	"runtime"
+	"strconv"
+	"strings"
+	"time"
 
+	kservice "github.com/kardianos/service"
+	"github.com/xxnuo/vibego/internal/config"
 	"github.com/xxnuo/vibego/internal/version"
 )
+
+var osStderr io.Writer = os.Stderr
+var osStdout io.Writer = os.Stdout
 
 const ServiceName = "vibego"
 const ServiceDescription = "VibeGo - Vibe Anywhere"
 
-type Manager interface {
-	Install(binPath string, args []string) error
-	Uninstall() error
-	Start() error
-	Stop() error
-	Restart() error
-	Status() error
+type Runner func(context.Context) error
+
+type serviceScope int
+
+const (
+	scopeAuto serviceScope = iota
+	scopeUser
+	scopeSystem
+)
+
+type serviceProgram struct {
+	runner Runner
+	ctx    context.Context
+	cancel context.CancelFunc
+	done   chan error
 }
 
-func Run(args []string) bool {
+func Run(args []string, runner Runner) bool {
 	if len(args) < 2 {
 		return false
 	}
 
 	switch args[1] {
+	case "help", "-h", "--help":
+		handleHelp(args)
+		return true
 	case "install":
 		handleInstall()
 		return true
@@ -35,39 +57,56 @@ func Run(args []string) bool {
 		handleUninstall()
 		return true
 	case "service":
-		handleService(args)
+		handleService(args, runner)
 		return true
 	default:
 		return false
 	}
 }
 
-func handleInstall() {
-	src := currentBinPath()
-	dst := InstalledBinPath()
+func (p *serviceProgram) Start(kservice.Service) error {
+	if p.runner == nil {
+		return nil
+	}
+	p.ctx, p.cancel = context.WithCancel(context.Background())
+	p.done = make(chan error, 1)
+	go func() {
+		p.done <- p.runner(p.ctx)
+	}()
+	return nil
+}
 
-	if src == dst {
-		fmt.Println("Already installed at", dst)
+func (p *serviceProgram) Stop(kservice.Service) error {
+	if p.cancel != nil {
+		p.cancel()
+	}
+	if p.done == nil {
+		return nil
+	}
+	select {
+	case err := <-p.done:
+		return err
+	case <-time.After(10 * time.Second):
+		return fmt.Errorf("service stop timed out")
+	}
+}
+
+func handleHelp(args []string) {
+	if len(args) >= 3 && args[2] == "service" {
+		printServiceUsage()
 		return
 	}
+	printUsage()
+}
 
-	dir := filepath.Dir(dst)
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: create directory %s: %v\n", dir, err)
+func handleInstall() {
+	dst := InstalledBinPath()
+	if err := installBinary(dst); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: install binary: %v\n", err)
 		os.Exit(1)
 	}
-
-	if err := copyFile(src, dst); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: copy binary: %v\n", err)
-		os.Exit(1)
-	}
-	if err := os.Chmod(dst, 0755); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: chmod: %v\n", err)
-		os.Exit(1)
-	}
-
 	fmt.Printf("Installed to %s\n", dst)
-	fmt.Printf("Make sure %s is in your PATH\n", dir)
+	fmt.Printf("Make sure %s is in your PATH\n", filepath.Dir(dst))
 }
 
 func handleUninstall() {
@@ -83,73 +122,268 @@ func handleUninstall() {
 	fmt.Printf("Removed %s\n", dst)
 }
 
-func handleService(args []string) {
+func handleService(args []string, runner Runner) {
 	if len(args) < 3 {
-		printUsage()
+		printServiceUsage()
 		os.Exit(1)
 	}
 
-	mgr := newManager()
-	var err error
-
-	switch args[2] {
-	case "install":
-		ensureInstalled()
-		extraArgs := collectExtraArgs(args)
-		err = mgr.Install(InstalledBinPath(), extraArgs)
-	case "uninstall":
-		err = mgr.Uninstall()
-	case "start":
-		err = mgr.Start()
-	case "stop":
-		err = mgr.Stop()
-	case "restart":
-		err = mgr.Restart()
-	case "status":
-		err = mgr.Status()
-	default:
-		fmt.Fprintf(os.Stderr, "Unknown service command: %s\n\n", args[2])
-		printUsage()
-		os.Exit(1)
+	cmd := args[2]
+	if cmd == "help" || cmd == "-h" || cmd == "--help" {
+		printServiceUsage()
+		return
 	}
 
+	if cmd == "run" {
+		if err := runService(args[3:], runner); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+		return
+	}
+
+	scope, extraArgs, err := parseServiceFlags(args[3:])
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
+
+	userService, err := resolveUserService(runtime.GOOS, currentUID(), scope)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+
+	if cmd != "install" && len(extraArgs) > 0 {
+		fmt.Fprintf(os.Stderr, "Error: %s does not accept server flags\n", cmd)
+		os.Exit(1)
+	}
+
+	err = runServiceCommand(cmd, userService, extraArgs)
+	if err != nil {
+		if cmd != "status" {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		}
+		os.Exit(1)
+	}
 }
 
-func ensureInstalled() {
-	src := currentBinPath()
-	dst := InstalledBinPath()
-
-	if src == dst {
-		return
+func runServiceCommand(cmd string, userService bool, extraArgs []string) error {
+	binPath := targetBinPath(userService)
+	if cmd == "install" {
+		if err := installBinary(binPath); err != nil {
+			return fmt.Errorf("install binary: %w", err)
+		}
 	}
 
-	dir := filepath.Dir(dst)
-	_ = os.MkdirAll(dir, 0755)
-
-	if err := copyFile(src, dst); err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: failed to update installed binary: %v\n", err)
-		return
+	svc, err := newService(userService, binPath, append([]string{"service", "run"}, extraArgs...), nil)
+	if err != nil {
+		return err
 	}
-	_ = os.Chmod(dst, 0755)
-	fmt.Printf("Updated %s\n", dst)
+
+	switch cmd {
+	case "install":
+		if err := svc.Install(); err != nil {
+			return serviceError(cmd, err)
+		}
+		fmt.Printf("Service installed (%s): %s\n", scopeName(userService), binPath)
+		fmt.Printf("Run: %s service start %s\n", os.Args[0], scopeFlag(userService))
+	case "uninstall":
+		_ = svc.Stop()
+		if err := svc.Uninstall(); err != nil {
+			return serviceError(cmd, err)
+		}
+		fmt.Println("Service uninstalled")
+	case "start":
+		if err := svc.Start(); err != nil {
+			return serviceError(cmd, err)
+		}
+		fmt.Println("Service started")
+	case "stop":
+		if err := svc.Stop(); err != nil {
+			return serviceError(cmd, err)
+		}
+		fmt.Println("Service stopped")
+	case "restart":
+		if err := svc.Restart(); err != nil {
+			return serviceError(cmd, err)
+		}
+		fmt.Println("Service restarted")
+	case "status":
+		return printServiceStatus(svc)
+	default:
+		return fmt.Errorf("unknown service command: %s", cmd)
+	}
+	return nil
+}
+
+func serviceError(cmd string, err error) error {
+	if runtime.GOOS == "windows" {
+		return fmt.Errorf("%s service: %w; run this command as administrator", cmd, err)
+	}
+	return err
+}
+
+func runService(args []string, runner Runner) error {
+	if runner == nil {
+		return fmt.Errorf("service runner is not configured")
+	}
+	os.Args = append([]string{os.Args[0]}, args...)
+	svc, err := newService(false, currentBinPath(), nil, runner)
+	if err != nil {
+		return err
+	}
+	return svc.Run()
+}
+
+func newService(userService bool, binPath string, args []string, runner Runner) (kservice.Service, error) {
+	cfg := newServiceConfig(userService, binPath, args)
+	return kservice.New(&serviceProgram{runner: runner}, cfg)
+}
+
+func newServiceConfig(userService bool, binPath string, args []string) *kservice.Config {
+	home, _ := os.UserHomeDir()
+	cfg := &kservice.Config{
+		Name:             ServiceName,
+		DisplayName:      ServiceDescription,
+		Description:      ServiceDescription,
+		Executable:       binPath,
+		Arguments:        args,
+		WorkingDirectory: home,
+		Option:           kservice.KeyValue{},
+	}
+
+	if userService {
+		cfg.Option["UserService"] = true
+	}
+
+	switch runtime.GOOS {
+	case "linux":
+		cfg.Dependencies = []string{"After=network.target"}
+		cfg.Option["Restart"] = "on-failure"
+		cfg.Option["LimitNOFILE"] = 65536
+		cfg.Option["SystemdScript"] = systemdScript(userService)
+	case "darwin":
+		cfg.Option["RunAtLoad"] = true
+		cfg.Option["KeepAlive"] = true
+	case "windows":
+		cfg.Option["StartType"] = "automatic"
+		cfg.Option["OnFailure"] = "restart"
+	}
+
+	return cfg
+}
+
+func printServiceStatus(svc kservice.Service) error {
+	status, err := svc.Status()
+	if errors.Is(err, kservice.ErrNotInstalled) {
+		fmt.Fprintln(osStdout, "not-installed")
+		return err
+	}
+	if err != nil {
+		fmt.Fprintln(osStdout, "not-installed")
+		return err
+	}
+
+	switch status {
+	case kservice.StatusRunning:
+		fmt.Fprintln(osStdout, "running")
+	case kservice.StatusStopped:
+		fmt.Fprintln(osStdout, "stopped")
+	default:
+		fmt.Fprintln(osStdout, "not-installed")
+		return kservice.ErrNotInstalled
+	}
+	return nil
+}
+
+func parseServiceFlags(args []string) (serviceScope, []string, error) {
+	scope := scopeAuto
+	rest := make([]string, 0, len(args))
+	for _, arg := range args {
+		switch arg {
+		case "--user":
+			if scope == scopeSystem {
+				return scopeAuto, nil, fmt.Errorf("--user and --system cannot be used together")
+			}
+			scope = scopeUser
+		case "--system":
+			if scope == scopeUser {
+				return scopeAuto, nil, fmt.Errorf("--user and --system cannot be used together")
+			}
+			scope = scopeSystem
+		default:
+			rest = append(rest, arg)
+		}
+	}
+	return scope, rest, nil
+}
+
+func resolveUserService(goos string, uid int, scope serviceScope) (bool, error) {
+	switch scope {
+	case scopeUser:
+		if goos == "windows" {
+			return false, fmt.Errorf("Windows user service is not supported; run as administrator and use --system")
+		}
+		return true, nil
+	case scopeSystem:
+		return false, nil
+	case scopeAuto:
+		if goos == "windows" {
+			return false, nil
+		}
+		return uid != 0, nil
+	default:
+		return false, fmt.Errorf("invalid service scope")
+	}
+}
+
+func currentUID() int {
+	u, err := user.Current()
+	if err != nil {
+		return -1
+	}
+	uid, err := strconv.Atoi(u.Uid)
+	if err != nil {
+		return -1
+	}
+	return uid
+}
+
+func targetBinPath(userService bool) string {
+	if userService {
+		return InstalledBinPath()
+	}
+	return systemBinPath(runtime.GOOS, os.Getenv("ProgramFiles"))
 }
 
 func InstalledBinPath() string {
 	home, _ := os.UserHomeDir()
+	return userBinPath(runtime.GOOS, home, os.Getenv("LOCALAPPDATA"))
+}
+
+func userBinPath(goos, home, localAppData string) string {
 	name := ServiceName
-	if runtime.GOOS == "windows" {
+	if goos == "windows" {
 		name += ".exe"
-		localAppData := os.Getenv("LOCALAPPDATA")
 		if localAppData != "" {
 			return filepath.Join(localAppData, "Programs", ServiceName, name)
 		}
 		return filepath.Join(home, "AppData", "Local", "Programs", ServiceName, name)
 	}
 	return filepath.Join(home, ".local", "bin", name)
+}
+
+func systemBinPath(goos, programFiles string) string {
+	name := ServiceName
+	if goos == "windows" {
+		name += ".exe"
+		if programFiles == "" {
+			programFiles = `C:\Program Files`
+		}
+		return filepath.Join(programFiles, "VibeGo", name)
+	}
+	return filepath.Join("/usr/local/bin", name)
 }
 
 func currentBinPath() string {
@@ -164,6 +398,23 @@ func currentBinPath() string {
 		os.Exit(1)
 	}
 	return p
+}
+
+func installBinary(dst string) error {
+	src := currentBinPath()
+	if src == dst {
+		return nil
+	}
+
+	dir := filepath.Dir(dst)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return fmt.Errorf("create directory %s: %w", dir, err)
+	}
+
+	if err := copyFile(src, dst); err != nil {
+		return fmt.Errorf("copy binary: %w", err)
+	}
+	return os.Chmod(dst, 0755)
 }
 
 func copyFile(src, dst string) error {
@@ -192,26 +443,67 @@ func copyFile(src, dst string) error {
 	return os.Rename(tmp, dst)
 }
 
-func collectExtraArgs(args []string) []string {
-	if len(args) <= 3 {
-		return nil
+func systemdScript(userService bool) string {
+	target := "multi-user.target"
+	if userService {
+		target = "default.target"
 	}
-	return args[3:]
+	return strings.ReplaceAll(`[Unit]
+Description={{.Description}}
+ConditionFileIsExecutable={{.Path|cmdEscape}}
+{{range $i, $dep := .Dependencies}}
+{{$dep}}{{end}}
+
+[Service]
+Type=simple
+ExecStart={{.Path|cmdEscape}}{{range .Arguments}} {{.|cmd}}{{end}}
+{{if .WorkingDirectory}}WorkingDirectory={{.WorkingDirectory|cmdEscape}}{{end}}
+Restart=on-failure
+RestartSec=5
+LimitNOFILE=65536
+
+[Install]
+WantedBy={{.Target}}
+`, "{{.Target}}", target)
+}
+
+func scopeName(userService bool) string {
+	if userService {
+		return "user"
+	}
+	return "system"
+}
+
+func scopeFlag(userService bool) string {
+	if userService {
+		return "--user"
+	}
+	return "--system"
 }
 
 func printUsage() {
-	fmt.Fprintf(os.Stderr, "VibeGo %s\n\n", version.Version)
-	fmt.Fprintf(os.Stderr, "Usage:\n")
-	fmt.Fprintf(os.Stderr, "  %s install                          Install binary to ~/.local/bin\n", os.Args[0])
-	fmt.Fprintf(os.Stderr, "  %s uninstall                        Remove installed binary\n", os.Args[0])
-	fmt.Fprintf(os.Stderr, "  %s service <command> [service flags] Manage system service\n\n", os.Args[0])
-	fmt.Fprintf(os.Stderr, "Service commands:\n")
-	fmt.Fprintf(os.Stderr, "  install     Install as system service (auto-copies binary)\n")
-	fmt.Fprintf(os.Stderr, "  uninstall   Uninstall system service\n")
-	fmt.Fprintf(os.Stderr, "  start       Start the service\n")
-	fmt.Fprintf(os.Stderr, "  stop        Stop the service\n")
-	fmt.Fprintf(os.Stderr, "  restart     Restart the service\n")
-	fmt.Fprintf(os.Stderr, "  status      Show service status\n")
-	fmt.Fprintf(os.Stderr, "\nExample:\n")
-	fmt.Fprintf(os.Stderr, "  %s service install -port 8080 -no-tls\n", os.Args[0])
+	config.WriteHelp(osStderr, os.Args[0])
+	fmt.Fprintf(osStderr, "\n")
+	printServiceUsage()
+}
+
+func printServiceUsage() {
+	fmt.Fprintf(osStderr, "VibeGo %s\n\n", version.Version)
+	fmt.Fprintf(osStderr, "Usage:\n")
+	fmt.Fprintf(osStderr, "  %s service <command> [--user|--system] [server flags]\n\n", os.Args[0])
+	fmt.Fprintf(osStderr, "Service commands:\n")
+	fmt.Fprintf(osStderr, "  help        Show service help\n")
+	fmt.Fprintf(osStderr, "  install     Install service (auto-copies binary)\n")
+	fmt.Fprintf(osStderr, "  uninstall   Uninstall service\n")
+	fmt.Fprintf(osStderr, "  start       Start service\n")
+	fmt.Fprintf(osStderr, "  stop        Stop service\n")
+	fmt.Fprintf(osStderr, "  restart     Restart service\n")
+	fmt.Fprintf(osStderr, "  status      Show service status\n")
+	fmt.Fprintf(osStderr, "\nScope:\n")
+	fmt.Fprintf(osStderr, "  --user      Install/control current user service on Linux/macOS\n")
+	fmt.Fprintf(osStderr, "  --system    Install/control system service\n")
+	fmt.Fprintf(osStderr, "\nExamples:\n")
+	fmt.Fprintf(osStderr, "  %s service install --user -port 8080\n", os.Args[0])
+	fmt.Fprintf(osStderr, "  sudo %s service install --system -port 8080\n", os.Args[0])
+	fmt.Fprintf(osStderr, "  %s service install --system -port 8080\n", os.Args[0])
 }

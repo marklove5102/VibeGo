@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"io/fs"
 	"net"
-	"os"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"os"
 	"os/signal"
 	"strings"
 	"syscall"
@@ -22,12 +22,12 @@ import (
 	"github.com/xxnuo/vibego/internal/config"
 
 	"github.com/xxnuo/vibego/internal/docs"
-	"github.com/xxnuo/vibego/internal/svcctl"
 	"github.com/xxnuo/vibego/internal/handler"
 	"github.com/xxnuo/vibego/internal/logger"
 	"github.com/xxnuo/vibego/internal/middleware"
 	"github.com/xxnuo/vibego/internal/model"
 	"github.com/xxnuo/vibego/internal/service/asr"
+	"github.com/xxnuo/vibego/internal/svcctl"
 	vibegoTls "github.com/xxnuo/vibego/internal/tls"
 	"github.com/xxnuo/vibego/internal/transport"
 	"github.com/xxnuo/vibego/internal/version"
@@ -78,10 +78,22 @@ func printAccessibleAddresses(host, port, scheme string) {
 // @host localhost:1984
 // @BasePath /api
 func main() {
-	if svcctl.Run(os.Args) {
+	if svcctl.Run(os.Args, runServer) {
 		return
 	}
 
+	if err := runServerWithSignals(); err != nil {
+		log.Fatal().Err(err).Msg("Server stopped")
+	}
+}
+
+func runServerWithSignals() error {
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+	return runServer(ctx)
+}
+
+func runServer(ctx context.Context) error {
 	cfg := config.GetConfig()
 
 	logger.Setup(cfg.LogLevel)
@@ -245,9 +257,7 @@ func main() {
 		srv.TLSConfig = &tls.Config{MinVersion: tls.VersionTLS12}
 	}
 
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer stop()
-
+	serverErr := make(chan error, 1)
 	go func() {
 		var err error
 		if cfg.NoTLS {
@@ -263,11 +273,18 @@ func main() {
 			err = srv.ServeTLS(mux.TLS(), certFile, keyFile)
 		}
 		if err != nil && err != http.ErrServerClosed {
-			log.Fatal().Err(err).Msg("Server error")
+			serverErr <- err
+			return
 		}
+		serverErr <- nil
 	}()
 
-	<-ctx.Done()
+	select {
+	case <-ctx.Done():
+	case err := <-serverErr:
+		return err
+	}
+
 	log.Info().Msg("Shutting down server...")
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -284,6 +301,7 @@ func main() {
 	if mux != nil {
 		_ = mux.Close()
 	}
+	return nil
 }
 
 func resolveTLSCert(cfg *config.Config) (certFile, keyFile string, err error) {
