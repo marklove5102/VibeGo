@@ -818,19 +818,11 @@ func (h *GitHandler) FileDiff(c *gin.Context) {
 		req.Mode = "working"
 	}
 
-	repo, err := h.openRepo(req.Path)
+	repoRoot, err := h.getRepoRoot(req.Path)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-
-	w, err := repo.Worktree()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-
-	repoRoot := w.Filesystem.Root()
 	scopeKey := buildGitScopeKey(req.WorkspaceSessionID, req.GroupID, repoRoot)
 	diff, err := getGitDiff(repoRoot, req.FilePath, req.Mode)
 	if err != nil {
@@ -873,18 +865,11 @@ func (h *GitHandler) ApplySelection(c *gin.Context) {
 		return
 	}
 
-	repo, err := h.openRepo(req.Path)
+	repoRoot, err := h.getRepoRoot(req.Path)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-
-	w, err := repo.Worktree()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	repoRoot := w.Filesystem.Root()
 	scopeKey := buildGitScopeKey(req.WorkspaceSessionID, req.GroupID, repoRoot)
 
 	if req.Mode == "staged" {
@@ -1063,19 +1048,11 @@ func (h *GitHandler) ApplySelectionBatch(c *gin.Context) {
 		return
 	}
 
-	repo, err := h.openRepo(req.Path)
+	repoRoot, err := h.getRepoRoot(req.Path)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-
-	w, err := repo.Worktree()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-
-	repoRoot := w.Filesystem.Root()
 	scopeKey := buildGitScopeKey(req.WorkspaceSessionID, req.GroupID, repoRoot)
 
 	for _, filePath := range req.FilePaths {
@@ -1112,18 +1089,11 @@ func (h *GitHandler) StashFiles(c *gin.Context) {
 		return
 	}
 
-	repo, err := h.openRepo(req.Path)
+	repoRoot, err := h.getRepoRoot(req.Path)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-
-	w, err := repo.Worktree()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	repoRoot := w.Filesystem.Root()
 
 	cmd := exec.Command("git", "stash", "show", "--name-status", fmt.Sprintf("stash@{%d}", req.Index))
 	cmd.Dir = repoRoot
@@ -1172,18 +1142,11 @@ func (h *GitHandler) StashDiff(c *gin.Context) {
 		return
 	}
 
-	repo, err := h.openRepo(req.Path)
+	repoRoot, err := h.getRepoRoot(req.Path)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-
-	w, err := repo.Worktree()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	repoRoot := w.Filesystem.Root()
 
 	stashRef := fmt.Sprintf("stash@{%d}", req.Index)
 
@@ -1254,18 +1217,11 @@ func (h *GitHandler) ConflictDetails(c *gin.Context) {
 		return
 	}
 
-	repo, err := h.openRepo(req.Path)
+	repoRoot, err := h.getRepoRoot(req.Path)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-
-	w, err := repo.Worktree()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	repoRoot := w.Filesystem.Root()
 	absPath := filepath.Join(repoRoot, req.FilePath)
 
 	contentBytes, err := exec.Command("cat", absPath).Output()
@@ -1369,18 +1325,11 @@ func (h *GitHandler) ConflictResolve(c *gin.Context) {
 		return
 	}
 
-	repo, err := h.openRepo(req.Path)
+	repoRoot, err := h.getRepoRoot(req.Path)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-
-	w, err := repo.Worktree()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	repoRoot := w.Filesystem.Root()
 	absPath := filepath.Join(repoRoot, req.FilePath)
 
 	var resolvedContent string
@@ -1431,8 +1380,7 @@ func (h *GitHandler) ConflictResolve(c *gin.Context) {
 		return
 	}
 
-	repo2, _ := h.openRepo(req.Path)
-	conflicts := collectConflictFiles(repo2)
+	conflicts := collectConflictFiles(repoRoot)
 	files, summary := h.collectStructuredStatus(repoRoot)
 
 	c.JSON(http.StatusOK, gin.H{

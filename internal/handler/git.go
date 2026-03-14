@@ -1,22 +1,15 @@
 package handler
 
 import (
-	"bytes"
 	"fmt"
-	"io"
 	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
-	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/go-git/go-git/v6"
-	"github.com/go-git/go-git/v6/plumbing"
-	"github.com/go-git/go-git/v6/plumbing/object"
-	"github.com/go-git/go-git/v6/utils/merkletrie"
 	"github.com/xxnuo/vibego/internal/service/kv"
 	"github.com/xxnuo/vibego/internal/service/settings"
 	"gorm.io/gorm"
@@ -161,17 +154,31 @@ func (h *GitHandler) Register(r *gin.RouterGroup) {
 	g.POST("/smart-switch-branch", h.SmartSwitchBranch)
 }
 
-func (h *GitHandler) openRepo(path string) (*git.Repository, error) {
-	return git.PlainOpenWithOptions(path, &git.PlainOpenOptions{DetectDotGit: true})
+func (h *GitHandler) getRepoRoot(path string) (string, error) {
+	cmd := exec.Command("git", "rev-parse", "--show-toplevel")
+	cmd.Dir = path
+	output, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("not a git repository")
+	}
+	return strings.TrimSpace(string(output)), nil
 }
 
+// Check godoc
+// @Summary Check if path is a git repository
+// @Tags Git
+// @Accept json
+// @Produce json
+// @Param request body GitPathRequest true "Repository path"
+// @Success 200 {object} map[string]bool
+// @Router /api/git/check [post]
 func (h *GitHandler) Check(c *gin.Context) {
 	var req GitPathRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	_, err := h.openRepo(req.Path)
+	_, err := h.getRepoRoot(req.Path)
 	c.JSON(http.StatusOK, gin.H{"isRepo": err == nil})
 }
 
@@ -185,14 +192,12 @@ type GitScopeRequest struct {
 }
 
 // Init godoc
-// @Summary Initialize git repository
-// @Description Initialize a new git repository
+// @Summary Initialize a new git repository
 // @Tags Git
 // @Accept json
 // @Produce json
-// @Param request body GitInitRequest true "Init request"
+// @Param request body GitInitRequest true "Repository path"
 // @Success 200 {object} map[string]bool
-// @Failure 400 {object} map[string]string
 // @Failure 500 {object} map[string]string
 // @Router /api/git/init [post]
 func (h *GitHandler) Init(c *gin.Context) {
@@ -202,9 +207,10 @@ func (h *GitHandler) Init(c *gin.Context) {
 		return
 	}
 
-	_, err := git.PlainInit(req.Path, false)
+	cmd := exec.Command("git", "init", req.Path)
+	output, err := cmd.CombinedOutput()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": gitCommandError(err, output).Error()})
 		return
 	}
 
@@ -217,14 +223,12 @@ type GitCloneRequest struct {
 }
 
 // Clone godoc
-// @Summary Clone git repository
-// @Description Clone a git repository from URL
+// @Summary Clone a git repository
 // @Tags Git
 // @Accept json
 // @Produce json
-// @Param request body GitCloneRequest true "Clone request"
+// @Param request body GitCloneRequest true "Clone URL and destination path"
 // @Success 200 {object} map[string]bool
-// @Failure 400 {object} map[string]string
 // @Failure 500 {object} map[string]string
 // @Router /api/git/clone [post]
 func (h *GitHandler) Clone(c *gin.Context) {
@@ -234,12 +238,10 @@ func (h *GitHandler) Clone(c *gin.Context) {
 		return
 	}
 
-	_, err := git.PlainClone(req.Path, &git.CloneOptions{
-		URL:      req.URL,
-		Progress: os.Stdout,
-	})
+	cmd := exec.Command("git", "clone", req.URL, req.Path)
+	output, err := cmd.CombinedOutput()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": gitCommandError(err, output).Error()})
 		return
 	}
 
@@ -258,15 +260,13 @@ type FileStatus struct {
 }
 
 // Status godoc
-// @Summary Get git status
-// @Description Get the status of files in the repository
+// @Summary Get structured file status of git repository
 // @Tags Git
 // @Accept json
 // @Produce json
-// @Param request body GitPathRequest true "Path request"
+// @Param request body GitPathRequest true "Repository path"
 // @Success 200 {object} map[string]interface{}
 // @Failure 400 {object} map[string]string
-// @Failure 500 {object} map[string]string
 // @Router /api/git/status [post]
 func (h *GitHandler) Status(c *gin.Context) {
 	var req GitPathRequest
@@ -275,19 +275,12 @@ func (h *GitHandler) Status(c *gin.Context) {
 		return
 	}
 
-	repo, err := h.openRepo(req.Path)
+	repoRoot, err := h.getRepoRoot(req.Path)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	w, err := repo.Worktree()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-
-	repoRoot := w.Filesystem.Root()
 	scopeKey := buildGitScopeKey(req.WorkspaceSessionID, req.GroupID, repoRoot)
 	files, summary := h.collectStructuredStatusWithScope(repoRoot, scopeKey)
 	c.JSON(http.StatusOK, gin.H{"files": files, "summary": summary})
@@ -309,13 +302,12 @@ type CommitInfo struct {
 }
 
 // Log godoc
-// @Summary Get git log
-// @Description Get commit history
+// @Summary Get commit log
 // @Tags Git
 // @Accept json
 // @Produce json
-// @Param request body GitLogRequest true "Log request"
-// @Success 200 {object} map[string]interface{}
+// @Param request body GitLogRequest true "Repository path and pagination"
+// @Success 200 {object} map[string][]CommitInfo
 // @Failure 400 {object} map[string]string
 // @Failure 500 {object} map[string]string
 // @Router /api/git/log [post]
@@ -326,25 +318,19 @@ func (h *GitHandler) Log(c *gin.Context) {
 		return
 	}
 
-	repo, err := h.openRepo(req.Path)
+	repoRoot, err := h.getRepoRoot(req.Path)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	ref, err := repo.Head()
-	if err != nil {
+	headCmd := exec.Command("git", "rev-parse", "HEAD")
+	headCmd.Dir = repoRoot
+	if err := headCmd.Run(); err != nil {
 		c.JSON(http.StatusOK, gin.H{"commits": []CommitInfo{}})
 		return
 	}
 
-	cIter, err := repo.Log(&git.LogOptions{From: ref.Hash()})
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-
-	var commits []CommitInfo
 	limit := req.Limit
 	if limit <= 0 {
 		limit = 20
@@ -353,31 +339,51 @@ func (h *GitHandler) Log(c *gin.Context) {
 	if skip < 0 {
 		skip = 0
 	}
-	count := 0
-	skipped := 0
 
-	err = cIter.ForEach(func(commit *object.Commit) error {
-		if skipped < skip {
-			skipped++
-			return nil
-		}
-		if count >= limit {
-			return io.EOF
-		}
-		commits = append(commits, CommitInfo{
-			Hash:        commit.Hash.String(),
-			Message:     commit.Message,
-			Author:      commit.Author.Name,
-			AuthorEmail: commit.Author.Email,
-			Date:        commit.Author.When.Format(time.RFC3339),
-			ParentCount: commit.NumParents(),
-		})
-		count++
-		return nil
-	})
-	if err != nil && err != io.EOF {
+	format := "%x1e%H%x00%s%x00%an%x00%ae%x00%aI%x00%P"
+	args := []string{"log", "-n", fmt.Sprintf("%d", limit),
+		fmt.Sprintf("--format=%s", format), "--no-decorate"}
+	if skip > 0 {
+		args = append(args, fmt.Sprintf("--skip=%d", skip))
+	}
+
+	cmd := exec.Command("git", args...)
+	cmd.Dir = repoRoot
+	output, err := cmd.Output()
+	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
+	}
+
+	var commits []CommitInfo
+	rawOutput := strings.TrimSpace(string(output))
+	if rawOutput == "" {
+		c.JSON(http.StatusOK, gin.H{"commits": []CommitInfo{}})
+		return
+	}
+
+	entries := strings.Split(rawOutput, "\x1e")
+	for _, entry := range entries {
+		entry = strings.TrimSpace(entry)
+		if entry == "" {
+			continue
+		}
+		parts := strings.SplitN(entry, "\x00", 6)
+		if len(parts) < 6 {
+			continue
+		}
+		parentCount := 0
+		if strings.TrimSpace(parts[5]) != "" {
+			parentCount = len(strings.Fields(parts[5]))
+		}
+		commits = append(commits, CommitInfo{
+			Hash:        parts[0],
+			Message:     strings.TrimSpace(parts[1]),
+			Author:      parts[2],
+			AuthorEmail: parts[3],
+			Date:        parts[4],
+			ParentCount: parentCount,
+		})
 	}
 
 	c.JSON(http.StatusOK, gin.H{"commits": commits})
@@ -389,15 +395,13 @@ type GitDiffRequest struct {
 }
 
 // Diff godoc
-// @Summary Get file diff
-// @Description Get diff between working tree and HEAD for a file
+// @Summary Get file diff between HEAD and working tree
 // @Tags Git
 // @Accept json
 // @Produce json
-// @Param request body GitDiffRequest true "Diff request"
-// @Success 200 {object} map[string]interface{}
+// @Param request body GitDiffRequest true "Repository path and file path"
+// @Success 200 {object} map[string]string
 // @Failure 400 {object} map[string]string
-// @Failure 500 {object} map[string]string
 // @Router /api/git/diff [post]
 func (h *GitHandler) Diff(c *gin.Context) {
 	var req GitDiffRequest
@@ -406,40 +410,21 @@ func (h *GitHandler) Diff(c *gin.Context) {
 		return
 	}
 
-	repo, err := h.openRepo(req.Path)
+	repoRoot, err := h.getRepoRoot(req.Path)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
 	var oldContent string
-	headRef, err := repo.Head()
+	showCmd := exec.Command("git", "show", "HEAD:"+req.FilePath)
+	showCmd.Dir = repoRoot
+	showOutput, err := showCmd.Output()
 	if err == nil {
-		headCommit, err := repo.CommitObject(headRef.Hash())
-		if err == nil {
-			tree, err := headCommit.Tree()
-			if err == nil {
-				file, err := tree.File(req.FilePath)
-				if err == nil {
-					r, err := file.Reader()
-					if err == nil {
-						buf := new(bytes.Buffer)
-						buf.ReadFrom(r)
-						oldContent = buf.String()
-						r.Close()
-					}
-				}
-			}
-		}
+		oldContent = string(showOutput)
 	}
 
-	w, err := repo.Worktree()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-
-	absPath := filepath.Join(w.Filesystem.Root(), req.FilePath)
+	absPath := filepath.Join(repoRoot, req.FilePath)
 	newContentBytes, err := os.ReadFile(absPath)
 	if err != nil {
 		newContentBytes = []byte{}
@@ -459,16 +444,14 @@ type GitShowRequest struct {
 }
 
 // Show godoc
-// @Summary Show file at ref
-// @Description Get file content at a specific ref
+// @Summary Show file content at a specific ref
 // @Tags Git
 // @Accept json
 // @Produce json
-// @Param request body GitShowRequest true "Show request"
+// @Param request body GitShowRequest true "Repository path, file path and ref"
 // @Success 200 {object} map[string]string
 // @Failure 400 {object} map[string]string
 // @Failure 404 {object} map[string]string
-// @Failure 500 {object} map[string]string
 // @Router /api/git/show [post]
 func (h *GitHandler) Show(c *gin.Context) {
 	var req GitShowRequest
@@ -481,47 +464,28 @@ func (h *GitHandler) Show(c *gin.Context) {
 		req.Ref = "HEAD"
 	}
 
-	repo, err := h.openRepo(req.Path)
+	repoRoot, err := h.getRepoRoot(req.Path)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	hash, err := repo.ResolveRevision(plumbing.Revision(req.Ref))
-	if err != nil {
+	verifyCmd := exec.Command("git", "rev-parse", "--verify", req.Ref)
+	verifyCmd.Dir = repoRoot
+	if err := verifyCmd.Run(); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid ref: " + err.Error()})
 		return
 	}
 
-	commit, err := repo.CommitObject(*hash)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-
-	tree, err := commit.Tree()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-
-	file, err := tree.File(req.FilePath)
+	showCmd := exec.Command("git", "show", req.Ref+":"+req.FilePath)
+	showCmd.Dir = repoRoot
+	output, err := showCmd.Output()
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "file not found"})
 		return
 	}
 
-	r, err := file.Reader()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	defer r.Close()
-
-	buf := new(bytes.Buffer)
-	buf.ReadFrom(r)
-
-	c.JSON(http.StatusOK, gin.H{"content": buf.String()})
+	c.JSON(http.StatusOK, gin.H{"content": string(output)})
 }
 
 type GitFilesRequest struct {
@@ -531,11 +495,10 @@ type GitFilesRequest struct {
 
 // Add godoc
 // @Summary Stage files
-// @Description Add files to git staging area
 // @Tags Git
 // @Accept json
 // @Produce json
-// @Param request body GitFilesRequest true "Add request"
+// @Param request body GitFilesRequest true "Repository path and file list"
 // @Success 200 {object} map[string]bool
 // @Failure 400 {object} map[string]string
 // @Failure 500 {object} map[string]string
@@ -547,23 +510,19 @@ func (h *GitHandler) Add(c *gin.Context) {
 		return
 	}
 
-	repo, err := h.openRepo(req.Path)
+	repoRoot, err := h.getRepoRoot(req.Path)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	w, err := repo.Worktree()
+	args := append([]string{"add", "--"}, req.Files...)
+	cmd := exec.Command("git", args...)
+	cmd.Dir = repoRoot
+	output, err := cmd.CombinedOutput()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": gitCommandError(err, output).Error()})
 		return
-	}
-
-	for _, file := range req.Files {
-		if _, err := w.Add(file); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to add " + file + ": " + err.Error()})
-			return
-		}
 	}
 
 	c.JSON(http.StatusOK, gin.H{"ok": true})
@@ -576,11 +535,10 @@ type GitResetRequest struct {
 
 // Reset godoc
 // @Summary Unstage files
-// @Description Reset files from staging area
 // @Tags Git
 // @Accept json
 // @Produce json
-// @Param request body GitResetRequest true "Reset request"
+// @Param request body GitResetRequest true "Repository path and optional file list"
 // @Success 200 {object} map[string]bool
 // @Failure 400 {object} map[string]string
 // @Failure 500 {object} map[string]string
@@ -592,29 +550,22 @@ func (h *GitHandler) Reset(c *gin.Context) {
 		return
 	}
 
-	repo, err := h.openRepo(req.Path)
+	repoRoot, err := h.getRepoRoot(req.Path)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	w, err := repo.Worktree()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-
-	head, err := repo.Head()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot reset without HEAD"})
-		return
-	}
-	resetOpts := &git.ResetOptions{Commit: head.Hash(), Mode: git.MixedReset}
+	args := []string{"reset", "HEAD"}
 	if len(req.Files) > 0 {
-		resetOpts.Files = req.Files
+		args = append(args, "--")
+		args = append(args, req.Files...)
 	}
-	if err := w.Reset(resetOpts); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	cmd := exec.Command("git", args...)
+	cmd.Dir = repoRoot
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": gitCommandError(err, output).Error()})
 		return
 	}
 
@@ -622,13 +573,12 @@ func (h *GitHandler) Reset(c *gin.Context) {
 }
 
 // Checkout godoc
-// @Summary Checkout files
-// @Description Discard changes in working directory
+// @Summary Discard working tree changes for specified files
 // @Tags Git
 // @Accept json
 // @Produce json
-// @Param request body GitFilesRequest true "Checkout request"
-// @Success 200 {object} map[string]bool
+// @Param request body GitFilesRequest true "Repository path and file list"
+// @Success 200 {object} map[string]interface{}
 // @Failure 400 {object} map[string]string
 // @Failure 500 {object} map[string]string
 // @Router /api/git/checkout [post]
@@ -639,63 +589,32 @@ func (h *GitHandler) Checkout(c *gin.Context) {
 		return
 	}
 
-	repo, err := h.openRepo(req.Path)
+	repoRoot, err := h.getRepoRoot(req.Path)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	idx, err := repo.Storer.Index()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-
-	w, err := repo.Worktree()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	baseDir := w.Filesystem.Root()
-
 	for _, p := range req.Files {
-		entry, err := idx.Entry(p)
-		if err != nil {
-			absP := filepath.Join(baseDir, p)
+		checkCmd := exec.Command("git", "ls-files", "--error-unmatch", p)
+		checkCmd.Dir = repoRoot
+		if err := checkCmd.Run(); err != nil {
+			absP := filepath.Join(repoRoot, p)
 			if _, e := os.Stat(absP); e == nil {
 				os.Remove(absP)
 			}
 			continue
 		}
 
-		blob, err := repo.BlobObject(entry.Hash)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "blob not found: " + err.Error()})
-			return
-		}
-
-		content, err := func() ([]byte, error) {
-			r, err := blob.Reader()
-			if err != nil {
-				return nil, err
-			}
-			defer r.Close()
-			return io.ReadAll(r)
-		}()
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "read error: " + err.Error()})
-			return
-		}
-
-		absP := filepath.Join(baseDir, p)
-		if err := os.WriteFile(absP, content, 0644); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "write error: " + err.Error()})
+		restoreCmd := exec.Command("git", "checkout", "--", p)
+		restoreCmd.Dir = repoRoot
+		if output, err := restoreCmd.CombinedOutput(); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": gitCommandError(err, output).Error()})
 			return
 		}
 	}
 
-	repo2, _ := h.openRepo(req.Path)
-	checkoutFiles := collectFileStatus(repo2)
+	checkoutFiles := collectFileStatus(repoRoot)
 	c.JSON(http.StatusOK, gin.H{"ok": true, "status": gin.H{"files": checkoutFiles}})
 }
 
@@ -707,12 +626,11 @@ type GitCommitRequest struct {
 }
 
 // Commit godoc
-// @Summary Create commit
-// @Description Commit staged changes
+// @Summary Create a git commit
 // @Tags Git
 // @Accept json
 // @Produce json
-// @Param request body GitCommitRequest true "Commit request"
+// @Param request body GitCommitRequest true "Repository path, message, and author info"
 // @Success 200 {object} map[string]interface{}
 // @Failure 400 {object} map[string]string
 // @Failure 500 {object} map[string]string
@@ -724,15 +642,9 @@ func (h *GitHandler) Commit(c *gin.Context) {
 		return
 	}
 
-	repo, err := h.openRepo(req.Path)
+	repoRoot, err := h.getRepoRoot(req.Path)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-
-	w, err := repo.Worktree()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -744,29 +656,35 @@ func (h *GitHandler) Commit(c *gin.Context) {
 		email = req.Email
 	}
 
-	hash, err := w.Commit(req.Message, &git.CommitOptions{
-		Author: &object.Signature{
-			Name:  author,
-			Email: email,
-			When:  time.Now(),
-		},
-	})
+	commitCmd := exec.Command("git", "-c", "user.name="+author, "-c", "user.email="+email,
+		"commit", "-m", req.Message)
+	commitCmd.Dir = repoRoot
+	commitCmd.Env = append(os.Environ(),
+		"GIT_AUTHOR_NAME="+author,
+		"GIT_AUTHOR_EMAIL="+email,
+		"GIT_COMMITTER_NAME="+author,
+		"GIT_COMMITTER_EMAIL="+email,
+	)
+	output, err := commitCmd.CombinedOutput()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": gitCommandError(err, output).Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"ok": true, "hash": hash.String()})
+	hashCmd := exec.Command("git", "rev-parse", "HEAD")
+	hashCmd.Dir = repoRoot
+	hashOut, _ := hashCmd.Output()
+
+	c.JSON(http.StatusOK, gin.H{"ok": true, "hash": strings.TrimSpace(string(hashOut))})
 }
 
 // UndoCommit godoc
-// @Summary Undo last commit
-// @Description Soft reset to parent commit
+// @Summary Undo the last commit (soft reset)
 // @Tags Git
 // @Accept json
 // @Produce json
-// @Param request body GitPathRequest true "Path request"
-// @Success 200 {object} map[string]bool
+// @Param request body GitPathRequest true "Repository path"
+// @Success 200 {object} map[string]interface{}
 // @Failure 400 {object} map[string]string
 // @Failure 500 {object} map[string]string
 // @Router /api/git/undo [post]
@@ -777,52 +695,29 @@ func (h *GitHandler) UndoCommit(c *gin.Context) {
 		return
 	}
 
-	repo, err := h.openRepo(req.Path)
+	repoRoot, err := h.getRepoRoot(req.Path)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	w, err := repo.Worktree()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-
-	head, err := repo.Head()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot find HEAD"})
-		return
-	}
-
-	commit, err := repo.CommitObject(head.Hash())
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-
-	if commit.NumParents() == 0 {
+	parentCmd := exec.Command("git", "rev-parse", "HEAD~1")
+	parentCmd.Dir = repoRoot
+	if err := parentCmd.Run(); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "initial commit cannot be undone"})
 		return
 	}
 
-	parent, err := commit.Parent(0)
+	resetCmd := exec.Command("git", "reset", "--soft", "HEAD~1")
+	resetCmd.Dir = repoRoot
+	output, err := resetCmd.CombinedOutput()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": gitCommandError(err, output).Error()})
 		return
 	}
 
-	if err := w.Reset(&git.ResetOptions{
-		Commit: parent.Hash,
-		Mode:   git.SoftReset,
-	}); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-
-	repo2, _ := h.openRepo(req.Path)
-	undoFiles := collectFileStatus(repo2)
-	undoCommits := collectCommitLog(repo2, 20)
+	undoFiles := collectFileStatus(repoRoot)
+	undoCommits := collectCommitLog(repoRoot, 20)
 	c.JSON(http.StatusOK, gin.H{"ok": true, "status": gin.H{"files": undoFiles}, "commits": undoCommits})
 }
 
@@ -851,6 +746,16 @@ type GitDraftResponse struct {
 	IsAmend     bool   `json:"isAmend"`
 }
 
+// GetDraft godoc
+// @Summary Get commit draft (summary, description, isAmend)
+// @Tags Git
+// @Produce json
+// @Param path query string true "Repository path"
+// @Param workspace_session_id query string false "Workspace session ID"
+// @Param group_id query string false "Group ID"
+// @Success 200 {object} GitDraftResponse
+// @Failure 400 {object} map[string]string
+// @Router /api/git/draft [get]
 func (h *GitHandler) GetDraft(c *gin.Context) {
 	path := c.Query("path")
 	if path == "" {
@@ -873,6 +778,15 @@ func (h *GitHandler) GetDraft(c *gin.Context) {
 	})
 }
 
+// UpdateDraft godoc
+// @Summary Update commit draft fields
+// @Tags Git
+// @Accept json
+// @Produce json
+// @Param request body GitDraftRequest true "Draft fields to update"
+// @Success 200 {object} GitDraftResponse
+// @Failure 400 {object} map[string]string
+// @Router /api/git/draft [post]
 func (h *GitHandler) UpdateDraft(c *gin.Context) {
 	var req GitDraftRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -928,22 +842,20 @@ func (h *GitHandler) buildSelectedCommitPayload(repoRoot string, scopeKey string
 	return selectedFiles, selectedPatches, nil
 }
 
+// CommitSelected godoc
+// @Summary Commit only selected files and/or patches
+// @Tags Git
+// @Accept json
+// @Produce json
+// @Param request body CommitSelectedRequest true "Selected files, patches, and commit info"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Router /api/git/commit-selected [post]
 func (h *GitHandler) CommitSelected(c *gin.Context) {
 	var req CommitSelectedRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-
-	repo, err := h.openRepo(req.Path)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-
-	w, err := repo.Worktree()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -952,6 +864,7 @@ func (h *GitHandler) CommitSelected(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+
 	scopeKey := buildGitScopeKey(req.WorkspaceSessionID, req.GroupID, repoRoot)
 
 	author, email := h.getGitAuthor()
@@ -993,14 +906,15 @@ func (h *GitHandler) CommitSelected(c *gin.Context) {
 		return
 	}
 
-	head, err := repo.Head()
-	if err == nil {
-		_ = w.Reset(&git.ResetOptions{Commit: head.Hash(), Mode: git.MixedReset})
-	}
+	resetCmd := exec.Command("git", "reset", "HEAD")
+	resetCmd.Dir = repoRoot
+	resetCmd.Run()
 
 	for _, file := range filesToCommit {
-		if _, err := w.Add(file); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to add " + file + ": " + err.Error()})
+		addCmd := exec.Command("git", "add", "--", file)
+		addCmd.Dir = repoRoot
+		if output, err := addCmd.CombinedOutput(); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to add " + file + ": " + gitCommandError(err, output).Error()})
 			return
 		}
 	}
@@ -1017,19 +931,29 @@ func (h *GitHandler) CommitSelected(c *gin.Context) {
 		message += "\n\n" + req.Description
 	}
 
-	hash, err := w.Commit(message, &git.CommitOptions{
-		Author: &object.Signature{Name: author, Email: email, When: time.Now()},
-	})
+	commitCmd := exec.Command("git", "-c", "user.name="+author, "-c", "user.email="+email,
+		"commit", "-m", message)
+	commitCmd.Dir = repoRoot
+	commitCmd.Env = append(os.Environ(),
+		"GIT_AUTHOR_NAME="+author,
+		"GIT_AUTHOR_EMAIL="+email,
+		"GIT_COMMITTER_NAME="+author,
+		"GIT_COMMITTER_EMAIL="+email,
+	)
+	commitOutput, err := commitCmd.CombinedOutput()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": gitCommandError(err, commitOutput).Error()})
 		return
 	}
 
+	hashCmd := exec.Command("git", "rev-parse", "HEAD")
+	hashCmd.Dir = repoRoot
+	hashOut, _ := hashCmd.Output()
+	hash := strings.TrimSpace(string(hashOut))
+
 	h.selectionStore.resetRepo(scopeKey)
 	files, summary := h.collectStructuredStatusWithScope(repoRoot, scopeKey)
-	repo, _ = h.openRepo(req.Path)
-	commits := collectCommitLog(repo, 20)
-	repoRoot, _ = h.getRepoRoot(req.Path)
+	commits := collectCommitLog(repoRoot, 20)
 	bs := collectBranchStatus(repoRoot)
 	h.broadcastStatus(req.Path)
 	h.broadcastBranchStatus(req.Path)
@@ -1037,27 +961,25 @@ func (h *GitHandler) CommitSelected(c *gin.Context) {
 	h.broadcastRepoSyncNeededScoped(req.Path, req.WorkspaceSessionID, req.GroupID, gin.H{"draft": true})
 
 	c.JSON(http.StatusOK, gin.H{
-		"ok": true, "hash": hash.String(),
+		"ok": true, "hash": hash,
 		"status": gin.H{"files": files, "summary": summary}, "commits": commits, "branchStatus": bs,
 	})
 }
 
+// Amend godoc
+// @Summary Amend the last commit with selected files and/or patches
+// @Tags Git
+// @Accept json
+// @Produce json
+// @Param request body CommitSelectedRequest true "Selected files, patches, and commit info"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Router /api/git/amend [post]
 func (h *GitHandler) Amend(c *gin.Context) {
 	var req CommitSelectedRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-
-	repo, err := h.openRepo(req.Path)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-
-	w, err := repo.Worktree()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -1066,6 +988,7 @@ func (h *GitHandler) Amend(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+
 	scopeKey := buildGitScopeKey(req.WorkspaceSessionID, req.GroupID, repoRoot)
 
 	author, email := h.getGitAuthor()
@@ -1107,14 +1030,15 @@ func (h *GitHandler) Amend(c *gin.Context) {
 		return
 	}
 
-	head, err := repo.Head()
-	if err == nil {
-		_ = w.Reset(&git.ResetOptions{Commit: head.Hash(), Mode: git.MixedReset})
-	}
+	resetCmd := exec.Command("git", "reset", "HEAD")
+	resetCmd.Dir = repoRoot
+	resetCmd.Run()
 
 	for _, file := range filesToCommit {
-		if _, err := w.Add(file); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to add " + file + ": " + err.Error()})
+		addCmd := exec.Command("git", "add", "--", file)
+		addCmd.Dir = repoRoot
+		if output, err := addCmd.CombinedOutput(); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to add " + file + ": " + gitCommandError(err, output).Error()})
 			return
 		}
 	}
@@ -1131,20 +1055,24 @@ func (h *GitHandler) Amend(c *gin.Context) {
 		message += "\n\n" + req.Description
 	}
 
-	_, err = w.Commit(message, &git.CommitOptions{
-		Amend:  true,
-		Author: &object.Signature{Name: author, Email: email, When: time.Now()},
-	})
+	commitCmd := exec.Command("git", "-c", "user.name="+author, "-c", "user.email="+email,
+		"commit", "--amend", "-m", message)
+	commitCmd.Dir = repoRoot
+	commitCmd.Env = append(os.Environ(),
+		"GIT_AUTHOR_NAME="+author,
+		"GIT_AUTHOR_EMAIL="+email,
+		"GIT_COMMITTER_NAME="+author,
+		"GIT_COMMITTER_EMAIL="+email,
+	)
+	commitOutput, err := commitCmd.CombinedOutput()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": gitCommandError(err, commitOutput).Error()})
 		return
 	}
 
 	h.selectionStore.resetRepo(scopeKey)
-	repoRoot, _ = h.getRepoRoot(req.Path)
-	repo, _ = h.openRepo(req.Path)
 	files, summary := h.collectStructuredStatusWithScope(repoRoot, scopeKey)
-	commits := collectCommitLog(repo, 20)
+	commits := collectCommitLog(repoRoot, 20)
 	bs := collectBranchStatus(repoRoot)
 	h.broadcastStatus(req.Path)
 	h.broadcastBranchStatus(req.Path)
@@ -1167,13 +1095,12 @@ type CommitFileInfo struct {
 }
 
 // CommitFiles godoc
-// @Summary Get commit files
-// @Description Get list of changed files in a specific commit
+// @Summary List files changed in a specific commit
 // @Tags Git
 // @Accept json
 // @Produce json
-// @Param request body GitCommitFilesRequest true "Commit files request"
-// @Success 200 {object} map[string]interface{}
+// @Param request body GitCommitFilesRequest true "Repository path and commit hash"
+// @Success 200 {object} map[string][]CommitFileInfo
 // @Failure 400 {object} map[string]string
 // @Failure 500 {object} map[string]string
 // @Router /api/git/commit-files [post]
@@ -1184,77 +1111,53 @@ func (h *GitHandler) CommitFiles(c *gin.Context) {
 		return
 	}
 
-	repo, err := h.openRepo(req.Path)
+	repoRoot, err := h.getRepoRoot(req.Path)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	hash := plumbing.NewHash(req.Commit)
-	commit, err := repo.CommitObject(hash)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "commit not found: " + err.Error()})
-		return
-	}
+	parentCmd := exec.Command("git", "rev-parse", req.Commit+"^")
+	parentCmd.Dir = repoRoot
+	hasParent := parentCmd.Run() == nil
 
 	var files []CommitFileInfo
 
-	if commit.NumParents() == 0 {
-		tree, err := commit.Tree()
+	if !hasParent {
+		cmd := exec.Command("git", "diff-tree", "--no-commit-id", "-r", "--name-status", "--root", req.Commit)
+		cmd.Dir = repoRoot
+		output, err := cmd.Output()
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
-		tree.Files().ForEach(func(f *object.File) error {
-			files = append(files, CommitFileInfo{Path: f.Name, Status: "A"})
-			return nil
-		})
-	} else {
-		parent, err := commit.Parent(0)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
-		}
-
-		parentTree, err := parent.Tree()
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
-		}
-
-		commitTree, err := commit.Tree()
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
-		}
-
-		changes, err := parentTree.Diff(commitTree)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
-		}
-
-		for _, change := range changes {
-			action, err := change.Action()
-			if err != nil {
+		for _, line := range strings.Split(strings.TrimSpace(string(output)), "\n") {
+			if line == "" {
 				continue
 			}
-			var status string
-			var path string
-			switch action {
-			case merkletrie.Insert:
-				status = "A"
-				path = change.To.Name
-			case merkletrie.Delete:
-				status = "D"
-				path = change.From.Name
-			case merkletrie.Modify:
-				status = "M"
-				path = change.To.Name
+			parts := strings.SplitN(line, "\t", 2)
+			if len(parts) < 2 {
+				continue
 			}
-			if path != "" {
-				files = append(files, CommitFileInfo{Path: path, Status: status})
+			files = append(files, CommitFileInfo{Path: parts[1], Status: parts[0]})
+		}
+	} else {
+		cmd := exec.Command("git", "diff-tree", "--no-commit-id", "-r", "--name-status", req.Commit)
+		cmd.Dir = repoRoot
+		output, err := cmd.Output()
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		for _, line := range strings.Split(strings.TrimSpace(string(output)), "\n") {
+			if line == "" {
+				continue
 			}
+			parts := strings.SplitN(line, "\t", 2)
+			if len(parts) < 2 {
+				continue
+			}
+			files = append(files, CommitFileInfo{Path: parts[1], Status: parts[0]})
 		}
 	}
 
@@ -1272,15 +1175,13 @@ type GitCommitDiffRequest struct {
 }
 
 // CommitDiff godoc
-// @Summary Get commit file diff
-// @Description Get diff of a specific file in a commit compared to its parent
+// @Summary Get file diff for a specific commit
 // @Tags Git
 // @Accept json
 // @Produce json
-// @Param request body GitCommitDiffRequest true "Commit diff request"
-// @Success 200 {object} map[string]interface{}
+// @Param request body GitCommitDiffRequest true "Repository path, commit hash, and file path"
+// @Success 200 {object} map[string]string
 // @Failure 400 {object} map[string]string
-// @Failure 500 {object} map[string]string
 // @Router /api/git/commit-diff [post]
 func (h *GitHandler) CommitDiff(c *gin.Context) {
 	var req GitCommitDiffRequest
@@ -1289,55 +1190,26 @@ func (h *GitHandler) CommitDiff(c *gin.Context) {
 		return
 	}
 
-	repo, err := h.openRepo(req.Path)
+	repoRoot, err := h.getRepoRoot(req.Path)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	hash := plumbing.NewHash(req.Commit)
-	commit, err := repo.CommitObject(hash)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "commit not found: " + err.Error()})
-		return
-	}
-
 	var oldContent, newContent string
 
-	commitTree, err := commit.Tree()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-
-	file, err := commitTree.File(req.FilePath)
+	newCmd := exec.Command("git", "show", req.Commit+":"+req.FilePath)
+	newCmd.Dir = repoRoot
+	newOut, err := newCmd.Output()
 	if err == nil {
-		r, err := file.Reader()
-		if err == nil {
-			buf := new(bytes.Buffer)
-			buf.ReadFrom(r)
-			newContent = buf.String()
-			r.Close()
-		}
+		newContent = string(newOut)
 	}
 
-	if commit.NumParents() > 0 {
-		parent, err := commit.Parent(0)
-		if err == nil {
-			parentTree, err := parent.Tree()
-			if err == nil {
-				file, err := parentTree.File(req.FilePath)
-				if err == nil {
-					r, err := file.Reader()
-					if err == nil {
-						buf := new(bytes.Buffer)
-						buf.ReadFrom(r)
-						oldContent = buf.String()
-						r.Close()
-					}
-				}
-			}
-		}
+	parentCmd := exec.Command("git", "show", req.Commit+"^:"+req.FilePath)
+	parentCmd.Dir = repoRoot
+	oldOut, err := parentCmd.Output()
+	if err == nil {
+		oldContent = string(oldOut)
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -1353,15 +1225,13 @@ type RemoteInfo struct {
 }
 
 // Remotes godoc
-// @Summary List remotes
-// @Description Get list of remote repositories
+// @Summary List remote repositories
 // @Tags Git
 // @Accept json
 // @Produce json
-// @Param request body GitPathRequest true "Path request"
-// @Success 200 {object} map[string]interface{}
+// @Param request body GitPathRequest true "Repository path"
+// @Success 200 {object} map[string][]RemoteInfo
 // @Failure 400 {object} map[string]string
-// @Failure 500 {object} map[string]string
 // @Router /api/git/remotes [post]
 func (h *GitHandler) Remotes(c *gin.Context) {
 	var req GitPathRequest
@@ -1370,27 +1240,13 @@ func (h *GitHandler) Remotes(c *gin.Context) {
 		return
 	}
 
-	repo, err := h.openRepo(req.Path)
+	repoRoot, err := h.getRepoRoot(req.Path)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	remotes, err := repo.Remotes()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-
-	var result []RemoteInfo
-	for _, r := range remotes {
-		cfg := r.Config()
-		result = append(result, RemoteInfo{
-			Name: cfg.Name,
-			URLs: cfg.URLs,
-		})
-	}
-
+	result := collectRemoteInfos(repoRoot)
 	c.JSON(http.StatusOK, gin.H{"remotes": result})
 }
 
@@ -1401,12 +1257,11 @@ type GitFetchRequest struct {
 
 // Fetch godoc
 // @Summary Fetch from remote
-// @Description Fetch updates from a remote repository
 // @Tags Git
 // @Accept json
 // @Produce json
-// @Param request body GitFetchRequest true "Fetch request"
-// @Success 200 {object} map[string]bool
+// @Param request body GitFetchRequest true "Repository path and optional remote name"
+// @Success 200 {object} map[string]interface{}
 // @Failure 400 {object} map[string]string
 // @Failure 500 {object} map[string]string
 // @Router /api/git/fetch [post]
@@ -1417,7 +1272,7 @@ func (h *GitHandler) Fetch(c *gin.Context) {
 		return
 	}
 
-	repo, err := h.openRepo(req.Path)
+	repoRoot, err := h.getRepoRoot(req.Path)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -1428,17 +1283,15 @@ func (h *GitHandler) Fetch(c *gin.Context) {
 		remoteName = "origin"
 	}
 
-	err = repo.Fetch(&git.FetchOptions{
-		RemoteName: remoteName,
-		Progress:   os.Stdout,
-	})
-	if err != nil && err != git.NoErrAlreadyUpToDate {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	cmd := exec.Command("git", "fetch", remoteName)
+	cmd.Dir = repoRoot
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": gitCommandError(err, output).Error()})
 		return
 	}
 
-	fetchRoot, _ := h.getRepoRoot(req.Path)
-	fetchBS := collectBranchStatus(fetchRoot)
+	fetchBS := collectBranchStatus(repoRoot)
 	c.JSON(http.StatusOK, gin.H{"ok": true, "branchStatus": fetchBS})
 }
 
@@ -1450,12 +1303,11 @@ type GitPullRequest struct {
 
 // Pull godoc
 // @Summary Pull from remote
-// @Description Pull updates from a remote repository and merge
 // @Tags Git
 // @Accept json
 // @Produce json
-// @Param request body GitPullRequest true "Pull request"
-// @Success 200 {object} map[string]bool
+// @Param request body GitPullRequest true "Repository path, optional remote and branch"
+// @Success 200 {object} map[string]interface{}
 // @Failure 400 {object} map[string]string
 // @Failure 500 {object} map[string]string
 // @Router /api/git/pull [post]
@@ -1466,15 +1318,9 @@ func (h *GitHandler) Pull(c *gin.Context) {
 		return
 	}
 
-	repo, err := h.openRepo(req.Path)
+	repoRoot, err := h.getRepoRoot(req.Path)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-
-	w, err := repo.Worktree()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -1483,27 +1329,26 @@ func (h *GitHandler) Pull(c *gin.Context) {
 		remoteName = "origin"
 	}
 
-	pullOpts := &git.PullOptions{
-		RemoteName: remoteName,
-		Progress:   os.Stdout,
-	}
-
+	args := []string{"pull", remoteName}
 	if req.Branch != "" {
-		pullOpts.ReferenceName = plumbing.NewBranchReferenceName(req.Branch)
+		args = append(args, req.Branch)
 	}
 
-	err = w.Pull(pullOpts)
-	if err != nil && err != git.NoErrAlreadyUpToDate {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
+	cmd := exec.Command("git", args...)
+	cmd.Dir = repoRoot
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		errMsg := strings.TrimSpace(string(output))
+		if errMsg != "" && !strings.Contains(errMsg, "Already up to date") {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": errMsg})
+			return
+		}
 	}
 
-	repo2, _ := h.openRepo(req.Path)
-	pullFiles := collectFileStatus(repo2)
-	pullCommits := collectCommitLog(repo2, 20)
-	pullConflicts := collectConflictFiles(repo2)
-	pullRoot, _ := h.getRepoRoot(req.Path)
-	pullBS := collectBranchStatus(pullRoot)
+	pullFiles := collectFileStatus(repoRoot)
+	pullCommits := collectCommitLog(repoRoot, 20)
+	pullConflicts := collectConflictFiles(repoRoot)
+	pullBS := collectBranchStatus(repoRoot)
 	c.JSON(http.StatusOK, gin.H{
 		"ok": true, "status": gin.H{"files": pullFiles},
 		"commits": pullCommits, "conflicts": pullConflicts, "branchStatus": pullBS,
@@ -1513,16 +1358,16 @@ func (h *GitHandler) Pull(c *gin.Context) {
 type GitPushRequest struct {
 	Path   string `json:"path" binding:"required"`
 	Remote string `json:"remote"`
+	Force  bool   `json:"force"`
 }
 
 // Push godoc
 // @Summary Push to remote
-// @Description Push local commits to a remote repository
 // @Tags Git
 // @Accept json
 // @Produce json
-// @Param request body GitPushRequest true "Push request"
-// @Success 200 {object} map[string]bool
+// @Param request body GitPushRequest true "Repository path, optional remote and force flag"
+// @Success 200 {object} map[string]interface{}
 // @Failure 400 {object} map[string]string
 // @Failure 500 {object} map[string]string
 // @Router /api/git/push [post]
@@ -1533,7 +1378,7 @@ func (h *GitHandler) Push(c *gin.Context) {
 		return
 	}
 
-	repo, err := h.openRepo(req.Path)
+	repoRoot, err := h.getRepoRoot(req.Path)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -1544,30 +1389,25 @@ func (h *GitHandler) Push(c *gin.Context) {
 		remoteName = "origin"
 	}
 
-	err = repo.Push(&git.PushOptions{
-		RemoteName: remoteName,
-		Progress:   os.Stdout,
-	})
-	if err != nil && err != git.NoErrAlreadyUpToDate {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	args := []string{"push", remoteName}
+	if req.Force {
+		args = append(args, "--force")
+	}
+
+	cmd := exec.Command("git", args...)
+	cmd.Dir = repoRoot
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		errMsg := strings.TrimSpace(string(output))
+		if errMsg == "" {
+			errMsg = err.Error()
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": errMsg})
 		return
 	}
 
-	pushRoot, _ := h.getRepoRoot(req.Path)
-	pushBS := collectBranchStatus(pushRoot)
+	pushBS := collectBranchStatus(repoRoot)
 	c.JSON(http.StatusOK, gin.H{"ok": true, "branchStatus": pushBS})
-}
-
-func (h *GitHandler) getRepoRoot(path string) (string, error) {
-	repo, err := h.openRepo(path)
-	if err != nil {
-		return "", err
-	}
-	w, err := repo.Worktree()
-	if err != nil {
-		return "", err
-	}
-	return w.Filesystem.Root(), nil
 }
 
 type GitStashRequest struct {
@@ -1576,6 +1416,16 @@ type GitStashRequest struct {
 	Files   []string `json:"files"`
 }
 
+// Stash godoc
+// @Summary Stash working tree changes
+// @Tags Git
+// @Accept json
+// @Produce json
+// @Param request body GitStashRequest true "Repository path, optional message and files"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Router /api/git/stash [post]
 func (h *GitHandler) Stash(c *gin.Context) {
 	var req GitStashRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -1606,11 +1456,8 @@ func (h *GitHandler) Stash(c *gin.Context) {
 		return
 	}
 
-	repo, errR := h.openRepo(req.Path)
 	stashResult := gin.H{"ok": true, "message": strings.TrimSpace(string(output))}
-	if errR == nil {
-		stashResult["status"] = gin.H{"files": collectFileStatus(repo)}
-	}
+	stashResult["status"] = gin.H{"files": collectFileStatus(repoRoot)}
 	c.JSON(http.StatusOK, stashResult)
 }
 
@@ -1620,13 +1467,12 @@ type StashEntry struct {
 }
 
 // StashList godoc
-// @Summary List stashes
-// @Description Get list of stashed changes (uses git CLI as go-git lacks native stash support)
+// @Summary List stash entries
 // @Tags Git
 // @Accept json
 // @Produce json
-// @Param request body GitPathRequest true "Path request"
-// @Success 200 {object} map[string]interface{}
+// @Param request body GitPathRequest true "Repository path"
+// @Success 200 {object} map[string][]StashEntry
 // @Failure 400 {object} map[string]string
 // @Failure 500 {object} map[string]string
 // @Router /api/git/stash-list [post]
@@ -1672,13 +1518,12 @@ type GitStashIndexRequest struct {
 }
 
 // StashPop godoc
-// @Summary Pop stash
-// @Description Apply and remove a stash entry (uses git CLI as go-git lacks native stash support)
+// @Summary Apply and remove a stash entry
 // @Tags Git
 // @Accept json
 // @Produce json
-// @Param request body GitStashIndexRequest true "Stash index request"
-// @Success 200 {object} map[string]bool
+// @Param request body GitStashIndexRequest true "Repository path and stash index"
+// @Success 200 {object} map[string]interface{}
 // @Failure 400 {object} map[string]string
 // @Failure 500 {object} map[string]string
 // @Router /api/git/stash-pop [post]
@@ -1708,21 +1553,17 @@ func (h *GitHandler) StashPop(c *gin.Context) {
 		return
 	}
 
-	repo, errR := h.openRepo(req.Path)
 	popResult := gin.H{"ok": true}
-	if errR == nil {
-		popResult["status"] = gin.H{"files": collectFileStatus(repo)}
-	}
+	popResult["status"] = gin.H{"files": collectFileStatus(repoRoot)}
 	c.JSON(http.StatusOK, popResult)
 }
 
 // StashDrop godoc
-// @Summary Drop stash
-// @Description Remove a stash entry without applying (uses git CLI as go-git lacks native stash support)
+// @Summary Remove a stash entry without applying
 // @Tags Git
 // @Accept json
 // @Produce json
-// @Param request body GitStashIndexRequest true "Stash index request"
+// @Param request body GitStashIndexRequest true "Repository path and stash index"
 // @Success 200 {object} map[string]bool
 // @Failure 400 {object} map[string]string
 // @Failure 500 {object} map[string]string
@@ -1757,15 +1598,13 @@ func (h *GitHandler) StashDrop(c *gin.Context) {
 }
 
 // Conflicts godoc
-// @Summary List conflict files
-// @Description Get list of files with merge conflicts
+// @Summary List conflicted files
 // @Tags Git
 // @Accept json
 // @Produce json
-// @Param request body GitPathRequest true "Path request"
-// @Success 200 {object} map[string]interface{}
+// @Param request body GitPathRequest true "Repository path"
+// @Success 200 {object} map[string][]string
 // @Failure 400 {object} map[string]string
-// @Failure 500 {object} map[string]string
 // @Router /api/git/conflicts [post]
 func (h *GitHandler) Conflicts(c *gin.Context) {
 	var req GitPathRequest
@@ -1774,31 +1613,13 @@ func (h *GitHandler) Conflicts(c *gin.Context) {
 		return
 	}
 
-	repo, err := h.openRepo(req.Path)
+	repoRoot, err := h.getRepoRoot(req.Path)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	w, err := repo.Worktree()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-
-	status, err := w.Status()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-
-	var conflicts []string
-	for path, s := range status {
-		if s.Worktree == git.UpdatedButUnmerged || s.Staging == git.UpdatedButUnmerged {
-			conflicts = append(conflicts, path)
-		}
-	}
-
+	conflicts := collectConflictFiles(repoRoot)
 	sort.Strings(conflicts)
 	c.JSON(http.StatusOK, gin.H{"conflicts": conflicts})
 }
@@ -1810,12 +1631,11 @@ type GitResolveConflictRequest struct {
 }
 
 // ResolveConflict godoc
-// @Summary Resolve conflict
-// @Description Resolve a merge conflict by writing resolved content and staging the file
+// @Summary Resolve a merge conflict by writing content and staging
 // @Tags Git
 // @Accept json
 // @Produce json
-// @Param request body GitResolveConflictRequest true "Resolve conflict request"
+// @Param request body GitResolveConflictRequest true "Repository path, file path, and resolved content"
 // @Success 200 {object} map[string]bool
 // @Failure 400 {object} map[string]string
 // @Failure 500 {object} map[string]string
@@ -1827,26 +1647,23 @@ func (h *GitHandler) ResolveConflict(c *gin.Context) {
 		return
 	}
 
-	repo, err := h.openRepo(req.Path)
+	repoRoot, err := h.getRepoRoot(req.Path)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	w, err := repo.Worktree()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-
-	absPath := filepath.Join(w.Filesystem.Root(), req.FilePath)
+	absPath := filepath.Join(repoRoot, req.FilePath)
 	if err := os.WriteFile(absPath, []byte(req.Content), 0644); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	if _, err := w.Add(req.FilePath); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	addCmd := exec.Command("git", "add", "--", req.FilePath)
+	addCmd.Dir = repoRoot
+	output, err := addCmd.CombinedOutput()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": gitCommandError(err, output).Error()})
 		return
 	}
 
@@ -1893,12 +1710,11 @@ func applyPatchToIndex(repoRoot string, patch string) error {
 }
 
 // AddPatch godoc
-// @Summary Apply patch to staging
-// @Description Apply a unified diff patch to the staging area (uses git CLI for git apply --cached)
+// @Summary Apply a patch to the staging area
 // @Tags Git
 // @Accept json
 // @Produce json
-// @Param request body GitAddPatchRequest true "Add patch request"
+// @Param request body GitAddPatchRequest true "Repository path, file path, and patch content"
 // @Success 200 {object} map[string]bool
 // @Failure 400 {object} map[string]string
 // @Failure 500 {object} map[string]string

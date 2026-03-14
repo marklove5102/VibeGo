@@ -124,17 +124,11 @@ func (h *GitWSHandler) pollLoop(client *gitWSClient) {
 				return
 			}
 		case <-ticker.C:
-			repo, err := h.gitHandler.openRepo(client.path)
+			repoRoot, err := h.gitHandler.getRepoRoot(client.path)
 			if err != nil {
 				continue
 			}
 
-			w, err := repo.Worktree()
-			if err != nil {
-				continue
-			}
-
-			repoRoot := w.Filesystem.Root()
 			scopeKey := buildGitScopeKey(client.workspaceSessionID, client.groupID, repoRoot)
 			files, summary := h.gitHandler.collectStructuredStatusWithScope(repoRoot, scopeKey)
 			payload := gin.H{"files": files, "summary": summary}
@@ -145,10 +139,6 @@ func (h *GitWSHandler) pollLoop(client *gitWSClient) {
 				h.sendEvent(client, GitWSEvent{Type: "file_changed", Data: payload})
 			}
 
-			repoRoot, err = h.gitHandler.getRepoRoot(client.path)
-			if err != nil {
-				continue
-			}
 			bs := collectBranchStatus(repoRoot)
 			bData, _ := json.Marshal(bs)
 			bStr := string(bData)
@@ -159,13 +149,13 @@ func (h *GitWSHandler) pollLoop(client *gitWSClient) {
 
 			syncData := gin.H{}
 
-			headHash := collectHeadHash(repo)
+			headHash := collectHeadHash(repoRoot)
 			if headHash != lastHeadHash {
 				lastHeadHash = headHash
 				syncData["history"] = true
 			}
 
-			branches := collectBranchesSnapshot(repo)
+			branches := collectBranchesSnapshot(repoRoot)
 			branchesData, _ := json.Marshal(branches)
 			branchesStr := string(branchesData)
 			if branchesStr != lastBranchesJSON {
@@ -173,7 +163,7 @@ func (h *GitWSHandler) pollLoop(client *gitWSClient) {
 				syncData["branches"] = true
 			}
 
-			remotes := collectRemoteInfos(repo)
+			remotes := collectRemoteInfos(repoRoot)
 			remotesData, _ := json.Marshal(remotes)
 			remotesStr := string(remotesData)
 			if remotesStr != lastRemotesJSON {
@@ -189,7 +179,7 @@ func (h *GitWSHandler) pollLoop(client *gitWSClient) {
 				syncData["stashes"] = true
 			}
 
-			conflicts := collectConflictFiles(repo)
+			conflicts := collectConflictFiles(repoRoot)
 			conflictsData, _ := json.Marshal(conflicts)
 			conflictsStr := string(conflictsData)
 			if conflictsStr != lastConflictsJSON {

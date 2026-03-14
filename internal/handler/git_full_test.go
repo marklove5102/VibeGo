@@ -2,7 +2,6 @@ package handler
 
 import (
 	"encoding/json"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -11,10 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
-	"github.com/go-git/go-git/v6"
-	"github.com/go-git/go-git/v6/plumbing/object"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -22,34 +18,31 @@ import (
 func setupFullRepo(t *testing.T) string {
 	dir, err := os.MkdirTemp("", "git-full-test")
 	require.NoError(t, err)
-	repo, err := git.PlainInit(dir, false)
-	require.NoError(t, err)
-	wt, err := repo.Worktree()
-	require.NoError(t, err)
+
+	runGit := func(args ...string) {
+		cmd := exec.Command("git", args...)
+		cmd.Dir = dir
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %s failed: %s\n%s", args[0], err, string(out))
+		}
+	}
+
+	runGit("init")
+	runGit("config", "user.name", "Test")
+	runGit("config", "user.email", "test@test.com")
 
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "README.md"), []byte("# Test\n"), 0644))
-	_, err = wt.Add("README.md")
-	require.NoError(t, err)
-	_, err = wt.Commit("initial commit", &git.CommitOptions{
-		Author: &object.Signature{Name: "Test", Email: "test@test.com", When: time.Now()},
-	})
-	require.NoError(t, err)
+	runGit("add", "README.md")
+	runGit("commit", "-m", "initial commit")
 
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "main.go"), []byte("package main\n\nfunc main() {}\n"), 0644))
-	_, err = wt.Add("main.go")
-	require.NoError(t, err)
-	_, err = wt.Commit("add main.go", &git.CommitOptions{
-		Author: &object.Signature{Name: "Test", Email: "test@test.com", When: time.Now()},
-	})
-	require.NoError(t, err)
+	runGit("add", "main.go")
+	runGit("commit", "-m", "add main.go")
 
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "hello.txt"), []byte("hello world\n"), 0644))
-	_, err = wt.Add("hello.txt")
-	require.NoError(t, err)
-	_, err = wt.Commit("add hello.txt", &git.CommitOptions{
-		Author: &object.Signature{Name: "Test", Email: "test@test.com", When: time.Now()},
-	})
-	require.NoError(t, err)
+	runGit("add", "hello.txt")
+	runGit("commit", "-m", "add hello.txt")
 
 	cmd := exec.Command("git", "checkout", "-b", "feature-a")
 	cmd.Dir = dir
@@ -482,24 +475,18 @@ func TestGitFullServerSidePartialSelectionCommit(t *testing.T) {
 	})
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 
-	repo, err := git.PlainOpen(dir)
+	logCmd := exec.Command("git", "log", "-1", "--format=%B")
+	logCmd.Dir = dir
+	logOut, err := logCmd.Output()
 	require.NoError(t, err)
-	head, err := repo.Head()
-	require.NoError(t, err)
-	commit, err := repo.CommitObject(head.Hash())
-	require.NoError(t, err)
-	assert.Contains(t, commit.Message, "feat: backend selection")
-	assert.Contains(t, commit.Message, "server side partial")
+	assert.Contains(t, string(logOut), "feat: backend selection")
+	assert.Contains(t, string(logOut), "server side partial")
 
-	file, err := commit.File("hello.txt")
+	showCmd := exec.Command("git", "show", "HEAD:hello.txt")
+	showCmd.Dir = dir
+	committedContent, err := showCmd.Output()
 	require.NoError(t, err)
-	reader, err := file.Reader()
-	require.NoError(t, err)
-	defer reader.Close()
-
-	content, err := io.ReadAll(reader)
-	require.NoError(t, err)
-	assert.Equal(t, "ONE\ntwo\nthree\n", string(content))
+	assert.Equal(t, "ONE\ntwo\nthree\n", string(committedContent))
 
 	workingTreeContent, err := os.ReadFile(filepath.Join(dir, "hello.txt"))
 	require.NoError(t, err)
@@ -884,17 +871,18 @@ func TestGitFullCommitSelectedWithDescription(t *testing.T) {
 	assert.True(t, resp.OK)
 	assert.NotEmpty(t, resp.Hash)
 
-	repo, _ := git.PlainOpen(dir)
-	head, _ := repo.Head()
-	commit, _ := repo.CommitObject(head.Hash())
-	assert.Contains(t, commit.Message, "feat: selected only")
-	assert.Contains(t, commit.Message, "detailed description")
+	cmd := exec.Command("git", "log", "-1", "--format=%B")
+	cmd.Dir = dir
+	logOut, _ := cmd.Output()
+	assert.Contains(t, string(logOut), "feat: selected only")
+	assert.Contains(t, string(logOut), "detailed description")
 
-	_, err := commit.File("selected.txt")
-	assert.NoError(t, err)
+	showCmd := exec.Command("git", "show", "HEAD:selected.txt")
+	showCmd.Dir = dir
+	assert.NoError(t, showCmd.Run())
 
-	_, err = os.Stat(filepath.Join(dir, "excluded.txt"))
-	assert.NoError(t, err)
+	_, statErr := os.Stat(filepath.Join(dir, "excluded.txt"))
+	assert.NoError(t, statErr)
 }
 
 func TestGitFullCommitSelectedWithPartialPatch(t *testing.T) {
@@ -933,22 +921,17 @@ func TestGitFullCommitSelectedWithPartialPatch(t *testing.T) {
 	})
 	assert.Equal(t, http.StatusOK, w.Code)
 
-	repo, err := git.PlainOpen(dir)
+	cmd = exec.Command("git", "log", "-1", "--format=%s")
+	cmd.Dir = dir
+	logOut, err := cmd.Output()
 	require.NoError(t, err)
-	head, err := repo.Head()
-	require.NoError(t, err)
-	commit, err := repo.CommitObject(head.Hash())
-	require.NoError(t, err)
+	assert.Equal(t, "feat: partial patch", strings.TrimSpace(string(logOut)))
 
-	file, err := commit.File("hello.txt")
+	showCmd := exec.Command("git", "show", "HEAD:hello.txt")
+	showCmd.Dir = dir
+	committedContent, err := showCmd.Output()
 	require.NoError(t, err)
-	reader, err := file.Reader()
-	require.NoError(t, err)
-	defer reader.Close()
-
-	content, err := io.ReadAll(reader)
-	require.NoError(t, err)
-	assert.Equal(t, "ONE\ntwo\nthree\n", string(content))
+	assert.Equal(t, "ONE\ntwo\nthree\n", string(committedContent))
 
 	workingTreeContent, err := os.ReadFile(filepath.Join(dir, "hello.txt"))
 	require.NoError(t, err)
@@ -978,10 +961,10 @@ func TestGitFullAmendChangesMessage(t *testing.T) {
 	})
 	assert.Equal(t, http.StatusOK, w.Code)
 
-	repo, _ := git.PlainOpen(dir)
-	head, _ := repo.Head()
-	commit, _ := repo.CommitObject(head.Hash())
-	assert.Equal(t, "amended: new message", strings.TrimSpace(commit.Message))
+	cmd := exec.Command("git", "log", "-1", "--format=%s")
+	cmd.Dir = dir
+	logOut, _ := cmd.Output()
+	assert.Equal(t, "amended: new message", strings.TrimSpace(string(logOut)))
 }
 
 func TestGitFullUndoAndRedo(t *testing.T) {
@@ -989,16 +972,18 @@ func TestGitFullUndoAndRedo(t *testing.T) {
 	defer os.RemoveAll(dir)
 	r, _ := setupRouter()
 
-	repo, _ := git.PlainOpen(dir)
-	head1, _ := repo.Head()
-	hash1 := head1.Hash().String()
+	hash1Cmd := exec.Command("git", "rev-parse", "HEAD")
+	hash1Cmd.Dir = dir
+	hash1Out, _ := hash1Cmd.Output()
+	hash1 := strings.TrimSpace(string(hash1Out))
 
 	w := postJSON(r, "/git/undo", map[string]string{"path": dir})
 	assert.Equal(t, http.StatusOK, w.Code)
 
-	repo, _ = git.PlainOpen(dir)
-	head2, _ := repo.Head()
-	assert.NotEqual(t, hash1, head2.Hash().String())
+	hash2Cmd := exec.Command("git", "rev-parse", "HEAD")
+	hash2Cmd.Dir = dir
+	hash2Out, _ := hash2Cmd.Output()
+	assert.NotEqual(t, hash1, strings.TrimSpace(string(hash2Out)))
 }
 
 func TestGitFullDeleteCurrentBranchFails(t *testing.T) {

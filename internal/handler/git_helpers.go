@@ -1,16 +1,11 @@
 package handler
 
 import (
-	"io"
+	"fmt"
 	"os/exec"
 	"sort"
 	"strconv"
 	"strings"
-	"time"
-
-	"github.com/go-git/go-git/v6"
-	"github.com/go-git/go-git/v6/plumbing"
-	"github.com/go-git/go-git/v6/plumbing/object"
 )
 
 type BranchStatusInfo struct {
@@ -26,12 +21,7 @@ type BranchesSnapshot struct {
 	CurrentBranch  string   `json:"currentBranch"`
 }
 
-func collectFileStatus(repo *git.Repository) []FileStatus {
-	w, err := repo.Worktree()
-	if err != nil {
-		return []FileStatus{}
-	}
-	repoRoot := w.Filesystem.Root()
+func collectFileStatus(repoRoot string) []FileStatus {
 	cmd := exec.Command("git", "status", "--porcelain=v1", "-z")
 	cmd.Dir = repoRoot
 	output, err := cmd.Output()
@@ -73,44 +63,52 @@ func collectFileStatus(repo *git.Repository) []FileStatus {
 	return files
 }
 
-func collectCommitLog(repo *git.Repository, limit int) []CommitInfo {
+func collectCommitLog(repoRoot string, limit int) []CommitInfo {
 	if limit <= 0 {
 		limit = 20
 	}
-	ref, err := repo.Head()
-	if err != nil {
-		return []CommitInfo{}
-	}
-	iter, err := repo.Log(&git.LogOptions{From: ref.Hash()})
+	format := strings.Join([]string{"%H", "%s", "%an", "%ae", "%aI", "%P"}, "%x00")
+	cmd := exec.Command("git", "log", "-n", strconv.Itoa(limit),
+		fmt.Sprintf("--format=%s", format), "--no-decorate")
+	cmd.Dir = repoRoot
+	output, err := cmd.Output()
 	if err != nil {
 		return []CommitInfo{}
 	}
 	var commits []CommitInfo
-	count := 0
-	_ = iter.ForEach(func(c *object.Commit) error {
-		if count >= limit {
-			return io.EOF
+	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
+	for _, line := range lines {
+		if line == "" {
+			continue
+		}
+		parts := strings.SplitN(line, "\x00", 6)
+		if len(parts) < 6 {
+			continue
+		}
+		parentCount := 0
+		if strings.TrimSpace(parts[5]) != "" {
+			parentCount = len(strings.Fields(parts[5]))
 		}
 		commits = append(commits, CommitInfo{
-			Hash:        c.Hash.String(),
-			Message:     c.Message,
-			Author:      c.Author.Name,
-			AuthorEmail: c.Author.Email,
-			Date:        c.Author.When.Format(time.RFC3339),
-			ParentCount: c.NumParents(),
+			Hash:        parts[0],
+			Message:     parts[1],
+			Author:      parts[2],
+			AuthorEmail: parts[3],
+			Date:        parts[4],
+			ParentCount: parentCount,
 		})
-		count++
-		return nil
-	})
+	}
 	return commits
 }
 
-func collectHeadHash(repo *git.Repository) string {
-	ref, err := repo.Head()
+func collectHeadHash(repoRoot string) string {
+	cmd := exec.Command("git", "rev-parse", "HEAD")
+	cmd.Dir = repoRoot
+	output, err := cmd.Output()
 	if err != nil {
 		return ""
 	}
-	return ref.Hash().String()
+	return strings.TrimSpace(string(output))
 }
 
 func collectBranchStatus(repoRoot string) *BranchStatusInfo {
@@ -149,88 +147,101 @@ func collectBranchStatus(repoRoot string) *BranchStatusInfo {
 	return info
 }
 
-func collectBranchesSnapshot(repo *git.Repository) BranchesSnapshot {
-	head, err := repo.Head()
-	if err != nil {
-		return BranchesSnapshot{}
-	}
-
+func collectBranchesSnapshot(repoRoot string) BranchesSnapshot {
 	currentBranch := ""
-	if head.Name().IsBranch() {
-		currentBranch = head.Name().Short()
+	cmd := exec.Command("git", "branch", "--show-current")
+	cmd.Dir = repoRoot
+	out, err := cmd.Output()
+	if err == nil {
+		currentBranch = strings.TrimSpace(string(out))
 	}
 
-	branches, err := repo.Branches()
+	cmd = exec.Command("git", "branch", "--format=%(refname:short)")
+	cmd.Dir = repoRoot
+	out, err = cmd.Output()
 	if err != nil {
 		return BranchesSnapshot{CurrentBranch: currentBranch}
 	}
 
 	var branchList []string
-	_ = branches.ForEach(func(ref *plumbing.Reference) error {
-		branchList = append(branchList, ref.Name().Short())
-		return nil
-	})
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		if line != "" {
+			branchList = append(branchList, line)
+		}
+	}
 	sort.Strings(branchList)
 
 	return BranchesSnapshot{
 		Branches:       branchList,
-		RemoteBranches: collectRemoteBranches(repo),
+		RemoteBranches: collectRemoteBranches(repoRoot),
 		CurrentBranch:  currentBranch,
 	}
 }
 
-func collectConflictFiles(repo *git.Repository) []string {
-	w, err := repo.Worktree()
-	if err != nil {
-		return nil
-	}
-	status, err := w.Status()
+func collectConflictFiles(repoRoot string) []string {
+	cmd := exec.Command("git", "diff", "--name-only", "--diff-filter=U")
+	cmd.Dir = repoRoot
+	output, err := cmd.Output()
 	if err != nil {
 		return nil
 	}
 	var conflicts []string
-	for p, s := range status {
-		if s.Worktree == git.UpdatedButUnmerged || s.Staging == git.UpdatedButUnmerged {
-			conflicts = append(conflicts, p)
+	for _, line := range strings.Split(strings.TrimSpace(string(output)), "\n") {
+		if line != "" {
+			conflicts = append(conflicts, line)
 		}
 	}
 	sort.Strings(conflicts)
 	return conflicts
 }
 
-func collectRemoteBranches(repo *git.Repository) []string {
-	refs, err := repo.References()
+func collectRemoteBranches(repoRoot string) []string {
+	cmd := exec.Command("git", "branch", "-r", "--format=%(refname:short)")
+	cmd.Dir = repoRoot
+	out, err := cmd.Output()
 	if err != nil {
 		return nil
 	}
 	var remote []string
-	_ = refs.ForEach(func(ref *plumbing.Reference) error {
-		name := ref.Name().String()
-		if strings.HasPrefix(name, "refs/remotes/") {
-			short := strings.TrimPrefix(name, "refs/remotes/")
-			if !strings.HasSuffix(short, "/HEAD") {
-				remote = append(remote, short)
-			}
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		if line != "" && !strings.HasSuffix(line, "/HEAD") {
+			remote = append(remote, line)
 		}
-		return nil
-	})
+	}
 	sort.Strings(remote)
 	return remote
 }
 
-func collectRemoteInfos(repo *git.Repository) []RemoteInfo {
-	remotes, err := repo.Remotes()
+func collectRemoteInfos(repoRoot string) []RemoteInfo {
+	cmd := exec.Command("git", "remote")
+	cmd.Dir = repoRoot
+	output, err := cmd.Output()
 	if err != nil {
 		return nil
 	}
 
-	result := make([]RemoteInfo, 0, len(remotes))
-	for _, remote := range remotes {
-		cfg := remote.Config()
-		urls := append([]string(nil), cfg.URLs...)
+	names := strings.Split(strings.TrimSpace(string(output)), "\n")
+	result := make([]RemoteInfo, 0, len(names))
+	for _, name := range names {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			continue
+		}
+		urlCmd := exec.Command("git", "remote", "get-url", "--all", name)
+		urlCmd.Dir = repoRoot
+		urlOut, err := urlCmd.Output()
+		if err != nil {
+			continue
+		}
+		var urls []string
+		for _, u := range strings.Split(strings.TrimSpace(string(urlOut)), "\n") {
+			if u != "" {
+				urls = append(urls, u)
+			}
+		}
 		sort.Strings(urls)
 		result = append(result, RemoteInfo{
-			Name: cfg.Name,
+			Name: name,
 			URLs: urls,
 		})
 	}

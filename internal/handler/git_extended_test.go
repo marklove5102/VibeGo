@@ -14,8 +14,6 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/go-git/go-git/v6"
-	"github.com/go-git/go-git/v6/plumbing/object"
 	"github.com/gorilla/websocket"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -52,34 +50,31 @@ func setupRouterWithGitWS() (*gin.Engine, *GitHandler) {
 func setupGitRepoWithMultipleCommits(t *testing.T) string {
 	dir, err := os.MkdirTemp("", "git-ext-test")
 	require.NoError(t, err)
-	repo, err := git.PlainInit(dir, false)
-	require.NoError(t, err)
-	wt, err := repo.Worktree()
-	require.NoError(t, err)
+
+	runGit := func(args ...string) {
+		cmd := exec.Command("git", args...)
+		cmd.Dir = dir
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %s failed: %s\n%s", args[0], err, string(out))
+		}
+	}
+
+	runGit("init")
+	runGit("config", "user.name", "Test")
+	runGit("config", "user.email", "test@test.com")
 
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "file1.txt"), []byte("one"), 0644))
-	_, err = wt.Add("file1.txt")
-	require.NoError(t, err)
-	_, err = wt.Commit("commit 1", &git.CommitOptions{
-		Author: &object.Signature{Name: "Test", Email: "test@test.com", When: time.Now()},
-	})
-	require.NoError(t, err)
+	runGit("add", "file1.txt")
+	runGit("commit", "-m", "commit 1")
 
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "file2.txt"), []byte("two"), 0644))
-	_, err = wt.Add("file2.txt")
-	require.NoError(t, err)
-	_, err = wt.Commit("commit 2", &git.CommitOptions{
-		Author: &object.Signature{Name: "Test", Email: "test@test.com", When: time.Now()},
-	})
-	require.NoError(t, err)
+	runGit("add", "file2.txt")
+	runGit("commit", "-m", "commit 2")
 
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "file3.txt"), []byte("three"), 0644))
-	_, err = wt.Add("file3.txt")
-	require.NoError(t, err)
-	_, err = wt.Commit("commit 3", &git.CommitOptions{
-		Author: &object.Signature{Name: "Test", Email: "test@test.com", When: time.Now()},
-	})
-	require.NoError(t, err)
+	runGit("add", "file3.txt")
+	runGit("commit", "-m", "commit 3")
 
 	return dir
 }
@@ -381,10 +376,10 @@ func TestGitAmend(t *testing.T) {
 	})
 	assert.Equal(t, http.StatusOK, w.Code)
 
-	repo, _ := git.PlainOpen(dir)
-	head, _ := repo.Head()
-	commit, _ := repo.CommitObject(head.Hash())
-	assert.Equal(t, "amended commit", strings.TrimSpace(commit.Message))
+	cmd := exec.Command("git", "log", "-1", "--format=%s")
+	cmd.Dir = dir
+	out, _ := cmd.Output()
+	assert.Equal(t, "amended commit", strings.TrimSpace(string(out)))
 }
 
 func TestGitLogWithSkip(t *testing.T) {
@@ -474,7 +469,8 @@ func TestGitSmartSwitchBranch(t *testing.T) {
 func TestGitStatusEmptyRepo(t *testing.T) {
 	dir, _ := os.MkdirTemp("", "git-empty-test")
 	defer os.RemoveAll(dir)
-	git.PlainInit(dir, false)
+	cmd := exec.Command("git", "init", dir)
+	cmd.Run()
 
 	r, _ := setupRouter()
 	w := postJSON(r, "/git/status", map[string]string{"path": dir})
@@ -484,7 +480,8 @@ func TestGitStatusEmptyRepo(t *testing.T) {
 func TestGitLogEmptyRepo(t *testing.T) {
 	dir, _ := os.MkdirTemp("", "git-empty-log-test")
 	defer os.RemoveAll(dir)
-	git.PlainInit(dir, false)
+	cmd := exec.Command("git", "init", dir)
+	cmd.Run()
 
 	r, _ := setupRouter()
 	w := postJSON(r, "/git/log", map[string]string{"path": dir})

@@ -7,17 +7,11 @@ func (h *GitHandler) broadcastStatus(path string) {
 		return
 	}
 
-	repo, err := h.openRepo(path)
+	repoRoot, err := h.getRepoRoot(path)
 	if err != nil {
 		return
 	}
 
-	w, err := repo.Worktree()
-	if err != nil {
-		return
-	}
-
-	repoRoot := w.Filesystem.Root()
 	h.wsHandler.BroadcastStatusByPath(path, func(workspaceSessionID string, groupID string) GitWSEvent {
 		scopeKey := buildGitScopeKey(workspaceSessionID, groupID, repoRoot)
 		files, summary := h.collectStructuredStatusWithScope(repoRoot, scopeKey)
@@ -36,17 +30,11 @@ func (h *GitHandler) broadcastStatusScoped(path string, workspaceSessionID strin
 		return
 	}
 
-	repo, err := h.openRepo(path)
+	repoRoot, err := h.getRepoRoot(path)
 	if err != nil {
 		return
 	}
 
-	w, err := repo.Worktree()
-	if err != nil {
-		return
-	}
-
-	repoRoot := w.Filesystem.Root()
 	scopeKey := buildGitScopeKey(workspaceSessionID, groupID, repoRoot)
 	files, summary := h.collectStructuredStatusWithScope(repoRoot, scopeKey)
 	h.wsHandler.BroadcastScoped(path, workspaceSessionID, groupID, GitWSEvent{
