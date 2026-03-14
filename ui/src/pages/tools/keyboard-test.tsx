@@ -26,11 +26,12 @@ function formatEvent(e: KeyEvent): string {
 }
 
 const KeyboardTestView: React.FC<PageViewProps> = () => {
-  const [lines, setLines] = useState<string[]>(["$ "]);
+  const [text, setText] = useState<string>("");
   const [eventLog, setEventLog] = useState<EventLogEntry[]>([]);
   const nextId = useRef(0);
-  const termRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const logRef = useRef<HTMLDivElement>(null);
+  const historyRef = useRef<string[]>([]);
 
   const scrollBottom = useCallback((ref: React.RefObject<HTMLDivElement | null>) => {
     requestAnimationFrame(() => {
@@ -50,57 +51,187 @@ const KeyboardTestView: React.FC<PageViewProps> = () => {
       setEventLog((prev) => [...prev.slice(-199), entry]);
       scrollBottom(logRef);
 
-      setLines((prev) => {
-        const copy = [...prev];
-        const lastIdx = copy.length - 1;
+      const textarea = textareaRef.current;
+      if (!textarea) return;
 
-        if (e.value === "Enter") {
-          return [...copy, "$ "];
-        }
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+      const currentText = textarea.value;
 
-        if (e.value === "Backspace") {
-          if (copy[lastIdx].length > 2) {
-            copy[lastIdx] = copy[lastIdx].slice(0, -1);
+      let nextText = currentText;
+      let finalCursor = start;
+      let handled = false;
+
+      const handleArrow = (deltaFn: (pos: number) => number, isHorizontalLeft = false, isHorizontalRight = false) => {
+        if (e.select || e.shift) {
+          const dir = textarea.selectionDirection || "none";
+          const activeCursor = (dir === "backward" || start === end) ? start : end;
+          const newCursor = deltaFn(activeCursor);
+          const fixedCursor = (dir === "backward" || start === end) ? end : start;
+          const isNowBackward = newCursor < fixedCursor || (newCursor === fixedCursor && dir === "backward");
+          const newStart = Math.min(newCursor, fixedCursor);
+          const newEnd = Math.max(newCursor, fixedCursor);
+          textarea.setSelectionRange(newStart, newEnd, isNowBackward ? "backward" : "forward");
+        } else {
+          if (start !== end && (isHorizontalLeft || isHorizontalRight)) {
+            const collapseCursor = isHorizontalLeft ? start : end;
+            textarea.setSelectionRange(collapseCursor, collapseCursor);
+          } else {
+            const dir = textarea.selectionDirection || "none";
+            const activeCursor = (dir === "backward") ? start : end;
+            const newCursor = deltaFn(start !== end ? (dir === "backward" ? start : end) : start);
+            textarea.setSelectionRange(newCursor, newCursor);
           }
-          return copy;
         }
+        textarea.focus();
+      };
 
-        if (e.value === "Delete") {
-          return copy;
+      if (e.value === "SelectAll" || ((e.ctrl || e.meta) && e.value.toLowerCase() === "a")) {
+        textarea.setSelectionRange(0, currentText.length);
+        textarea.focus();
+        return;
+      }
+
+      if (e.value === "Copy" || ((e.ctrl || e.meta) && e.value.toLowerCase() === "c")) {
+        if (start !== end) navigator.clipboard.writeText(currentText.slice(start, end));
+        textarea.focus();
+        return;
+      }
+
+      if (e.value === "Cut" || ((e.ctrl || e.meta) && e.value.toLowerCase() === "x")) {
+        if (start !== end) {
+          navigator.clipboard.writeText(currentText.slice(start, end)).then(() => {
+            historyRef.current.push(currentText);
+            if (historyRef.current.length > 100) historyRef.current.shift();
+            const next = currentText.slice(0, start) + currentText.slice(end);
+            setText(next);
+            setTimeout(() => {
+              if (textareaRef.current) {
+                textareaRef.current.setSelectionRange(start, start);
+                textareaRef.current.focus();
+              }
+            }, 0);
+          });
+        } else {
+          textarea.focus();
         }
+        return;
+      }
 
-        if (e.value === "Tab") {
-          copy[lastIdx] += "    ";
-          return copy;
+      if (e.value === "Paste" || ((e.ctrl || e.meta) && e.value.toLowerCase() === "v")) {
+        navigator.clipboard.readText().then((clip) => {
+          historyRef.current.push(currentText);
+          if (historyRef.current.length > 100) historyRef.current.shift();
+          const next = currentText.slice(0, start) + clip + currentText.slice(end);
+          setText(next);
+          const cursor = start + clip.length;
+          setTimeout(() => {
+            if (textareaRef.current) {
+              textareaRef.current.setSelectionRange(cursor, cursor);
+              textareaRef.current.focus();
+            }
+          }, 0);
+        }).catch(() => { textarea.focus(); });
+        return;
+      }
+
+      if (e.value === "Undo" || ((e.ctrl || e.meta) && e.value.toLowerCase() === "z")) {
+        if (historyRef.current.length > 0) {
+          const previous = historyRef.current.pop()!;
+          setText(previous);
+          setTimeout(() => {
+            if (textareaRef.current) {
+              textareaRef.current.focus();
+            }
+          }, 0);
+        } else {
+          textarea.focus();
         }
+        return;
+      }
 
-        if (e.value === "Escape") {
-          copy[lastIdx] += "^[";
-          return copy;
+      if (e.value === "Backspace") {
+        if (start !== end) {
+          nextText = currentText.slice(0, start) + currentText.slice(end);
+          finalCursor = start;
+        } else if (start > 0) {
+          nextText = currentText.slice(0, start - 1) + currentText.slice(end);
+          finalCursor = start - 1;
         }
-
-        if (e.type === "char") {
-          copy[lastIdx] += e.value;
-          return copy;
+        handled = true;
+      } else if (e.value === "Delete") {
+        if (start !== end) {
+          nextText = currentText.slice(0, start) + currentText.slice(end);
+          finalCursor = start;
+        } else if (start < currentText.length) {
+          nextText = currentText.slice(0, start) + currentText.slice(start + 1);
+          finalCursor = start;
         }
+        handled = true;
+      } else if (e.value === "ArrowLeft") {
+        handleArrow((pos) => Math.max(0, pos - 1), true, false);
+        return;
+      } else if (e.value === "ArrowRight") {
+        handleArrow((pos) => Math.min(currentText.length, pos + 1), false, true);
+        return;
+      } else if (e.value === "ArrowUp") {
+        handleArrow((pos) => {
+          const textBeforeBox = currentText.slice(0, pos);
+          const lastNewLine = textBeforeBox.lastIndexOf('\n');
+          if (lastNewLine === -1) return 0;
+          const currentColumn = pos - lastNewLine - 1;
+          const prevLineStart = currentText.lastIndexOf('\n', lastNewLine - 1);
+          const prevLineLength = lastNewLine - (prevLineStart + 1);
+          return (prevLineStart + 1) + Math.min(currentColumn, Math.max(0, prevLineLength));
+        });
+        return;
+      } else if (e.value === "ArrowDown") {
+        handleArrow((pos) => {
+          const textBeforeBox = currentText.slice(0, pos);
+          const lastNewLine = textBeforeBox.lastIndexOf('\n');
+          const currentColumn = pos - lastNewLine - 1;
+          const nextNewLine = currentText.indexOf('\n', pos);
+          if (nextNewLine === -1) return currentText.length;
+          const nextNextNewLine = currentText.indexOf('\n', nextNewLine + 1);
+          const nextLineEnd = nextNextNewLine === -1 ? currentText.length : nextNextNewLine;
+          const nextLineLength = nextLineEnd - (nextNewLine + 1);
+          return (nextNewLine + 1) + Math.min(currentColumn, Math.max(0, nextLineLength));
+        });
+        return;
+      } else if (!(e.ctrl || e.meta || e.alt)) {
+        let insertText = "";
+        if (e.value === "Enter") insertText = "\n";
+        else if (e.value === "Tab") insertText = "    ";
+        else if (e.value === "Space") insertText = " ";
+        else if (e.type === "char") insertText = e.value;
 
-        if (e.value.startsWith("Arrow") || e.value.startsWith("F") ||
-            e.value === "Home" || e.value === "End" ||
-            e.value === "PageUp" || e.value === "PageDown" ||
-            e.value === "Insert") {
-          copy[lastIdx] += `[${formatEvent(e)}]`;
-          return copy;
+        if (insertText) {
+          nextText = currentText.slice(0, start) + insertText + currentText.slice(end);
+          finalCursor = start + insertText.length;
+          handled = true;
         }
+      }
 
-        return copy;
-      });
-      scrollBottom(termRef);
+      if (handled) {
+        historyRef.current.push(currentText);
+        if (historyRef.current.length > 100) historyRef.current.shift();
+        setText(nextText);
+        setTimeout(() => {
+          if (textareaRef.current) {
+            textareaRef.current.selectionStart = finalCursor;
+            textareaRef.current.selectionEnd = finalCursor;
+            textareaRef.current.focus();
+          }
+        }, 0);
+      } else {
+        textarea.focus();
+      }
     },
-    [scrollBottom],
+    [scrollBottom]
   );
 
   const handleClear = useCallback(() => {
-    setLines(["$ "]);
+    setText("");
     setEventLog([]);
   }, []);
 
@@ -112,6 +243,7 @@ const KeyboardTestView: React.FC<PageViewProps> = () => {
         flexDirection: "column",
         background: "var(--ide-bg)",
         overflow: "hidden",
+        position: "relative",
       }}
     >
       <div
@@ -153,99 +285,112 @@ const KeyboardTestView: React.FC<PageViewProps> = () => {
         </button>
       </div>
 
-      <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
-        <div style={{ flex: 1, display: "flex", gap: "1px", overflow: "hidden", minHeight: 0 }}>
-          <div
-            ref={termRef}
-            style={{
-              flex: 1,
-              overflowY: "auto",
-              padding: "10px 12px",
-              fontFamily: "'SF Mono', 'Menlo', 'Consolas', monospace",
-              fontSize: "13px",
-              lineHeight: 1.6,
-              color: "var(--ide-text)",
-              background: "var(--ide-panel)",
-            }}
-          >
-            {lines.map((line, i) => (
-              <div key={i} style={{ whiteSpace: "pre-wrap", wordBreak: "break-all", minHeight: "1.6em" }}>
-                {line}
-                {i === lines.length - 1 && (
-                  <span
-                    style={{
-                      animation: "tktest-blink 1s step-end infinite",
-                      opacity: 0.7,
-                    }}
-                  >
-                    |
-                  </span>
-                )}
-              </div>
-            ))}
-          </div>
+      <div
+        style={{
+          flex: 1,
+          display: "flex",
+          flexDirection: "row",
+          overflow: "hidden",
+          position: "relative",
+        }}
+      >
+        <textarea
+          ref={textareaRef}
+          value={text}
+          onChange={(e) => {
+            historyRef.current.push(text);
+            if (historyRef.current.length > 100) historyRef.current.shift();
+            setText(e.target.value);
+          }}
+          placeholder="Click keyboard to type here..."
+          style={{
+            flex: 1,
+            padding: "16px",
+            paddingBottom: "260px", // space for floating keyboard
+            fontFamily: "'SF Mono', 'Menlo', 'Consolas', monospace",
+            fontSize: "14px",
+            lineHeight: 1.6,
+            color: "var(--ide-text)",
+            background: "var(--ide-panel)",
+            border: "none",
+            resize: "none",
+            outline: "none",
+            boxShadow: "inset 0 0 10px rgba(0,0,0,0.05)",
+          }}
+        />
 
+        <div
+          ref={logRef}
+          style={{
+            width: "130px", // a bit more room for text
+            flexShrink: 0,
+            overflowY: "auto",
+            padding: "12px 8px 260px", // bottom padding so list can scroll past keyboard
+            fontSize: "12px",
+            fontFamily: "'SF Mono', 'Menlo', 'Consolas', monospace",
+            color: "var(--ide-mute)",
+            background: "var(--ide-bg)",
+            borderLeft: "1px solid var(--ide-border)",
+            display: "flex",
+            flexDirection: "column",
+          }}
+        >
           <div
-            ref={logRef}
             style={{
-              width: "280px",
-              overflowY: "auto",
-              padding: "8px",
               fontSize: "11px",
-              fontFamily: "'SF Mono', 'Menlo', 'Consolas', monospace",
-              color: "var(--ide-mute)",
-              background: "var(--ide-bg)",
-              borderLeft: "1px solid var(--ide-border)",
+              fontWeight: 600,
+              textTransform: "uppercase",
+              letterSpacing: "0.5px",
+              marginBottom: "8px",
+              color: "var(--ide-text)",
+              opacity: 0.6,
             }}
           >
+            Event Log
+          </div>
+          {eventLog.map((entry) => (
             <div
+              key={entry.id}
               style={{
-                fontSize: "10px",
-                fontWeight: 600,
-                textTransform: "uppercase",
-                letterSpacing: "0.5px",
-                marginBottom: "6px",
-                color: "var(--ide-text)",
-                opacity: 0.5,
+                padding: "4px 6px",
+                borderRadius: "4px",
+                marginBottom: "4px",
+                display: "flex",
+                justifyContent: "space-between",
+                gap: "8px",
+                background: "var(--ide-panel)",
               }}
             >
-              Event Log
-            </div>
-            {eventLog.map((entry) => (
-              <div
-                key={entry.id}
+              <span
                 style={{
-                  padding: "2px 4px",
-                  borderRadius: "3px",
-                  marginBottom: "1px",
-                  display: "flex",
-                  justifyContent: "space-between",
-                  gap: "8px",
+                  color: "var(--ide-text)",
+                  fontWeight: entry.event.type === "char" ? 400 : 600,
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                  textAlign: "center",
+                  width: "100%",
                 }}
               >
-                <span
-                  style={{
-                    color: entry.event.type === "char" ? "#34c759" : "#007aff",
-                  }}
-                >
-                  {entry.event.type}
-                </span>
-                <span style={{ color: "var(--ide-text)" }}>{entry.formatted}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div style={{ flexShrink: 0 }}>
-          <Keyboard onKeyEvent={handleKeyEvent} />
+                {entry.formatted}
+              </span>
+            </div>
+          ))}
         </div>
       </div>
 
-      <style>{`
-        @keyframes tktest-blink {
-          50% { opacity: 0; }
-        }
-      `}</style>
+      <div
+        style={{
+          position: "absolute",
+          bottom: 0,
+          left: 0,
+          right: 0,
+          zIndex: 50,
+          boxShadow: "0 -4px 12px rgba(0,0,0,0.08)",
+        }}
+      >
+        <Keyboard onKeyEvent={handleKeyEvent} />
+      </div>
     </div>
   );
 };

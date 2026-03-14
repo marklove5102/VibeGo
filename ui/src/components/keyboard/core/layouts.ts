@@ -14,12 +14,12 @@ export const KEYBOARD_QWERTY: LayoutDef = {
         { id: 'u', label: 'u', value: 'u', type: 'char', sub: { nw: 'F7', ne: '<', sw: '>', se: '7' } },
         { id: 'i', label: 'i', value: 'i', type: 'char', sub: { nw: 'F8', ne: '{', sw: '}', se: '8' } },
         { id: 'o', label: 'o', value: 'o', type: 'char', sub: { nw: 'F9', ne: '[', sw: ']', se: '9' } },
-        { id: 'p', label: 'p', value: 'p', type: 'char', sub: { nw: 'F10', ne: '\\\\', sw: '|', se: '0' } },
+        { id: 'p', label: 'p', value: 'p', type: 'char', sub: { nw: 'F10', ne: '\\', sw: '|', se: '0' } },
       ],
     },
     {
       keys: [
-        { id: 'a', label: 'a', value: 'a', type: 'char', sub: { nw: 'Tab', se: 'Select' } },
+        { id: 'a', label: 'a', value: 'a', type: 'char', sub: { nw: 'Tab', se: 'Caps' } },
         { id: 's', label: 's', value: 's', type: 'char', sub: { ne: '*' } },
         { id: 'd', label: 'd', value: 'd', type: 'char', sub: { ne: '/' } },
         { id: 'f', label: 'f', value: 'f', type: 'char', sub: { ne: '?' } },
@@ -27,12 +27,12 @@ export const KEYBOARD_QWERTY: LayoutDef = {
         { id: 'h', label: 'h', value: 'h', type: 'char', sub: { ne: '=', sw: '+' } },
         { id: 'j', label: 'j', value: 'j', type: 'char', sub: { ne: ':', sw: ';' } },
         { id: 'k', label: 'k', value: 'k', type: 'char', sub: { nw: 'F11', ne: '"', sw: '\'' } },
-        { id: 'l', label: 'l', value: 'l', type: 'char', sub: { nw: 'F12', ne: 'Enter' } },
+        { id: 'l', label: 'l', value: 'l', type: 'char', sub: { nw: 'F12' } },
       ],
     },
     {
       keys: [
-        { id: 'shift', label: '⇧', value: 'Shift', type: 'modifier', width: 1.5, sub: { ne: 'Caps' } },
+        { id: 'shift', label: '⇧', value: 'Shift', type: 'modifier', width: 1.5, sub: { ne: 'SelectAll', se: 'Select' } },
         { id: 'z', label: 'z', value: 'z', type: 'char', sub: { se: 'Undo' } },
         { id: 'x', label: 'x', value: 'x', type: 'char', sub: { se: 'Cut' } },
         { id: 'c', label: 'c', value: 'c', type: 'char', sub: { sw: ',', se: 'Copy' } },

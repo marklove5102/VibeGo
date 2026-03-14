@@ -21,7 +21,8 @@ import {
   Keyboard,
   Smile,
   Mic,
-  BoxSelect
+  BoxSelect,
+  CheckSquare
 } from 'lucide-react'
 import type { KeyDef, SwipeDir } from '@/components/keyboard/core/types'
 import { getSwipeDirection, isSpecialKey, MODIFIER_KEYS, SWIPE_DIRS } from '@/components/keyboard/core/types'
@@ -47,6 +48,7 @@ const DISPLAY_LABELS: Record<string, React.ReactNode> = {
   Delete: 'Del',
   Tab: <ArrowRightToLine size={12} strokeWidth={2.5} />,
   Select: <BoxSelect size={12} strokeWidth={2.5} />,
+  SelectAll: <CheckSquare size={12} strokeWidth={2.5} />,
   Undo: <Undo2 size={12} strokeWidth={2.5} />,
   Cut: <Scissors size={12} strokeWidth={2.5} />,
   Copy: <Copy size={12} strokeWidth={2.5} />,

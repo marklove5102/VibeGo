@@ -38,6 +38,7 @@ export interface KeyEvent {
   alt: boolean
   shift: boolean
   meta: boolean
+  select: boolean
 }
 
 export interface ModifierState {
@@ -50,6 +51,7 @@ export interface ModifiersState {
   alt: ModifierState
   shift: ModifierState
   meta: ModifierState
+  select: ModifierState
 }
 
 export const SPECIAL_KEYS = new Set([
@@ -58,10 +60,10 @@ export const SPECIAL_KEYS = new Set([
   'Home', 'End', 'PageUp', 'PageDown',
   'F1', 'F2', 'F3', 'F4', 'F5', 'F6', 'F7', 'F8', 'F9', 'F10', 'F11', 'F12',
   'Ctrl', 'Alt', 'Shift', 'Meta',
-  'Mic', 'Keyboard', 'Emoji', 'Clipboard', 'Select', 'Undo', 'Cut', 'Copy', 'Paste', 'Fn', 'Caps',
+  'Mic', 'Keyboard', 'Emoji', 'Clipboard', 'Select', 'SelectAll', 'Undo', 'Cut', 'Copy', 'Paste', 'Fn', 'Caps',
 ])
 
-export const MODIFIER_KEYS = new Set(['Ctrl', 'Alt', 'Shift', 'Meta'])
+export const MODIFIER_KEYS = new Set(['Ctrl', 'Alt', 'Shift', 'Meta', 'Select'])
 
 export const SWIPE_DIRS = ['nw', 'n', 'ne', 'w', 'e', 'sw', 's', 'se'] as const
 export type SwipeDir = typeof SWIPE_DIRS[number]
