@@ -422,49 +422,52 @@ const TerminalPage: React.FC<TerminalPageProps> = ({ groupId, cwd }) => {
     return terminalRefsMap.current.get(targetId) ?? null;
   }, [focusedId, activeTerminalId]);
 
-  const handleVirtualKeyEvent = useCallback((event: KeyEvent) => {
-    const action = translateKeyEvent(event);
-    const handle = getFocusedTerminalRef();
-    if (!handle) return false;
-    
-    switch (action.type) {
-      case 'input':
-        handle.sendInput(action.data);
-        return true;
-      case 'copy': {
-        const text = handle.getSelection();
-        if (text) void navigator.clipboard.writeText(text);
-        return true;
-      }
-      case 'paste':
-        void navigator.clipboard.readText().then((text) => {
-          if (text) handle.paste(text);
-        });
-        return true;
-      case 'cut': {
-        const sel = handle.getSelection();
-        if (sel) {
-          void navigator.clipboard.writeText(sel);
-          handle.sendInput('\x18');
+  const handleVirtualKeyEvent = useCallback(
+    (event: KeyEvent) => {
+      const action = translateKeyEvent(event);
+      const handle = getFocusedTerminalRef();
+      if (!handle) return false;
+
+      switch (action.type) {
+        case "input":
+          handle.sendInput(action.data);
+          return true;
+        case "copy": {
+          const text = handle.getSelection();
+          if (text) void navigator.clipboard.writeText(text);
+          return true;
         }
-        return true;
+        case "paste":
+          void navigator.clipboard.readText().then((text) => {
+            if (text) handle.paste(text);
+          });
+          return true;
+        case "cut": {
+          const sel = handle.getSelection();
+          if (sel) {
+            void navigator.clipboard.writeText(sel);
+            handle.sendInput("\x18");
+          }
+          return true;
+        }
+        case "undo":
+          handle.sendInput("\x1a");
+          return true;
+        case "select":
+          handle.selectAll();
+          return true;
       }
-      case 'undo':
-        handle.sendInput('\x1a');
-        return true;
-      case 'select':
-        handle.selectAll();
-        return true;
-    }
-    return false;
-  }, [getFocusedTerminalRef]);
+      return false;
+    },
+    [getFocusedTerminalRef]
+  );
 
   const registerHandler = useKeyboardStore((s) => s.registerHandler);
 
   useEffect(() => {
     return registerHandler((e) => {
       const active = document.activeElement;
-      if (!active || !active.classList.contains('xterm-helper-textarea')) return false;
+      if (!active || !active.classList.contains("xterm-helper-textarea")) return false;
 
       // Only handle if this terminal page instance owns the focused terminal
       const handle = getFocusedTerminalRef();
@@ -474,13 +477,16 @@ const TerminalPage: React.FC<TerminalPageProps> = ({ groupId, cwd }) => {
     });
   }, [registerHandler, handleVirtualKeyEvent, getFocusedTerminalRef]);
 
-  const setTerminalRef = useCallback((id: string) => (ref: TerminalInstanceHandle | null) => {
-    if (ref) {
-      terminalRefsMap.current.set(id, ref);
-    } else {
-      terminalRefsMap.current.delete(id);
-    }
-  }, []);
+  const setTerminalRef = useCallback(
+    (id: string) => (ref: TerminalInstanceHandle | null) => {
+      if (ref) {
+        terminalRefsMap.current.set(id, ref);
+      } else {
+        terminalRefsMap.current.delete(id);
+      }
+    },
+    []
+  );
 
   if (showHistory) {
     return <TerminalHistoryPage onBack={() => setShowHistory(false)} />;

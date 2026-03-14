@@ -112,7 +112,9 @@ const useCachedAvatarUrl = (email: string, platforms: AvatarPlatform[]): string 
     fetchAndCacheAvatar(trimmed, platforms).then((result) => {
       if (!cancelled && result) setUrl(result);
     });
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [trimmed, platforms]);
 
   return url;
@@ -263,10 +265,7 @@ const CommitItem: React.FC<CommitItemProps> = ({
         </div>
         <div className="flex items-center gap-1.5 pt-1">
           {isUnpushed && (
-            <span
-              className="shrink-0 px-2 py-0.5 rounded-full bg-ide-mute/15"
-              title={t("git.unpushedCommit")}
-            >
+            <span className="shrink-0 px-2 py-0.5 rounded-full bg-ide-mute/15" title={t("git.unpushedCommit")}>
               <ArrowUp size={12} className="text-ide-text/60" />
             </span>
           )}

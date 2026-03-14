@@ -397,1017 +397,1019 @@ const parseOsc777Notification = (data: string): ParsedTerminalNotification | nul
   return { title: normalizedTitle, body };
 };
 
-const TerminalInstance = React.forwardRef<TerminalInstanceHandle, TerminalInstanceProps>(({
-  terminalId,
-  terminalName,
-  isActive,
-  isFocused = isActive,
-  isExited = false,
-  onExited,
-}, ref) => {
-  const wrapperRef = useRef<HTMLDivElement>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const terminalRef = useRef<Terminal | null>(null);
-  const fitAddonRef = useRef<FitAddon | null>(null);
-  const searchAddonRef = useRef<SearchAddon | null>(null);
-  const serializeAddonRef = useRef<SerializeAddon | null>(null);
-  const oscHandlersRef = useRef<TerminalDisposable[]>([]);
-  const wsRef = useRef<WebSocket | null>(null);
-  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const reconnectAttemptsRef = useRef(0);
-  const wasOpenRef = useRef(false);
-  const initializedRef = useRef(false);
-  const isUnmountingRef = useRef(false);
-  const lastCursorRef = useRef(0);
-  const lastAckCursorRef = useRef(0);
-  const replayServerDoneRef = useRef(false);
-  const pendingReplayWritesRef = useRef(0);
-  const inputReadyRef = useRef(false);
-  const callbacksRef = useRef<CallbackRefs>({
-    isActive,
-    isFocused,
-    isExited,
-    onExited,
-    terminalName,
-    t: (key: string) => key,
-  });
-
-  const [searchVisible, setSearchVisible] = useState(false);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [searchCaseSensitive, setSearchCaseSensitive] = useState(false);
-  const [searchRegex, setSearchRegex] = useState(false);
-  const [selectionMenu, setSelectionMenu] = useState<SelectionMenuState | null>(null);
-  const searchInputRef = useRef<HTMLInputElement | null>(null);
-  const searchVisibleRef = useRef(false);
-  const openSearchRef = useRef<() => void>(() => {});
-  const closeSearchRef = useRef<() => void>(() => {});
-  const selectionAnchorRef = useRef<{ clientX: number; clientY: number } | null>(null);
-  const selectionMenuFrameRef = useRef<number | null>(null);
-
-  const [progress, setProgress] = useState<{ value: number; state: 0 | 1 | 2 | 3 | 4 } | null>(null);
-  const [copySuccess, setCopySuccess] = useState(false);
-  const progressAddonRef = useRef<ProgressAddon | null>(null);
-
-  const theme = useAppStore((s) => s.theme);
-  const locale = useAppStore((s) => s.locale);
-  const t = useTranslation(locale);
-
-  const disposeOscHandlers = () => {
-    oscHandlersRef.current.forEach((handler) => handler.dispose());
-    oscHandlersRef.current = [];
-  };
-
-  const handleOscNotification = useCallback(
-    (data: string, parser: (value: string) => ParsedTerminalNotification | null) => {
-      if (!inputReadyRef.current) {
-        return true;
-      }
-
-      const notification = parser(data);
-      if (!notification) {
-        return true;
-      }
-
-      const currentCallbacks = callbacksRef.current;
-      if (currentCallbacks.isExited) {
-        return true;
-      }
-
-      notifyTerminal({
-        body: notification.body,
-        isActive: currentCallbacks.isFocused,
-        terminalId,
-        title: notification.title,
-      });
-
-      return true;
-    },
-    [terminalId]
-  );
-
-  const clearReconnectTimer = () => {
-    if (reconnectTimerRef.current) {
-      clearTimeout(reconnectTimerRef.current);
-      reconnectTimerRef.current = null;
-    }
-  };
-
-  const cancelSelectionMenuFrame = useCallback(() => {
-    if (selectionMenuFrameRef.current !== null) {
-      cancelAnimationFrame(selectionMenuFrameRef.current);
-      selectionMenuFrameRef.current = null;
-    }
-  }, []);
-
-  const hideSelectionMenu = useCallback(() => {
-    cancelSelectionMenuFrame();
-    setSelectionMenu(null);
-  }, [cancelSelectionMenuFrame]);
-
-  const clearTerminalSelection = useCallback(() => {
-    terminalRef.current?.clearSelection();
-    hideSelectionMenu();
-  }, [hideSelectionMenu]);
-
-  const getDomSelectionRect = useCallback((): DOMRect | null => {
-    const wrapper = wrapperRef.current;
-    if (!wrapper) {
-      return null;
-    }
-    const selection = window.getSelection();
-    if (!selection || selection.rangeCount === 0 || selection.isCollapsed) {
-      return null;
-    }
-    const range = selection.getRangeAt(0);
-    const ancestor = range.commonAncestorContainer;
-    if (!(ancestor instanceof Node) || !wrapper.contains(ancestor)) {
-      return null;
-    }
-    const rects = Array.from(range.getClientRects()).filter((rect) => rect.width > 0 || rect.height > 0);
-    if (rects.length === 0) {
-      return null;
-    }
-    const wrapperRect = wrapper.getBoundingClientRect();
-    const visibleRects = rects.filter(
-      (rect) =>
-        rect.bottom >= wrapperRect.top &&
-        rect.top <= wrapperRect.bottom &&
-        rect.right >= wrapperRect.left &&
-        rect.left <= wrapperRect.right
-    );
-    if (visibleRects.length === 0) {
-      return null;
-    }
-    const left = Math.min(...visibleRects.map((rect) => rect.left));
-    const right = Math.max(...visibleRects.map((rect) => rect.right));
-    const top = Math.min(...visibleRects.map((rect) => rect.top));
-    const bottom = Math.max(...visibleRects.map((rect) => rect.bottom));
-    return new DOMRect(left, top, right - left, bottom - top);
-  }, []);
-
-  const getTerminalSelectionRect = useCallback((terminal: Terminal): DOMRect | null => {
-    const screenElement = containerRef.current?.querySelector(".xterm-screen");
-    if (!(screenElement instanceof HTMLElement)) {
-      return null;
-    }
-    const selection = terminal.getSelectionPosition();
-    if (!selection) {
-      return null;
-    }
-    const screenRect = screenElement.getBoundingClientRect();
-    const cellWidth = screenRect.width / Math.max(terminal.cols, 1);
-    const cellHeight = screenRect.height / Math.max(terminal.rows, 1);
-    if (!Number.isFinite(cellWidth) || !Number.isFinite(cellHeight) || cellWidth <= 0 || cellHeight <= 0) {
-      return null;
-    }
-    const viewportY = terminal.buffer.active.viewportY;
-    const startRow = selection.start.y - viewportY;
-    const endRow = selection.end.y - viewportY;
-    if (endRow < 0 || startRow > terminal.rows - 1) {
-      return null;
-    }
-    const visibleRow = clamp(startRow, 0, terminal.rows - 1);
-    const top = screenRect.top + visibleRow * cellHeight;
-    const bottom = top + cellHeight;
-    if (startRow === endRow && startRow >= 0 && startRow < terminal.rows) {
-      const startCol = clamp(selection.start.x, 0, terminal.cols - 1);
-      const endCol = clamp(Math.max(selection.end.x, selection.start.x + 1), 1, terminal.cols);
-      const left = screenRect.left + startCol * cellWidth;
-      const right = screenRect.left + endCol * cellWidth;
-      return new DOMRect(left, top, Math.max(right - left, cellWidth), bottom - top);
-    }
-    const left = screenRect.left + clamp(selection.start.x, 0, terminal.cols - 1) * cellWidth;
-    return new DOMRect(left, top, Math.max(screenRect.right - left, cellWidth), bottom - top);
-  }, []);
-
-  const updateSelectionMenu = useCallback(() => {
-    const wrapper = wrapperRef.current;
-    const terminal = terminalRef.current;
-    if (!wrapper || !terminal || !terminal.hasSelection()) {
-      setSelectionMenu(null);
-      return;
-    }
-    const selectionText = terminal.getSelection();
-    if (!selectionText) {
-      setSelectionMenu(null);
-      return;
-    }
-    const wrapperRect = wrapper.getBoundingClientRect();
-    const selectionRect = getDomSelectionRect() ?? getTerminalSelectionRect(terminal);
-    const fallbackX = selectionAnchorRef.current?.clientX ?? wrapperRect.left + wrapperRect.width / 2;
-    const fallbackY = selectionAnchorRef.current?.clientY ?? wrapperRect.top + wrapperRect.height / 2;
-    const anchorX = selectionRect ? selectionRect.left + selectionRect.width / 2 : fallbackX;
-    const anchorTop = selectionRect ? selectionRect.top : fallbackY;
-    const anchorBottom = selectionRect ? selectionRect.bottom : fallbackY;
-    const halfWidth = SELECTION_MENU_WIDTH / 2;
-    const leftMin = Math.min(halfWidth + SELECTION_MENU_MARGIN, wrapperRect.width / 2);
-    const leftMax = Math.max(wrapperRect.width - halfWidth - SELECTION_MENU_MARGIN, leftMin);
-    const left = clamp(anchorX - wrapperRect.left, leftMin, leftMax);
-    let top = anchorTop - wrapperRect.top - SELECTION_MENU_HEIGHT - 10;
-    if (top < SELECTION_MENU_MARGIN) {
-      top = anchorBottom - wrapperRect.top + 10;
-    }
-    const maxTop = Math.max(wrapperRect.height - SELECTION_MENU_HEIGHT - SELECTION_MENU_MARGIN, SELECTION_MENU_MARGIN);
-    setSelectionMenu({
-      left,
-      top: clamp(top, SELECTION_MENU_MARGIN, maxTop),
+const TerminalInstance = React.forwardRef<TerminalInstanceHandle, TerminalInstanceProps>(
+  ({ terminalId, terminalName, isActive, isFocused = isActive, isExited = false, onExited }, ref) => {
+    const wrapperRef = useRef<HTMLDivElement>(null);
+    const containerRef = useRef<HTMLDivElement>(null);
+    const terminalRef = useRef<Terminal | null>(null);
+    const fitAddonRef = useRef<FitAddon | null>(null);
+    const searchAddonRef = useRef<SearchAddon | null>(null);
+    const serializeAddonRef = useRef<SerializeAddon | null>(null);
+    const oscHandlersRef = useRef<TerminalDisposable[]>([]);
+    const wsRef = useRef<WebSocket | null>(null);
+    const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const reconnectAttemptsRef = useRef(0);
+    const wasOpenRef = useRef(false);
+    const initializedRef = useRef(false);
+    const isUnmountingRef = useRef(false);
+    const lastCursorRef = useRef(0);
+    const lastAckCursorRef = useRef(0);
+    const replayServerDoneRef = useRef(false);
+    const pendingReplayWritesRef = useRef(0);
+    const inputReadyRef = useRef(false);
+    const callbacksRef = useRef<CallbackRefs>({
+      isActive,
+      isFocused,
+      isExited,
+      onExited,
+      terminalName,
+      t: (key: string) => key,
     });
-  }, [getDomSelectionRect, getTerminalSelectionRect]);
 
-  const queueSelectionMenuUpdate = useCallback(() => {
-    cancelSelectionMenuFrame();
-    selectionMenuFrameRef.current = requestAnimationFrame(() => {
-      selectionMenuFrameRef.current = null;
-      updateSelectionMenu();
-    });
-  }, [cancelSelectionMenuFrame, updateSelectionMenu]);
+    const [searchVisible, setSearchVisible] = useState(false);
+    const [searchTerm, setSearchTerm] = useState("");
+    const [searchCaseSensitive, setSearchCaseSensitive] = useState(false);
+    const [searchRegex, setSearchRegex] = useState(false);
+    const [selectionMenu, setSelectionMenu] = useState<SelectionMenuState | null>(null);
+    const searchInputRef = useRef<HTMLInputElement | null>(null);
+    const searchVisibleRef = useRef(false);
+    const openSearchRef = useRef<() => void>(() => {});
+    const closeSearchRef = useRef<() => void>(() => {});
+    const selectionAnchorRef = useRef<{ clientX: number; clientY: number } | null>(null);
+    const selectionMenuFrameRef = useRef<number | null>(null);
 
-  const connectWebSocket = useCallback(
-    (terminal: Terminal) => {
-      clearReconnectTimer();
+    const [progress, setProgress] = useState<{ value: number; state: 0 | 1 | 2 | 3 | 4 } | null>(null);
+    const [copySuccess, setCopySuccess] = useState(false);
+    const progressAddonRef = useRef<ProgressAddon | null>(null);
 
-      if (wsRef.current) {
-        const prev = wsRef.current;
-        wsRef.current = null;
-        prev.onopen = null;
-        prev.onmessage = null;
-        prev.onclose = null;
-        prev.onerror = null;
-        try {
-          prev.close();
-        } catch {}
-      }
+    const theme = useAppStore((s) => s.theme);
+    const locale = useAppStore((s) => s.locale);
+    const t = useTranslation(locale);
 
-      replayServerDoneRef.current = false;
-      pendingReplayWritesRef.current = 0;
-      inputReadyRef.current = false;
-      terminal.options.cursorBlink = false;
-      terminal.options.disableStdin = true;
+    const disposeOscHandlers = () => {
+      oscHandlersRef.current.forEach((handler) => handler.dispose());
+      oscHandlersRef.current = [];
+    };
 
-      const cursor = lastAckCursorRef.current > 0 ? lastAckCursorRef.current : undefined;
-      const wsUrl = terminalApi.wsUrl(terminalId, cursor);
-      const ws = new WebSocket(wsUrl);
-      wsRef.current = ws;
-
-      let decoder = new TextDecoder("utf-8", { fatal: false });
-
-      const sendAck = (cursorValue: number) => {
-        if (!Number.isFinite(cursorValue) || cursorValue <= lastAckCursorRef.current) {
-          return;
+    const handleOscNotification = useCallback(
+      (data: string, parser: (value: string) => ParsedTerminalNotification | null) => {
+        if (!inputReadyRef.current) {
+          return true;
         }
-        lastAckCursorRef.current = cursorValue;
-        if (wsRef.current === ws && ws.readyState === WebSocket.OPEN) {
+
+        const notification = parser(data);
+        if (!notification) {
+          return true;
+        }
+
+        const currentCallbacks = callbacksRef.current;
+        if (currentCallbacks.isExited) {
+          return true;
+        }
+
+        notifyTerminal({
+          body: notification.body,
+          isActive: currentCallbacks.isFocused,
+          terminalId,
+          title: notification.title,
+        });
+
+        return true;
+      },
+      [terminalId]
+    );
+
+    const clearReconnectTimer = () => {
+      if (reconnectTimerRef.current) {
+        clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
+      }
+    };
+
+    const cancelSelectionMenuFrame = useCallback(() => {
+      if (selectionMenuFrameRef.current !== null) {
+        cancelAnimationFrame(selectionMenuFrameRef.current);
+        selectionMenuFrameRef.current = null;
+      }
+    }, []);
+
+    const hideSelectionMenu = useCallback(() => {
+      cancelSelectionMenuFrame();
+      setSelectionMenu(null);
+    }, [cancelSelectionMenuFrame]);
+
+    const clearTerminalSelection = useCallback(() => {
+      terminalRef.current?.clearSelection();
+      hideSelectionMenu();
+    }, [hideSelectionMenu]);
+
+    const getDomSelectionRect = useCallback((): DOMRect | null => {
+      const wrapper = wrapperRef.current;
+      if (!wrapper) {
+        return null;
+      }
+      const selection = window.getSelection();
+      if (!selection || selection.rangeCount === 0 || selection.isCollapsed) {
+        return null;
+      }
+      const range = selection.getRangeAt(0);
+      const ancestor = range.commonAncestorContainer;
+      if (!(ancestor instanceof Node) || !wrapper.contains(ancestor)) {
+        return null;
+      }
+      const rects = Array.from(range.getClientRects()).filter((rect) => rect.width > 0 || rect.height > 0);
+      if (rects.length === 0) {
+        return null;
+      }
+      const wrapperRect = wrapper.getBoundingClientRect();
+      const visibleRects = rects.filter(
+        (rect) =>
+          rect.bottom >= wrapperRect.top &&
+          rect.top <= wrapperRect.bottom &&
+          rect.right >= wrapperRect.left &&
+          rect.left <= wrapperRect.right
+      );
+      if (visibleRects.length === 0) {
+        return null;
+      }
+      const left = Math.min(...visibleRects.map((rect) => rect.left));
+      const right = Math.max(...visibleRects.map((rect) => rect.right));
+      const top = Math.min(...visibleRects.map((rect) => rect.top));
+      const bottom = Math.max(...visibleRects.map((rect) => rect.bottom));
+      return new DOMRect(left, top, right - left, bottom - top);
+    }, []);
+
+    const getTerminalSelectionRect = useCallback((terminal: Terminal): DOMRect | null => {
+      const screenElement = containerRef.current?.querySelector(".xterm-screen");
+      if (!(screenElement instanceof HTMLElement)) {
+        return null;
+      }
+      const selection = terminal.getSelectionPosition();
+      if (!selection) {
+        return null;
+      }
+      const screenRect = screenElement.getBoundingClientRect();
+      const cellWidth = screenRect.width / Math.max(terminal.cols, 1);
+      const cellHeight = screenRect.height / Math.max(terminal.rows, 1);
+      if (!Number.isFinite(cellWidth) || !Number.isFinite(cellHeight) || cellWidth <= 0 || cellHeight <= 0) {
+        return null;
+      }
+      const viewportY = terminal.buffer.active.viewportY;
+      const startRow = selection.start.y - viewportY;
+      const endRow = selection.end.y - viewportY;
+      if (endRow < 0 || startRow > terminal.rows - 1) {
+        return null;
+      }
+      const visibleRow = clamp(startRow, 0, terminal.rows - 1);
+      const top = screenRect.top + visibleRow * cellHeight;
+      const bottom = top + cellHeight;
+      if (startRow === endRow && startRow >= 0 && startRow < terminal.rows) {
+        const startCol = clamp(selection.start.x, 0, terminal.cols - 1);
+        const endCol = clamp(Math.max(selection.end.x, selection.start.x + 1), 1, terminal.cols);
+        const left = screenRect.left + startCol * cellWidth;
+        const right = screenRect.left + endCol * cellWidth;
+        return new DOMRect(left, top, Math.max(right - left, cellWidth), bottom - top);
+      }
+      const left = screenRect.left + clamp(selection.start.x, 0, terminal.cols - 1) * cellWidth;
+      return new DOMRect(left, top, Math.max(screenRect.right - left, cellWidth), bottom - top);
+    }, []);
+
+    const updateSelectionMenu = useCallback(() => {
+      const wrapper = wrapperRef.current;
+      const terminal = terminalRef.current;
+      if (!wrapper || !terminal || !terminal.hasSelection()) {
+        setSelectionMenu(null);
+        return;
+      }
+      const selectionText = terminal.getSelection();
+      if (!selectionText) {
+        setSelectionMenu(null);
+        return;
+      }
+      const wrapperRect = wrapper.getBoundingClientRect();
+      const selectionRect = getDomSelectionRect() ?? getTerminalSelectionRect(terminal);
+      const fallbackX = selectionAnchorRef.current?.clientX ?? wrapperRect.left + wrapperRect.width / 2;
+      const fallbackY = selectionAnchorRef.current?.clientY ?? wrapperRect.top + wrapperRect.height / 2;
+      const anchorX = selectionRect ? selectionRect.left + selectionRect.width / 2 : fallbackX;
+      const anchorTop = selectionRect ? selectionRect.top : fallbackY;
+      const anchorBottom = selectionRect ? selectionRect.bottom : fallbackY;
+      const halfWidth = SELECTION_MENU_WIDTH / 2;
+      const leftMin = Math.min(halfWidth + SELECTION_MENU_MARGIN, wrapperRect.width / 2);
+      const leftMax = Math.max(wrapperRect.width - halfWidth - SELECTION_MENU_MARGIN, leftMin);
+      const left = clamp(anchorX - wrapperRect.left, leftMin, leftMax);
+      let top = anchorTop - wrapperRect.top - SELECTION_MENU_HEIGHT - 10;
+      if (top < SELECTION_MENU_MARGIN) {
+        top = anchorBottom - wrapperRect.top + 10;
+      }
+      const maxTop = Math.max(
+        wrapperRect.height - SELECTION_MENU_HEIGHT - SELECTION_MENU_MARGIN,
+        SELECTION_MENU_MARGIN
+      );
+      setSelectionMenu({
+        left,
+        top: clamp(top, SELECTION_MENU_MARGIN, maxTop),
+      });
+    }, [getDomSelectionRect, getTerminalSelectionRect]);
+
+    const queueSelectionMenuUpdate = useCallback(() => {
+      cancelSelectionMenuFrame();
+      selectionMenuFrameRef.current = requestAnimationFrame(() => {
+        selectionMenuFrameRef.current = null;
+        updateSelectionMenu();
+      });
+    }, [cancelSelectionMenuFrame, updateSelectionMenu]);
+
+    const connectWebSocket = useCallback(
+      (terminal: Terminal) => {
+        clearReconnectTimer();
+
+        if (wsRef.current) {
+          const prev = wsRef.current;
+          wsRef.current = null;
+          prev.onopen = null;
+          prev.onmessage = null;
+          prev.onclose = null;
+          prev.onerror = null;
           try {
-            ws.send(JSON.stringify({ type: "ack", cursor: cursorValue }));
+            prev.close();
           } catch {}
         }
-      };
 
-      const tryEnableInput = () => {
-        if (!replayServerDoneRef.current) return;
-        if (pendingReplayWritesRef.current > 0) return;
-        if (callbacksRef.current.isExited) return;
-        if (inputReadyRef.current) return;
-        inputReadyRef.current = true;
-        terminal.options.cursorBlink = true;
-        terminal.options.disableStdin = false;
-        if (callbacksRef.current.isFocused) {
-          terminal.focus();
-        }
-      };
+        replayServerDoneRef.current = false;
+        pendingReplayWritesRef.current = 0;
+        inputReadyRef.current = false;
+        terminal.options.cursorBlink = false;
+        terminal.options.disableStdin = true;
 
-      ws.onopen = () => {
-        if (wsRef.current !== ws) return;
-        wasOpenRef.current = true;
-        reconnectAttemptsRef.current = 0;
-        if (terminalRef.current && fitAddonRef.current) {
-          fitAddonRef.current.fit();
-          const { cols, rows } = terminalRef.current;
-          ws.send(JSON.stringify({ type: "resize", cols, rows }));
-        }
-      };
+        const cursor = lastAckCursorRef.current > 0 ? lastAckCursorRef.current : undefined;
+        const wsUrl = terminalApi.wsUrl(terminalId, cursor);
+        const ws = new WebSocket(wsUrl);
+        wsRef.current = ws;
 
-      ws.onmessage = (event) => {
-        if (wsRef.current !== ws) return;
-        try {
-          const msg = JSON.parse(event.data);
-          if (msg.type === "replay" || msg.type === "output") {
-            const hasCursor = typeof msg.cursor === "number" && Number.isFinite(msg.cursor);
-            const cursorValue = hasCursor ? msg.cursor : undefined;
-            if (cursorValue !== undefined && !msg.reset && cursorValue <= lastCursorRef.current) {
-              return;
-            }
-            if (msg.reset) {
-              terminal.reset();
-              decoder = new TextDecoder("utf-8", { fatal: false });
-              pendingReplayWritesRef.current = 0;
-            }
+        let decoder = new TextDecoder("utf-8", { fatal: false });
 
-            let hasOutput = false;
+        const sendAck = (cursorValue: number) => {
+          if (!Number.isFinite(cursorValue) || cursorValue <= lastAckCursorRef.current) {
+            return;
+          }
+          lastAckCursorRef.current = cursorValue;
+          if (wsRef.current === ws && ws.readyState === WebSocket.OPEN) {
             try {
-              if (typeof msg.data === "string" && msg.data.length > 0) {
-                const binaryString = atob(msg.data);
-                const bytes = new Uint8Array(binaryString.length);
-                for (let i = 0; i < binaryString.length; i++) {
-                  bytes[i] = binaryString.charCodeAt(i);
-                }
-                const decoded = decoder.decode(bytes, { stream: true });
-                hasOutput = decoded.length > 0;
-                if (hasOutput && msg.type === "replay") {
-                  pendingReplayWritesRef.current += 1;
-                }
-                terminal.write(decoded, () => {
-                  if (cursorValue !== undefined) {
-                    lastCursorRef.current = cursorValue;
-                    sendAck(cursorValue);
-                  }
-                  if (hasOutput && msg.type === "replay") {
-                    pendingReplayWritesRef.current = Math.max(0, pendingReplayWritesRef.current - 1);
-                  }
-                  tryEnableInput();
-                });
+              ws.send(JSON.stringify({ type: "ack", cursor: cursorValue }));
+            } catch {}
+          }
+        };
+
+        const tryEnableInput = () => {
+          if (!replayServerDoneRef.current) return;
+          if (pendingReplayWritesRef.current > 0) return;
+          if (callbacksRef.current.isExited) return;
+          if (inputReadyRef.current) return;
+          inputReadyRef.current = true;
+          terminal.options.cursorBlink = true;
+          terminal.options.disableStdin = false;
+          if (callbacksRef.current.isFocused) {
+            terminal.focus();
+          }
+        };
+
+        ws.onopen = () => {
+          if (wsRef.current !== ws) return;
+          wasOpenRef.current = true;
+          reconnectAttemptsRef.current = 0;
+          if (terminalRef.current && fitAddonRef.current) {
+            fitAddonRef.current.fit();
+            const { cols, rows } = terminalRef.current;
+            ws.send(JSON.stringify({ type: "resize", cols, rows }));
+          }
+        };
+
+        ws.onmessage = (event) => {
+          if (wsRef.current !== ws) return;
+          try {
+            const msg = JSON.parse(event.data);
+            if (msg.type === "replay" || msg.type === "output") {
+              const hasCursor = typeof msg.cursor === "number" && Number.isFinite(msg.cursor);
+              const cursorValue = hasCursor ? msg.cursor : undefined;
+              if (cursorValue !== undefined && !msg.reset && cursorValue <= lastCursorRef.current) {
+                return;
               }
-            } catch (e) {
-              console.warn("Failed to decode base64:", e);
-            }
-            if (!hasOutput && cursorValue !== undefined) {
-              lastCursorRef.current = cursorValue;
-              sendAck(cursorValue);
-            }
-          } else if (msg.type === "replay_done") {
-            replayServerDoneRef.current = true;
-            tryEnableInput();
-          } else if (msg.type === "state") {
-            if (typeof msg.cursor === "number" && Number.isFinite(msg.cursor) && msg.cursor > lastCursorRef.current) {
-              lastCursorRef.current = msg.cursor;
-            }
-            if (typeof msg.status === "string" && msg.status !== "running") {
+              if (msg.reset) {
+                terminal.reset();
+                decoder = new TextDecoder("utf-8", { fatal: false });
+                pendingReplayWritesRef.current = 0;
+              }
+
+              let hasOutput = false;
+              try {
+                if (typeof msg.data === "string" && msg.data.length > 0) {
+                  const binaryString = atob(msg.data);
+                  const bytes = new Uint8Array(binaryString.length);
+                  for (let i = 0; i < binaryString.length; i++) {
+                    bytes[i] = binaryString.charCodeAt(i);
+                  }
+                  const decoded = decoder.decode(bytes, { stream: true });
+                  hasOutput = decoded.length > 0;
+                  if (hasOutput && msg.type === "replay") {
+                    pendingReplayWritesRef.current += 1;
+                  }
+                  terminal.write(decoded, () => {
+                    if (cursorValue !== undefined) {
+                      lastCursorRef.current = cursorValue;
+                      sendAck(cursorValue);
+                    }
+                    if (hasOutput && msg.type === "replay") {
+                      pendingReplayWritesRef.current = Math.max(0, pendingReplayWritesRef.current - 1);
+                    }
+                    tryEnableInput();
+                  });
+                }
+              } catch (e) {
+                console.warn("Failed to decode base64:", e);
+              }
+              if (!hasOutput && cursorValue !== undefined) {
+                lastCursorRef.current = cursorValue;
+                sendAck(cursorValue);
+              }
+            } else if (msg.type === "replay_done") {
+              replayServerDoneRef.current = true;
+              tryEnableInput();
+            } else if (msg.type === "state") {
+              if (typeof msg.cursor === "number" && Number.isFinite(msg.cursor) && msg.cursor > lastCursorRef.current) {
+                lastCursorRef.current = msg.cursor;
+              }
+              if (typeof msg.status === "string" && msg.status !== "running") {
+                terminal.options.cursorBlink = false;
+                terminal.options.disableStdin = true;
+                callbacksRef.current.isExited = true;
+                inputReadyRef.current = false;
+              }
+            } else if (msg.type === "pty_exited") {
+              const { t: translate, onExited: exitCallback } = callbacksRef.current;
+              terminal.write(`\r\n[${translate("terminal.processExited")}]\r\n`);
               terminal.options.cursorBlink = false;
               terminal.options.disableStdin = true;
               callbacksRef.current.isExited = true;
               inputReadyRef.current = false;
+              clearReconnectTimer();
+              try {
+                ws.close();
+              } catch {}
+              exitCallback?.();
             }
-          } else if (msg.type === "pty_exited") {
-            const { t: translate, onExited: exitCallback } = callbacksRef.current;
-            terminal.write(`\r\n[${translate("terminal.processExited")}]\r\n`);
-            terminal.options.cursorBlink = false;
-            terminal.options.disableStdin = true;
-            callbacksRef.current.isExited = true;
-            inputReadyRef.current = false;
-            clearReconnectTimer();
-            try {
-              ws.close();
-            } catch {}
-            exitCallback?.();
+          } catch (e) {
+            console.warn("Failed to parse WebSocket message:", e);
           }
-        } catch (e) {
-          console.warn("Failed to parse WebSocket message:", e);
-        }
-      };
+        };
 
-      ws.onclose = () => {
-        if (wsRef.current !== ws) return;
-        wsRef.current = null;
-        inputReadyRef.current = false;
-        if (isUnmountingRef.current) return;
-        if (callbacksRef.current.isExited) return;
-
-        if (wasOpenRef.current) {
-          wasOpenRef.current = false;
-          const { t: translate } = callbacksRef.current;
-          terminal.write(`\r\n[${translate("terminal.connectionClosed")}]\r\n`);
-        }
-
-        terminal.options.cursorBlink = false;
-        terminal.options.disableStdin = true;
-
-        const attempt = reconnectAttemptsRef.current;
-        reconnectAttemptsRef.current = attempt + 1;
-        const baseDelay = 400;
-        const maxDelay = 10_000;
-        const delay = Math.min(maxDelay, baseDelay * Math.pow(2, attempt)) + Math.floor(Math.random() * 250);
-        reconnectTimerRef.current = setTimeout(() => {
+        ws.onclose = () => {
+          if (wsRef.current !== ws) return;
+          wsRef.current = null;
+          inputReadyRef.current = false;
           if (isUnmountingRef.current) return;
           if (callbacksRef.current.isExited) return;
-          connectWebSocket(terminal);
-        }, delay);
-      };
 
-      ws.onerror = () => {
-        if (wsRef.current !== ws) return;
-        const { t: translate } = callbacksRef.current;
-        terminal.write(`\r\n[${translate("terminal.connectionError")}]\r\n`);
-        try {
-          ws.close();
-        } catch {}
-      };
-    },
-    [terminalId]
-  );
+          if (wasOpenRef.current) {
+            wasOpenRef.current = false;
+            const { t: translate } = callbacksRef.current;
+            terminal.write(`\r\n[${translate("terminal.connectionClosed")}]\r\n`);
+          }
 
-  const openSearch = useCallback(() => {
-    hideSelectionMenu();
-    setSearchVisible(true);
-    searchVisibleRef.current = true;
-    setTimeout(() => searchInputRef.current?.focus(), 50);
-  }, [hideSelectionMenu]);
+          terminal.options.cursorBlink = false;
+          terminal.options.disableStdin = true;
 
-  const closeSearch = useCallback(() => {
-    setSearchVisible(false);
-    searchVisibleRef.current = false;
-    terminalRef.current?.focus();
-  }, []);
+          const attempt = reconnectAttemptsRef.current;
+          reconnectAttemptsRef.current = attempt + 1;
+          const baseDelay = 400;
+          const maxDelay = 10_000;
+          const delay = Math.min(maxDelay, baseDelay * Math.pow(2, attempt)) + Math.floor(Math.random() * 250);
+          reconnectTimerRef.current = setTimeout(() => {
+            if (isUnmountingRef.current) return;
+            if (callbacksRef.current.isExited) return;
+            connectWebSocket(terminal);
+          }, delay);
+        };
 
-  openSearchRef.current = openSearch;
-  closeSearchRef.current = closeSearch;
+        ws.onerror = () => {
+          if (wsRef.current !== ws) return;
+          const { t: translate } = callbacksRef.current;
+          terminal.write(`\r\n[${translate("terminal.connectionError")}]\r\n`);
+          try {
+            ws.close();
+          } catch {}
+        };
+      },
+      [terminalId]
+    );
 
-  const handleSearchNext = useCallback(() => {
-    if (!searchAddonRef.current || !searchTerm) return;
-    searchAddonRef.current.findNext(searchTerm, { caseSensitive: searchCaseSensitive, regex: searchRegex });
-  }, [searchTerm, searchCaseSensitive, searchRegex]);
-
-  const handleSearchPrev = useCallback(() => {
-    if (!searchAddonRef.current || !searchTerm) return;
-    searchAddonRef.current.findPrevious(searchTerm, { caseSensitive: searchCaseSensitive, regex: searchRegex });
-  }, [searchTerm, searchCaseSensitive, searchRegex]);
-
-  const syncBrowserShortcutFocus = useCallback(() => {
-    const hasFocusedTerminalInput =
-      isFocused &&
-      !!wrapperRef.current &&
-      document.activeElement instanceof Node &&
-      wrapperRef.current.contains(document.activeElement);
-    setTerminalBrowserShortcutFocus(terminalId, hasFocusedTerminalInput);
-  }, [isFocused, terminalId]);
-
-  const sendTerminalInput = useCallback(
-    (data: string) => {
-      if (callbacksRef.current.isExited) return;
-      if (!inputReadyRef.current) return;
-      if (wsRef.current?.readyState !== WebSocket.OPEN) return;
+    const openSearch = useCallback(() => {
       hideSelectionMenu();
-      wsRef.current.send(
-        JSON.stringify({
-          type: "input",
-          data: encodeUtf8Base64(data),
-        })
-      );
-    },
-    [hideSelectionMenu]
-  );
+      setSearchVisible(true);
+      searchVisibleRef.current = true;
+      setTimeout(() => searchInputRef.current?.focus(), 50);
+    }, [hideSelectionMenu]);
 
-  useImperativeHandle(ref, () => ({
-    sendInput: sendTerminalInput,
-    getSelection: () => terminalRef.current?.getSelection() ?? '',
-    paste: (text: string) => {
-      if (terminalRef.current) terminalRef.current.paste(text);
-    },
-    clearSelection: () => clearTerminalSelection(),
-    selectAll: () => {
-      const terminal = terminalRef.current;
-      if (terminal) terminal.selectAll();
-    },
-    focus: () => terminalRef.current?.focus(),
-  }), [sendTerminalInput, clearTerminalSelection]);
+    const closeSearch = useCallback(() => {
+      setSearchVisible(false);
+      searchVisibleRef.current = false;
+      terminalRef.current?.focus();
+    }, []);
 
-  const handleSelectionCopy = useCallback(() => {
-    const text = terminalRef.current?.getSelection();
-    if (!text) {
-      hideSelectionMenu();
-      return;
-    }
-    void navigator.clipboard.writeText(text).catch(() => {});
-    clearTerminalSelection();
-    terminalRef.current?.focus();
-  }, [clearTerminalSelection, hideSelectionMenu]);
+    openSearchRef.current = openSearch;
+    closeSearchRef.current = closeSearch;
 
-  const handleSelectionSearch = useCallback(() => {
-    const text = terminalRef.current?.getSelection();
-    if (!text) {
-      hideSelectionMenu();
-      return;
-    }
-    setSearchTerm(text);
-    clearTerminalSelection();
-    openSearchRef.current();
-  }, [clearTerminalSelection, hideSelectionMenu]);
+    const handleSearchNext = useCallback(() => {
+      if (!searchAddonRef.current || !searchTerm) return;
+      searchAddonRef.current.findNext(searchTerm, { caseSensitive: searchCaseSensitive, regex: searchRegex });
+    }, [searchTerm, searchCaseSensitive, searchRegex]);
 
-  const isFocusInsideInstance = useCallback(
-    (target: EventTarget | null) => {
-      if (!isFocused || !wrapperRef.current) {
-        return false;
-      }
-      if (target instanceof Node && wrapperRef.current.contains(target)) {
-        return true;
-      }
-      const activeElement = document.activeElement;
-      return activeElement instanceof Node && wrapperRef.current.contains(activeElement);
-    },
-    [isFocused]
-  );
+    const handleSearchPrev = useCallback(() => {
+      if (!searchAddonRef.current || !searchTerm) return;
+      searchAddonRef.current.findPrevious(searchTerm, { caseSensitive: searchCaseSensitive, regex: searchRegex });
+    }, [searchTerm, searchCaseSensitive, searchRegex]);
 
-  useEffect(() => {
-    const handleWindowKeyDown = (event: KeyboardEvent) => {
-      if (!isFocusInsideInstance(event.target)) {
-        return;
-      }
-      const key = normalizeShortcutKey(event.key);
-      if ((event.ctrlKey || event.metaKey) && key === "f") {
-        event.preventDefault();
-        return;
-      }
-      if (shouldArmTerminalUnloadGuard(event)) {
-        armTerminalBrowserUnloadGuard();
-      }
-      if (shouldPreventTerminalBrowserShortcut(event)) {
-        event.preventDefault();
-      }
-    };
+    const syncBrowserShortcutFocus = useCallback(() => {
+      const hasFocusedTerminalInput =
+        isFocused &&
+        !!wrapperRef.current &&
+        document.activeElement instanceof Node &&
+        wrapperRef.current.contains(document.activeElement);
+      setTerminalBrowserShortcutFocus(terminalId, hasFocusedTerminalInput);
+    }, [isFocused, terminalId]);
 
-    window.addEventListener("keydown", handleWindowKeyDown, true);
-    return () => window.removeEventListener("keydown", handleWindowKeyDown, true);
-  }, [isFocusInsideInstance]);
+    const sendTerminalInput = useCallback(
+      (data: string) => {
+        if (callbacksRef.current.isExited) return;
+        if (!inputReadyRef.current) return;
+        if (wsRef.current?.readyState !== WebSocket.OPEN) return;
+        hideSelectionMenu();
+        wsRef.current.send(
+          JSON.stringify({
+            type: "input",
+            data: encodeUtf8Base64(data),
+          })
+        );
+      },
+      [hideSelectionMenu]
+    );
 
-  useEffect(() => {
-    syncBrowserShortcutFocus();
-    return () => setTerminalBrowserShortcutFocus(terminalId, false);
-  }, [syncBrowserShortcutFocus, terminalId]);
+    useImperativeHandle(
+      ref,
+      () => ({
+        sendInput: sendTerminalInput,
+        getSelection: () => terminalRef.current?.getSelection() ?? "",
+        paste: (text: string) => {
+          if (terminalRef.current) terminalRef.current.paste(text);
+        },
+        clearSelection: () => clearTerminalSelection(),
+        selectAll: () => {
+          const terminal = terminalRef.current;
+          if (terminal) terminal.selectAll();
+        },
+        focus: () => terminalRef.current?.focus(),
+      }),
+      [sendTerminalInput, clearTerminalSelection]
+    );
 
-  useEffect(() => {
-    if (!selectionMenu) {
-      return;
-    }
-    const handleResize = () => queueSelectionMenuUpdate();
-    const handleSelectionChange = () => queueSelectionMenuUpdate();
-    const handlePointerDown = (event: PointerEvent) => {
-      const target = event.target;
-      if (!(target instanceof Node)) {
+    const handleSelectionCopy = useCallback(() => {
+      const text = terminalRef.current?.getSelection();
+      if (!text) {
         hideSelectionMenu();
         return;
       }
-      if (wrapperRef.current?.contains(target)) {
+      void navigator.clipboard.writeText(text).catch(() => {});
+      clearTerminalSelection();
+      terminalRef.current?.focus();
+    }, [clearTerminalSelection, hideSelectionMenu]);
+
+    const handleSelectionSearch = useCallback(() => {
+      const text = terminalRef.current?.getSelection();
+      if (!text) {
+        hideSelectionMenu();
         return;
       }
-      hideSelectionMenu();
-    };
-    window.addEventListener("resize", handleResize);
-    document.addEventListener("selectionchange", handleSelectionChange);
-    window.addEventListener("pointerdown", handlePointerDown, true);
-    return () => {
-      window.removeEventListener("resize", handleResize);
-      document.removeEventListener("selectionchange", handleSelectionChange);
-      window.removeEventListener("pointerdown", handlePointerDown, true);
-    };
-  }, [hideSelectionMenu, queueSelectionMenuUpdate, selectionMenu]);
+      setSearchTerm(text);
+      clearTerminalSelection();
+      openSearchRef.current();
+    }, [clearTerminalSelection, hideSelectionMenu]);
 
-  useEffect(() => {
-    callbacksRef.current = { isActive, isFocused, isExited, onExited, terminalName, t };
-    if (isExited && terminalRef.current) {
-      terminalRef.current.options.cursorBlink = false;
-      terminalRef.current.options.disableStdin = true;
-    }
-    if (isExited) {
-      inputReadyRef.current = false;
-      clearReconnectTimer();
-      if (wsRef.current) {
-        const ws = wsRef.current;
-        wsRef.current = null;
-        ws.onopen = null;
-        ws.onmessage = null;
-        ws.onclose = null;
-        ws.onerror = null;
-        try {
-          ws.close();
-        } catch {}
-      }
-    }
-  }, [isActive, isFocused, isExited, onExited, t, terminalName]);
-
-  useEffect(() => {
-    if (terminalRef.current) {
-      terminalRef.current.options.theme = getXtermTheme(theme);
-    }
-  }, [theme]);
-
-  useEffect(() => {
-    if (!searchAddonRef.current || !searchTerm) return;
-    searchAddonRef.current.findNext(searchTerm, { caseSensitive: searchCaseSensitive, regex: searchRegex });
-  }, [searchTerm, searchCaseSensitive, searchRegex]);
-
-  useEffect(() => {
-    if (!containerRef.current || initializedRef.current) return;
-
-    initializedRef.current = true;
-    isUnmountingRef.current = false;
-    lastCursorRef.current = 0;
-    lastAckCursorRef.current = 0;
-    replayServerDoneRef.current = false;
-    pendingReplayWritesRef.current = 0;
-    inputReadyRef.current = false;
-
-    const terminal = new Terminal({
-      cursorBlink: true,
-      fontSize: 14,
-      fontFamily: "Menlo, Monaco, 'Courier New', monospace",
-      theme: getXtermTheme(theme),
-      scrollback: 5000,
-      allowProposedApi: true,
-    });
-
-    const fitAddon = new FitAddon();
-    const searchAddon = new SearchAddon();
-    const serializeAddon = new SerializeAddon();
-    const unicode11Addon = new Unicode11Addon();
-    const webLinksAddon = new WebLinksAddon();
-    const clipboardAddon = new ClipboardAddon();
-    const imageAddon = new ImageAddon();
-    const progressAddon = new ProgressAddon();
-
-    terminal.loadAddon(unicode11Addon);
-    terminal.loadAddon(fitAddon);
-    terminal.loadAddon(searchAddon);
-    terminal.loadAddon(serializeAddon);
-    terminal.loadAddon(webLinksAddon);
-    terminal.loadAddon(clipboardAddon);
-    terminal.loadAddon(imageAddon);
-    terminal.loadAddon(progressAddon);
-
-    progressAddon.onChange((p) => {
-      if (p.state === 0) {
-        setProgress(null);
-      } else {
-        setProgress({ value: p.value, state: p.state });
-      }
-    });
-
-    terminal.open(containerRef.current);
-    terminal.unicode.activeVersion = "11";
-
-    if (shouldEnableTerminalWebgl()) {
-      try {
-        const webglAddon = new WebglAddon();
-        webglAddon.onContextLoss(() => {
-          webglAddon.dispose();
-        });
-        terminal.loadAddon(webglAddon);
-        try {
-          const ligaturesAddon = new LigaturesAddon();
-          terminal.loadAddon(ligaturesAddon);
-        } catch {}
-      } catch {}
-    }
-
-    fitAddon.fit();
-
-    terminalRef.current = terminal;
-    fitAddonRef.current = fitAddon;
-    searchAddonRef.current = searchAddon;
-    serializeAddonRef.current = serializeAddon;
-    progressAddonRef.current = progressAddon;
-
-    oscHandlersRef.current = [
-      terminal.parser.registerOscHandler(9, (data) => {
-        const defaultTitle = callbacksRef.current.terminalName.trim() || callbacksRef.current.t("sidebar.terminal");
-        return handleOscNotification(data, (value) => parseOsc9Notification(value, defaultTitle));
-      }),
-      terminal.parser.registerOscHandler(777, (data) => {
-        return handleOscNotification(data, parseOsc777Notification);
-      }),
-    ];
-
-    terminal.attachCustomKeyEventHandler((event) => {
-      const key = normalizeShortcutKey(event.key);
-      if ((event.ctrlKey || event.metaKey) && key === "f" && event.type === "keydown") {
-        event.preventDefault();
-        openSearchRef.current();
-        return false;
-      }
-      if (event.type === "keydown" && shouldArmTerminalUnloadGuard(event)) {
-        armTerminalBrowserUnloadGuard();
-      }
-      if (event.type === "keydown" && shouldCopyTerminalSelection(event, terminal.hasSelection())) {
-        const selection = terminal.getSelection();
-        if (selection) {
-          event.preventDefault();
-          hideSelectionMenu();
-          void navigator.clipboard.writeText(selection).catch(() => {});
+    const isFocusInsideInstance = useCallback(
+      (target: EventTarget | null) => {
+        if (!isFocused || !wrapperRef.current) {
           return false;
         }
-      }
-      if (event.type === "keydown" && shouldPasteIntoTerminal(event)) {
-        event.preventDefault();
-        void navigator.clipboard
-          .readText()
-          .then((text) => {
-            if (text) {
-              terminal.paste(text);
-            }
-          })
-          .catch(() => {});
-        return false;
-      }
-      const manualInput = event.type === "keydown" ? getTerminalShortcutInput(event) : null;
-      if (manualInput) {
-        event.preventDefault();
-        sendTerminalInput(manualInput);
-        return false;
-      }
-      if (shouldPreventTerminalBrowserShortcut(event as TerminalShortcutEvent)) {
-        event.preventDefault();
-      }
-      if (event.key === "Escape" && event.type === "keydown" && searchVisibleRef.current) {
-        closeSearchRef.current();
-        return false;
-      }
-      return true;
-    });
-
-    terminal.onSelectionChange(() => {
-      queueSelectionMenuUpdate();
-    });
-
-    terminal.onScroll(() => {
-      if (terminal.hasSelection()) {
-        queueSelectionMenuUpdate();
-      } else {
-        hideSelectionMenu();
-      }
-    });
-
-    terminal.onData((data) => {
-      if (callbacksRef.current.isExited) return;
-      if (!inputReadyRef.current) return;
-      if (wsRef.current?.readyState === WebSocket.OPEN) {
-        const msg = {
-          type: "input",
-          data: encodeUtf8Base64(data),
-        };
-        wsRef.current.send(JSON.stringify(msg));
-      }
-    });
-
-    connectWebSocket(terminal);
-
-    return () => {
-      isUnmountingRef.current = true;
-      inputReadyRef.current = false;
-      cancelSelectionMenuFrame();
-      clearReconnectTimer();
-      if (wsRef.current) {
-        const ws = wsRef.current;
-        wsRef.current = null;
-        ws.onopen = null;
-        ws.onmessage = null;
-        ws.onclose = null;
-        ws.onerror = null;
-        try {
-          ws.close();
-        } catch {}
-      }
-      disposeOscHandlers();
-      terminal.dispose();
-      terminalRef.current = null;
-      fitAddonRef.current = null;
-      searchAddonRef.current = null;
-      serializeAddonRef.current = null;
-      progressAddonRef.current = null;
-      initializedRef.current = false;
-    };
-  }, [
-    cancelSelectionMenuFrame,
-    connectWebSocket,
-    handleOscNotification,
-    hideSelectionMenu,
-    queueSelectionMenuUpdate,
-    terminalId,
-  ]);
-
-  useEffect(() => {
-    if (isActive && fitAddonRef.current && terminalRef.current) {
-      setTimeout(() => {
-        fitAddonRef.current?.fit();
-
-        if (wsRef.current?.readyState === WebSocket.OPEN && terminalRef.current) {
-          const { cols, rows } = terminalRef.current;
-          wsRef.current.send(JSON.stringify({ type: "resize", cols, rows }));
+        if (target instanceof Node && wrapperRef.current.contains(target)) {
+          return true;
         }
-      }, 50);
-    }
-  }, [isActive]);
+        const activeElement = document.activeElement;
+        return activeElement instanceof Node && wrapperRef.current.contains(activeElement);
+      },
+      [isFocused]
+    );
 
-  useEffect(() => {
-    if (!isActive || !isFocused || !terminalRef.current) {
-      return;
-    }
-    const timer = setTimeout(() => {
-      terminalRef.current?.focus();
-    }, 50);
-    return () => clearTimeout(timer);
-  }, [isActive, isFocused]);
-
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container || !fitAddonRef.current) return;
-
-    const observer = new ResizeObserver(() => {
-      if (isActive && fitAddonRef.current) {
-        fitAddonRef.current.fit();
-        if (wsRef.current?.readyState === WebSocket.OPEN && terminalRef.current) {
-          const { cols, rows } = terminalRef.current;
-          wsRef.current.send(JSON.stringify({ type: "resize", cols, rows }));
-        }
-      }
-    });
-
-    observer.observe(container);
-    return () => observer.disconnect();
-  }, [isActive]);
-
-  const touchStartRef = useRef<{ y: number } | null>(null);
-  const touchAccumRef = useRef(0);
-
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-
-    const onTouchStart = (e: TouchEvent) => {
-      if (e.touches.length === 2) {
-        const y = (e.touches[0].clientY + e.touches[1].clientY) / 2;
-        touchStartRef.current = { y };
-        touchAccumRef.current = 0;
-      } else {
-        touchStartRef.current = null;
-      }
-    };
-
-    const onTouchMove = (e: TouchEvent) => {
-      if (e.touches.length !== 2 || !touchStartRef.current) return;
-      e.preventDefault();
-      const y = (e.touches[0].clientY + e.touches[1].clientY) / 2;
-      const delta = touchStartRef.current.y - y;
-      touchAccumRef.current += delta;
-      touchStartRef.current.y = y;
-      const fontSize = terminalRef.current?.options.fontSize ?? 14;
-      const lineHeight = terminalRef.current?.options.lineHeight ?? 1;
-      const linePixels = fontSize * lineHeight;
-      const lines = Math.round(touchAccumRef.current / linePixels);
-      if (lines !== 0 && terminalRef.current) {
-        terminalRef.current.scrollLines(lines);
-        touchAccumRef.current -= lines * linePixels;
-      }
-    };
-
-    const onTouchEnd = (e: TouchEvent) => {
-      if (e.touches.length < 2) {
-        touchStartRef.current = null;
-        touchAccumRef.current = 0;
-      }
-    };
-
-    container.addEventListener("touchstart", onTouchStart, { passive: true });
-    container.addEventListener("touchmove", onTouchMove, { passive: false });
-    container.addEventListener("touchend", onTouchEnd, { passive: true });
-
-    return () => {
-      container.removeEventListener("touchstart", onTouchStart);
-      container.removeEventListener("touchmove", onTouchMove);
-      container.removeEventListener("touchend", onTouchEnd);
-    };
-  }, []);
-
-  return (
-    <div
-      ref={wrapperRef}
-      className="absolute inset-0"
-      style={{
-        display: isActive ? "block" : "none",
-        backgroundColor: getXtermTheme(theme).background,
-      }}
-      onKeyDownCapture={(e) => {
-        const key = normalizeShortcutKey(e.key);
-        if ((e.ctrlKey || e.metaKey) && key === "f") {
-          e.preventDefault();
-          e.stopPropagation();
-          openSearchRef.current();
+    useEffect(() => {
+      const handleWindowKeyDown = (event: KeyboardEvent) => {
+        if (!isFocusInsideInstance(event.target)) {
           return;
         }
-        if (shouldArmTerminalUnloadGuard(e.nativeEvent)) {
+        const key = normalizeShortcutKey(event.key);
+        if ((event.ctrlKey || event.metaKey) && key === "f") {
+          event.preventDefault();
+          return;
+        }
+        if (shouldArmTerminalUnloadGuard(event)) {
           armTerminalBrowserUnloadGuard();
         }
-        if (shouldPreventTerminalBrowserShortcut(e.nativeEvent)) {
-          e.preventDefault();
+        if (shouldPreventTerminalBrowserShortcut(event)) {
+          event.preventDefault();
         }
-      }}
-      onFocusCapture={() => setTerminalBrowserShortcutFocus(terminalId, true)}
-      onBlurCapture={() => setTimeout(syncBrowserShortcutFocus, 0)}
-      onPointerUpCapture={(e) => {
-        selectionAnchorRef.current = { clientX: e.clientX, clientY: e.clientY };
-        queueSelectionMenuUpdate();
-      }}
-    >
-      <div
-        ref={containerRef}
-        className="absolute inset-0 [&_.xterm]:!p-0 [&_.xterm]:!m-0 [&_.xterm-viewport]:!p-0 [&_.xterm-screen]:!p-0 [&_.xterm-screen]:!m-0"
-      />
-      {selectionMenu && (
-        <TerminalSelectionMenu
-          left={selectionMenu.left}
-          top={selectionMenu.top}
-          copyLabel={t("common.copy")}
-          searchLabel={t("common.search")}
-          clearLabel={t("common.clear")}
-          onCopy={handleSelectionCopy}
-          onSearch={handleSelectionSearch}
-          onClear={clearTerminalSelection}
-        />
-      )}
-      {progress && (
-        <div className="absolute bottom-0 left-0 right-0 z-10">
-          <div
-            className={`h-0.5 transition-all duration-300 ${
-              progress.state === 2 ? "bg-red-500" : progress.state === 4 ? "bg-yellow-500" : "bg-blue-500"
-            }`}
-            style={{
-              width: progress.state === 3 ? "100%" : `${progress.value}%`,
-              animation: progress.state === 3 ? "pulse 1.5s ease-in-out infinite" : undefined,
-            }}
-          />
-        </div>
-      )}
-      {searchVisible && (
-        <div className="absolute top-2 right-2 z-10 flex items-center gap-1.5 rounded-md border border-ide-border bg-ide-panel/95 px-2 py-1.5 shadow-lg backdrop-blur-sm">
-          <input
-            ref={searchInputRef}
-            type="text"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.shiftKey ? handleSearchPrev() : handleSearchNext();
-              } else if (e.key === "Escape") {
-                closeSearch();
-              }
-            }}
-            placeholder="Search..."
-            className="w-40 bg-transparent text-xs text-ide-text outline-none placeholder:text-ide-mute/50"
-          />
-          <button
-            onClick={() => setSearchCaseSensitive((v) => !v)}
-            title="Case Sensitive"
-            className={`rounded px-1.5 py-0.5 text-xs font-medium transition-colors ${searchCaseSensitive ? "bg-ide-accent text-white" : "text-ide-mute hover:text-ide-text hover:bg-ide-bg"}`}
-          >
-            Aa
-          </button>
-          <button
-            onClick={() => setSearchRegex((v) => !v)}
-            title="Use Regex"
-            className={`rounded px-1.5 py-0.5 font-mono text-xs transition-colors ${searchRegex ? "bg-ide-accent text-white" : "text-ide-mute hover:text-ide-text hover:bg-ide-bg"}`}
-          >
-            .*
-          </button>
-          <div className="h-4 w-px bg-ide-border" />
-          <button
-            onClick={handleSearchPrev}
-            title="Previous (Shift+Enter)"
-            className="rounded p-0.5 text-ide-mute transition-colors hover:text-ide-text hover:bg-ide-bg"
-          >
-            <ChevronUp size={14} />
-          </button>
-          <button
-            onClick={handleSearchNext}
-            title="Next (Enter)"
-            className="rounded p-0.5 text-ide-mute transition-colors hover:text-ide-text hover:bg-ide-bg"
-          >
-            <ChevronDown size={14} />
-          </button>
-          <div className="h-4 w-px bg-ide-border" />
-          <button
-            onClick={() => {
-              const text = serializeAddonRef.current?.serialize();
-              if (!text) return;
-              navigator.clipboard.writeText(text).then(() => {
-                setCopySuccess(true);
-                setTimeout(() => setCopySuccess(false), 1500);
-              });
-            }}
-            title="Copy all output"
-            className="rounded p-0.5 text-ide-mute transition-colors hover:text-ide-text hover:bg-ide-bg"
-          >
-            {copySuccess ? <Check size={14} className="text-green-500" /> : <Copy size={14} />}
-          </button>
-          <button
-            onClick={closeSearch}
-            title="Close (Escape)"
-            className="rounded p-0.5 text-ide-mute transition-colors hover:text-ide-text hover:bg-ide-bg"
-          >
-            <X size={14} />
-          </button>
-        </div>
-      )}
-    </div>
-  );
-});
+      };
 
-TerminalInstance.displayName = 'TerminalInstance';
+      window.addEventListener("keydown", handleWindowKeyDown, true);
+      return () => window.removeEventListener("keydown", handleWindowKeyDown, true);
+    }, [isFocusInsideInstance]);
+
+    useEffect(() => {
+      syncBrowserShortcutFocus();
+      return () => setTerminalBrowserShortcutFocus(terminalId, false);
+    }, [syncBrowserShortcutFocus, terminalId]);
+
+    useEffect(() => {
+      if (!selectionMenu) {
+        return;
+      }
+      const handleResize = () => queueSelectionMenuUpdate();
+      const handleSelectionChange = () => queueSelectionMenuUpdate();
+      const handlePointerDown = (event: PointerEvent) => {
+        const target = event.target;
+        if (!(target instanceof Node)) {
+          hideSelectionMenu();
+          return;
+        }
+        if (wrapperRef.current?.contains(target)) {
+          return;
+        }
+        hideSelectionMenu();
+      };
+      window.addEventListener("resize", handleResize);
+      document.addEventListener("selectionchange", handleSelectionChange);
+      window.addEventListener("pointerdown", handlePointerDown, true);
+      return () => {
+        window.removeEventListener("resize", handleResize);
+        document.removeEventListener("selectionchange", handleSelectionChange);
+        window.removeEventListener("pointerdown", handlePointerDown, true);
+      };
+    }, [hideSelectionMenu, queueSelectionMenuUpdate, selectionMenu]);
+
+    useEffect(() => {
+      callbacksRef.current = { isActive, isFocused, isExited, onExited, terminalName, t };
+      if (isExited && terminalRef.current) {
+        terminalRef.current.options.cursorBlink = false;
+        terminalRef.current.options.disableStdin = true;
+      }
+      if (isExited) {
+        inputReadyRef.current = false;
+        clearReconnectTimer();
+        if (wsRef.current) {
+          const ws = wsRef.current;
+          wsRef.current = null;
+          ws.onopen = null;
+          ws.onmessage = null;
+          ws.onclose = null;
+          ws.onerror = null;
+          try {
+            ws.close();
+          } catch {}
+        }
+      }
+    }, [isActive, isFocused, isExited, onExited, t, terminalName]);
+
+    useEffect(() => {
+      if (terminalRef.current) {
+        terminalRef.current.options.theme = getXtermTheme(theme);
+      }
+    }, [theme]);
+
+    useEffect(() => {
+      if (!searchAddonRef.current || !searchTerm) return;
+      searchAddonRef.current.findNext(searchTerm, { caseSensitive: searchCaseSensitive, regex: searchRegex });
+    }, [searchTerm, searchCaseSensitive, searchRegex]);
+
+    useEffect(() => {
+      if (!containerRef.current || initializedRef.current) return;
+
+      initializedRef.current = true;
+      isUnmountingRef.current = false;
+      lastCursorRef.current = 0;
+      lastAckCursorRef.current = 0;
+      replayServerDoneRef.current = false;
+      pendingReplayWritesRef.current = 0;
+      inputReadyRef.current = false;
+
+      const terminal = new Terminal({
+        cursorBlink: true,
+        fontSize: 14,
+        fontFamily: "Menlo, Monaco, 'Courier New', monospace",
+        theme: getXtermTheme(theme),
+        scrollback: 5000,
+        allowProposedApi: true,
+      });
+
+      const fitAddon = new FitAddon();
+      const searchAddon = new SearchAddon();
+      const serializeAddon = new SerializeAddon();
+      const unicode11Addon = new Unicode11Addon();
+      const webLinksAddon = new WebLinksAddon();
+      const clipboardAddon = new ClipboardAddon();
+      const imageAddon = new ImageAddon();
+      const progressAddon = new ProgressAddon();
+
+      terminal.loadAddon(unicode11Addon);
+      terminal.loadAddon(fitAddon);
+      terminal.loadAddon(searchAddon);
+      terminal.loadAddon(serializeAddon);
+      terminal.loadAddon(webLinksAddon);
+      terminal.loadAddon(clipboardAddon);
+      terminal.loadAddon(imageAddon);
+      terminal.loadAddon(progressAddon);
+
+      progressAddon.onChange((p) => {
+        if (p.state === 0) {
+          setProgress(null);
+        } else {
+          setProgress({ value: p.value, state: p.state });
+        }
+      });
+
+      terminal.open(containerRef.current);
+      terminal.unicode.activeVersion = "11";
+
+      if (shouldEnableTerminalWebgl()) {
+        try {
+          const webglAddon = new WebglAddon();
+          webglAddon.onContextLoss(() => {
+            webglAddon.dispose();
+          });
+          terminal.loadAddon(webglAddon);
+          try {
+            const ligaturesAddon = new LigaturesAddon();
+            terminal.loadAddon(ligaturesAddon);
+          } catch {}
+        } catch {}
+      }
+
+      fitAddon.fit();
+
+      terminalRef.current = terminal;
+      fitAddonRef.current = fitAddon;
+      searchAddonRef.current = searchAddon;
+      serializeAddonRef.current = serializeAddon;
+      progressAddonRef.current = progressAddon;
+
+      oscHandlersRef.current = [
+        terminal.parser.registerOscHandler(9, (data) => {
+          const defaultTitle = callbacksRef.current.terminalName.trim() || callbacksRef.current.t("sidebar.terminal");
+          return handleOscNotification(data, (value) => parseOsc9Notification(value, defaultTitle));
+        }),
+        terminal.parser.registerOscHandler(777, (data) => {
+          return handleOscNotification(data, parseOsc777Notification);
+        }),
+      ];
+
+      terminal.attachCustomKeyEventHandler((event) => {
+        const key = normalizeShortcutKey(event.key);
+        if ((event.ctrlKey || event.metaKey) && key === "f" && event.type === "keydown") {
+          event.preventDefault();
+          openSearchRef.current();
+          return false;
+        }
+        if (event.type === "keydown" && shouldArmTerminalUnloadGuard(event)) {
+          armTerminalBrowserUnloadGuard();
+        }
+        if (event.type === "keydown" && shouldCopyTerminalSelection(event, terminal.hasSelection())) {
+          const selection = terminal.getSelection();
+          if (selection) {
+            event.preventDefault();
+            hideSelectionMenu();
+            void navigator.clipboard.writeText(selection).catch(() => {});
+            return false;
+          }
+        }
+        if (event.type === "keydown" && shouldPasteIntoTerminal(event)) {
+          event.preventDefault();
+          void navigator.clipboard
+            .readText()
+            .then((text) => {
+              if (text) {
+                terminal.paste(text);
+              }
+            })
+            .catch(() => {});
+          return false;
+        }
+        const manualInput = event.type === "keydown" ? getTerminalShortcutInput(event) : null;
+        if (manualInput) {
+          event.preventDefault();
+          sendTerminalInput(manualInput);
+          return false;
+        }
+        if (shouldPreventTerminalBrowserShortcut(event as TerminalShortcutEvent)) {
+          event.preventDefault();
+        }
+        if (event.key === "Escape" && event.type === "keydown" && searchVisibleRef.current) {
+          closeSearchRef.current();
+          return false;
+        }
+        return true;
+      });
+
+      terminal.onSelectionChange(() => {
+        queueSelectionMenuUpdate();
+      });
+
+      terminal.onScroll(() => {
+        if (terminal.hasSelection()) {
+          queueSelectionMenuUpdate();
+        } else {
+          hideSelectionMenu();
+        }
+      });
+
+      terminal.onData((data) => {
+        if (callbacksRef.current.isExited) return;
+        if (!inputReadyRef.current) return;
+        if (wsRef.current?.readyState === WebSocket.OPEN) {
+          const msg = {
+            type: "input",
+            data: encodeUtf8Base64(data),
+          };
+          wsRef.current.send(JSON.stringify(msg));
+        }
+      });
+
+      connectWebSocket(terminal);
+
+      return () => {
+        isUnmountingRef.current = true;
+        inputReadyRef.current = false;
+        cancelSelectionMenuFrame();
+        clearReconnectTimer();
+        if (wsRef.current) {
+          const ws = wsRef.current;
+          wsRef.current = null;
+          ws.onopen = null;
+          ws.onmessage = null;
+          ws.onclose = null;
+          ws.onerror = null;
+          try {
+            ws.close();
+          } catch {}
+        }
+        disposeOscHandlers();
+        terminal.dispose();
+        terminalRef.current = null;
+        fitAddonRef.current = null;
+        searchAddonRef.current = null;
+        serializeAddonRef.current = null;
+        progressAddonRef.current = null;
+        initializedRef.current = false;
+      };
+    }, [
+      cancelSelectionMenuFrame,
+      connectWebSocket,
+      handleOscNotification,
+      hideSelectionMenu,
+      queueSelectionMenuUpdate,
+      terminalId,
+    ]);
+
+    useEffect(() => {
+      if (isActive && fitAddonRef.current && terminalRef.current) {
+        setTimeout(() => {
+          fitAddonRef.current?.fit();
+
+          if (wsRef.current?.readyState === WebSocket.OPEN && terminalRef.current) {
+            const { cols, rows } = terminalRef.current;
+            wsRef.current.send(JSON.stringify({ type: "resize", cols, rows }));
+          }
+        }, 50);
+      }
+    }, [isActive]);
+
+    useEffect(() => {
+      if (!isActive || !isFocused || !terminalRef.current) {
+        return;
+      }
+      const timer = setTimeout(() => {
+        terminalRef.current?.focus();
+      }, 50);
+      return () => clearTimeout(timer);
+    }, [isActive, isFocused]);
+
+    useEffect(() => {
+      const container = containerRef.current;
+      if (!container || !fitAddonRef.current) return;
+
+      const observer = new ResizeObserver(() => {
+        if (isActive && fitAddonRef.current) {
+          fitAddonRef.current.fit();
+          if (wsRef.current?.readyState === WebSocket.OPEN && terminalRef.current) {
+            const { cols, rows } = terminalRef.current;
+            wsRef.current.send(JSON.stringify({ type: "resize", cols, rows }));
+          }
+        }
+      });
+
+      observer.observe(container);
+      return () => observer.disconnect();
+    }, [isActive]);
+
+    const touchStartRef = useRef<{ y: number } | null>(null);
+    const touchAccumRef = useRef(0);
+
+    useEffect(() => {
+      const container = containerRef.current;
+      if (!container) return;
+
+      const onTouchStart = (e: TouchEvent) => {
+        if (e.touches.length === 2) {
+          const y = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+          touchStartRef.current = { y };
+          touchAccumRef.current = 0;
+        } else {
+          touchStartRef.current = null;
+        }
+      };
+
+      const onTouchMove = (e: TouchEvent) => {
+        if (e.touches.length !== 2 || !touchStartRef.current) return;
+        e.preventDefault();
+        const y = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+        const delta = touchStartRef.current.y - y;
+        touchAccumRef.current += delta;
+        touchStartRef.current.y = y;
+        const fontSize = terminalRef.current?.options.fontSize ?? 14;
+        const lineHeight = terminalRef.current?.options.lineHeight ?? 1;
+        const linePixels = fontSize * lineHeight;
+        const lines = Math.round(touchAccumRef.current / linePixels);
+        if (lines !== 0 && terminalRef.current) {
+          terminalRef.current.scrollLines(lines);
+          touchAccumRef.current -= lines * linePixels;
+        }
+      };
+
+      const onTouchEnd = (e: TouchEvent) => {
+        if (e.touches.length < 2) {
+          touchStartRef.current = null;
+          touchAccumRef.current = 0;
+        }
+      };
+
+      container.addEventListener("touchstart", onTouchStart, { passive: true });
+      container.addEventListener("touchmove", onTouchMove, { passive: false });
+      container.addEventListener("touchend", onTouchEnd, { passive: true });
+
+      return () => {
+        container.removeEventListener("touchstart", onTouchStart);
+        container.removeEventListener("touchmove", onTouchMove);
+        container.removeEventListener("touchend", onTouchEnd);
+      };
+    }, []);
+
+    return (
+      <div
+        ref={wrapperRef}
+        className="absolute inset-0"
+        style={{
+          display: isActive ? "block" : "none",
+          backgroundColor: getXtermTheme(theme).background,
+        }}
+        onKeyDownCapture={(e) => {
+          const key = normalizeShortcutKey(e.key);
+          if ((e.ctrlKey || e.metaKey) && key === "f") {
+            e.preventDefault();
+            e.stopPropagation();
+            openSearchRef.current();
+            return;
+          }
+          if (shouldArmTerminalUnloadGuard(e.nativeEvent)) {
+            armTerminalBrowserUnloadGuard();
+          }
+          if (shouldPreventTerminalBrowserShortcut(e.nativeEvent)) {
+            e.preventDefault();
+          }
+        }}
+        onFocusCapture={() => setTerminalBrowserShortcutFocus(terminalId, true)}
+        onBlurCapture={() => setTimeout(syncBrowserShortcutFocus, 0)}
+        onPointerUpCapture={(e) => {
+          selectionAnchorRef.current = { clientX: e.clientX, clientY: e.clientY };
+          queueSelectionMenuUpdate();
+        }}
+      >
+        <div
+          ref={containerRef}
+          className="absolute inset-0 [&_.xterm]:!p-0 [&_.xterm]:!m-0 [&_.xterm-viewport]:!p-0 [&_.xterm-screen]:!p-0 [&_.xterm-screen]:!m-0"
+        />
+        {selectionMenu && (
+          <TerminalSelectionMenu
+            left={selectionMenu.left}
+            top={selectionMenu.top}
+            copyLabel={t("common.copy")}
+            searchLabel={t("common.search")}
+            clearLabel={t("common.clear")}
+            onCopy={handleSelectionCopy}
+            onSearch={handleSelectionSearch}
+            onClear={clearTerminalSelection}
+          />
+        )}
+        {progress && (
+          <div className="absolute bottom-0 left-0 right-0 z-10">
+            <div
+              className={`h-0.5 transition-all duration-300 ${
+                progress.state === 2 ? "bg-red-500" : progress.state === 4 ? "bg-yellow-500" : "bg-blue-500"
+              }`}
+              style={{
+                width: progress.state === 3 ? "100%" : `${progress.value}%`,
+                animation: progress.state === 3 ? "pulse 1.5s ease-in-out infinite" : undefined,
+              }}
+            />
+          </div>
+        )}
+        {searchVisible && (
+          <div className="absolute top-2 right-2 z-10 flex items-center gap-1.5 rounded-md border border-ide-border bg-ide-panel/95 px-2 py-1.5 shadow-lg backdrop-blur-sm">
+            <input
+              ref={searchInputRef}
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.shiftKey ? handleSearchPrev() : handleSearchNext();
+                } else if (e.key === "Escape") {
+                  closeSearch();
+                }
+              }}
+              placeholder="Search..."
+              className="w-40 bg-transparent text-xs text-ide-text outline-none placeholder:text-ide-mute/50"
+            />
+            <button
+              onClick={() => setSearchCaseSensitive((v) => !v)}
+              title="Case Sensitive"
+              className={`rounded px-1.5 py-0.5 text-xs font-medium transition-colors ${searchCaseSensitive ? "bg-ide-accent text-white" : "text-ide-mute hover:text-ide-text hover:bg-ide-bg"}`}
+            >
+              Aa
+            </button>
+            <button
+              onClick={() => setSearchRegex((v) => !v)}
+              title="Use Regex"
+              className={`rounded px-1.5 py-0.5 font-mono text-xs transition-colors ${searchRegex ? "bg-ide-accent text-white" : "text-ide-mute hover:text-ide-text hover:bg-ide-bg"}`}
+            >
+              .*
+            </button>
+            <div className="h-4 w-px bg-ide-border" />
+            <button
+              onClick={handleSearchPrev}
+              title="Previous (Shift+Enter)"
+              className="rounded p-0.5 text-ide-mute transition-colors hover:text-ide-text hover:bg-ide-bg"
+            >
+              <ChevronUp size={14} />
+            </button>
+            <button
+              onClick={handleSearchNext}
+              title="Next (Enter)"
+              className="rounded p-0.5 text-ide-mute transition-colors hover:text-ide-text hover:bg-ide-bg"
+            >
+              <ChevronDown size={14} />
+            </button>
+            <div className="h-4 w-px bg-ide-border" />
+            <button
+              onClick={() => {
+                const text = serializeAddonRef.current?.serialize();
+                if (!text) return;
+                navigator.clipboard.writeText(text).then(() => {
+                  setCopySuccess(true);
+                  setTimeout(() => setCopySuccess(false), 1500);
+                });
+              }}
+              title="Copy all output"
+              className="rounded p-0.5 text-ide-mute transition-colors hover:text-ide-text hover:bg-ide-bg"
+            >
+              {copySuccess ? <Check size={14} className="text-green-500" /> : <Copy size={14} />}
+            </button>
+            <button
+              onClick={closeSearch}
+              title="Close (Escape)"
+              className="rounded p-0.5 text-ide-mute transition-colors hover:text-ide-text hover:bg-ide-bg"
+            >
+              <X size={14} />
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  }
+);
+
+TerminalInstance.displayName = "TerminalInstance";
 
 export default TerminalInstance;

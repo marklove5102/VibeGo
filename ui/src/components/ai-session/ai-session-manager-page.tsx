@@ -524,7 +524,9 @@ const AISessionManagerPage: React.FC = () => {
   );
 
   const renderOutline = (compact: boolean) => (
-    <div className={cn("space-y-2 bg-ide-bg", compact ? "p-4" : "min-h-0 overflow-y-auto border-l border-ide-border p-4")}>
+    <div
+      className={cn("space-y-2 bg-ide-bg", compact ? "p-4" : "min-h-0 overflow-y-auto border-l border-ide-border p-4")}
+    >
       <div className="flex items-center gap-2 text-sm font-medium text-ide-text">
         <ListTree size={16} />
         <span>{t("plugin.aiSessionManager.outline")}</span>
@@ -616,7 +618,12 @@ const AISessionManagerPage: React.FC = () => {
             </div>
           ) : null}
         </div>
-        <div className={cn("grid min-h-0 flex-1 overflow-hidden", outlineItems.length > 0 ? "xl:grid-cols-[minmax(0,1fr)_240px]" : "")}>
+        <div
+          className={cn(
+            "grid min-h-0 flex-1 overflow-hidden",
+            outlineItems.length > 0 ? "xl:grid-cols-[minmax(0,1fr)_240px]" : ""
+          )}
+        >
           <div className="min-h-0 overflow-y-auto px-4 py-4">
             {detailLoading ? (
               <div className="flex h-full items-center justify-center text-sm text-ide-mute">{t("common.loading")}</div>

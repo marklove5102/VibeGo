@@ -137,8 +137,6 @@ const FileDetailSheet: React.FC<FileDetailSheetProps> = ({ file, open, onClose, 
     );
   };
 
-
-
   return (
     <Dialog
       open={open}

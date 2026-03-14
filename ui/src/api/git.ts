@@ -298,11 +298,7 @@ export const gitApi = {
     return request<GitDraft>(`/git/draft?${params.toString()}`);
   },
 
-  setDraft: (
-    path: string,
-    draft: Partial<GitDraft>,
-    scope?: { workspace_session_id?: string; group_id?: string }
-  ) =>
+  setDraft: (path: string, draft: Partial<GitDraft>, scope?: { workspace_session_id?: string; group_id?: string }) =>
     request<GitDraft>("/git/draft", {
       method: "POST",
       body: JSON.stringify({ path, ...draft, ...scope }),

@@ -80,9 +80,9 @@ const KeyboardTestView: React.FC<PageViewProps> = () => {
       const handleArrow = (deltaFn: (pos: number) => number, isHorizontalLeft = false, isHorizontalRight = false) => {
         if (e.select || e.shift) {
           const dir = textarea.selectionDirection || "none";
-          const activeCursor = (dir === "backward" || start === end) ? start : end;
+          const activeCursor = dir === "backward" || start === end ? start : end;
           const newCursor = deltaFn(activeCursor);
-          const fixedCursor = (dir === "backward" || start === end) ? end : start;
+          const fixedCursor = dir === "backward" || start === end ? end : start;
           const isNowBackward = newCursor < fixedCursor || (newCursor === fixedCursor && dir === "backward");
           const newStart = Math.min(newCursor, fixedCursor);
           const newEnd = Math.max(newCursor, fixedCursor);
@@ -93,7 +93,7 @@ const KeyboardTestView: React.FC<PageViewProps> = () => {
             textarea.setSelectionRange(collapseCursor, collapseCursor);
           } else {
             const dir = textarea.selectionDirection || "none";
-            const activeCursor = (dir === "backward") ? start : end;
+            const activeCursor = dir === "backward" ? start : end;
             const newCursor = deltaFn(start !== end ? activeCursor : start);
             textarea.setSelectionRange(newCursor, newCursor);
           }
@@ -134,19 +134,24 @@ const KeyboardTestView: React.FC<PageViewProps> = () => {
       }
 
       if (e.value === "Paste" || ((e.ctrl || e.meta) && e.value.toLowerCase() === "v")) {
-        navigator.clipboard.readText().then((clip) => {
-          historyRef.current.push(currentText);
-          if (historyRef.current.length > 100) historyRef.current.shift();
-          const next = currentText.slice(0, start) + clip + currentText.slice(end);
-          setText(next);
-          const cursor = start + clip.length;
-          setTimeout(() => {
-            if (textareaRef.current) {
-              textareaRef.current.setSelectionRange(cursor, cursor);
-              textareaRef.current.focus();
-            }
-          }, 0);
-        }).catch(() => { textarea.focus(); });
+        navigator.clipboard
+          .readText()
+          .then((clip) => {
+            historyRef.current.push(currentText);
+            if (historyRef.current.length > 100) historyRef.current.shift();
+            const next = currentText.slice(0, start) + clip + currentText.slice(end);
+            setText(next);
+            const cursor = start + clip.length;
+            setTimeout(() => {
+              if (textareaRef.current) {
+                textareaRef.current.setSelectionRange(cursor, cursor);
+                textareaRef.current.focus();
+              }
+            }, 0);
+          })
+          .catch(() => {
+            textarea.focus();
+          });
         return;
       }
 
@@ -204,37 +209,37 @@ const KeyboardTestView: React.FC<PageViewProps> = () => {
       } else if (e.value === "ArrowUp") {
         handleArrow((pos) => {
           const textBeforeBox = currentText.slice(0, pos);
-          const lastNewLine = textBeforeBox.lastIndexOf('\n');
+          const lastNewLine = textBeforeBox.lastIndexOf("\n");
           if (lastNewLine === -1) return 0;
           const currentColumn = pos - lastNewLine - 1;
-          const prevLineStart = currentText.lastIndexOf('\n', lastNewLine - 1);
+          const prevLineStart = currentText.lastIndexOf("\n", lastNewLine - 1);
           const prevLineLength = lastNewLine - (prevLineStart + 1);
-          return (prevLineStart + 1) + Math.min(currentColumn, Math.max(0, prevLineLength));
+          return prevLineStart + 1 + Math.min(currentColumn, Math.max(0, prevLineLength));
         });
         return;
       } else if (e.value === "ArrowDown") {
         handleArrow((pos) => {
           const textBeforeBox = currentText.slice(0, pos);
-          const lastNewLine = textBeforeBox.lastIndexOf('\n');
+          const lastNewLine = textBeforeBox.lastIndexOf("\n");
           const currentColumn = pos - lastNewLine - 1;
-          const nextNewLine = currentText.indexOf('\n', pos);
+          const nextNewLine = currentText.indexOf("\n", pos);
           if (nextNewLine === -1) return currentText.length;
-          const nextNextNewLine = currentText.indexOf('\n', nextNewLine + 1);
+          const nextNextNewLine = currentText.indexOf("\n", nextNewLine + 1);
           const nextLineEnd = nextNextNewLine === -1 ? currentText.length : nextNextNewLine;
           const nextLineLength = nextLineEnd - (nextNewLine + 1);
-          return (nextNewLine + 1) + Math.min(currentColumn, Math.max(0, nextLineLength));
+          return nextNewLine + 1 + Math.min(currentColumn, Math.max(0, nextLineLength));
         });
         return;
       } else if (e.value === "Home") {
         handleArrow((pos) => {
           const textBeforeBox = currentText.slice(0, pos);
-          const lastNewLine = textBeforeBox.lastIndexOf('\n');
+          const lastNewLine = textBeforeBox.lastIndexOf("\n");
           return lastNewLine + 1;
         });
         return;
       } else if (e.value === "End") {
         handleArrow((pos) => {
-          const nextNewLine = currentText.indexOf('\n', pos);
+          const nextNewLine = currentText.indexOf("\n", pos);
           return nextNewLine === -1 ? currentText.length : nextNewLine;
         });
         return;
@@ -438,7 +443,6 @@ const KeyboardTestView: React.FC<PageViewProps> = () => {
           ))}
         </div>
       </div>
-
     </div>
   );
 };

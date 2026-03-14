@@ -1,12 +1,12 @@
-import React from "react"
-import { cn } from "@/lib/utils"
+import React from "react";
+import { cn } from "@/lib/utils";
 
 export interface ActionButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-  icon: React.ReactNode
-  label: string
-  destructive?: boolean
-  badge?: string | number
-  title?: string
+  icon: React.ReactNode;
+  label: string;
+  destructive?: boolean;
+  badge?: string | number;
+  title?: string;
 }
 
 export const ActionButton = React.forwardRef<HTMLButtonElement, ActionButtonProps>(
@@ -51,8 +51,8 @@ export const ActionButton = React.forwardRef<HTMLButtonElement, ActionButtonProp
           {title && <span className="text-[11px] text-ide-mute">{title}</span>}
         </div>
       </button>
-    )
+    );
   }
-)
+);
 
-ActionButton.displayName = "ActionButton"
+ActionButton.displayName = "ActionButton";

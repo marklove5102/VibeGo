@@ -50,7 +50,10 @@ export const terminalApi = {
     workspaceSessionId: string,
     terminals: Array<{ id: string; group_id: string; parent_id?: string }>,
     workspaceState?: {
-      terminalsByGroup: Record<string, Array<{ id: string; name: string; pinned?: boolean; status?: TerminalStatus; parentId?: string }>>;
+      terminalsByGroup: Record<
+        string,
+        Array<{ id: string; name: string; pinned?: boolean; status?: TerminalStatus; parentId?: string }>
+      >;
       activeTerminalByGroup: Record<string, string | null>;
       listManagerOpenByGroup: Record<string, boolean>;
       terminalLayouts: Record<string, unknown>;

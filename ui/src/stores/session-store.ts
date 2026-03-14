@@ -279,10 +279,12 @@ function sanitizeLayoutNode(node: LayoutNode, validTerminalIDs: Set<string>): La
   };
 }
 
-function sanitizeTerminalWorkspaceState(state: Pick<
-  SessionState,
-  "terminalsByGroup" | "activeTerminalByGroup" | "listManagerOpenByGroup" | "terminalLayouts" | "focusedIdByGroup"
->) {
+function sanitizeTerminalWorkspaceState(
+  state: Pick<
+    SessionState,
+    "terminalsByGroup" | "activeTerminalByGroup" | "listManagerOpenByGroup" | "terminalLayouts" | "focusedIdByGroup"
+  >
+) {
   const terminalsByGroup: Record<string, TerminalSession[]> = {};
   const validTerminalIDs = new Set<string>();
 

@@ -366,7 +366,12 @@ const ProjectMenu: React.FC<ProjectMenuProps> = ({
         ))}
 
         <div className="mt-6 pt-4 border-t border-ide-border flex justify-between text-[10px] text-ide-mute">
-          <a href="https://github.com/xxnuo/VibeGo" target="_blank" rel="noopener noreferrer" className="hover:text-ide-accent transition-colors underline">
+          <a
+            href="https://github.com/xxnuo/VibeGo"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="hover:text-ide-accent transition-colors underline"
+          >
             VibeGo{serverVersion ? ` ${serverVersion}` : ""}
           </a>
           <span>{t("common.connected")}</span>

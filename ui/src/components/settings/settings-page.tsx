@@ -1,4 +1,19 @@
-import { AlignLeft, Bell, Eye, EyeOff, Grid, List, Mail, RefreshCw, Settings, User, Vibrate, Volume2, WrapText, X } from "lucide-react";
+import {
+  AlignLeft,
+  Bell,
+  Eye,
+  EyeOff,
+  Grid,
+  List,
+  Mail,
+  RefreshCw,
+  Settings,
+  User,
+  Vibrate,
+  Volume2,
+  WrapText,
+  X,
+} from "lucide-react";
 import React, { useEffect, useState } from "react";
 import { useFrameController } from "@/framework/frame/controller";
 import { type Locale, useTranslation } from "@/lib/i18n";

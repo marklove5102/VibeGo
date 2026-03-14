@@ -96,9 +96,7 @@ const PortRow: React.FC<{
             {port.protocol.toUpperCase()}
           </span>
         </div>
-        <div className="hidden sm:block flex-1 min-w-0 text-xs text-ide-mute truncate font-mono">
-          {port.localAddr}
-        </div>
+        <div className="hidden sm:block flex-1 min-w-0 text-xs text-ide-mute truncate font-mono">{port.localAddr}</div>
         <div className="hidden sm:block w-16 shrink-0">
           {port.status && (
             <span className="px-1.5 py-0.5 rounded text-[10px] bg-green-500/15 text-green-500">
@@ -111,9 +109,7 @@ const PortRow: React.FC<{
         </div>
         <div className="flex-1 sm:flex-none sm:w-32 shrink-0 text-xs text-ide-text truncate">
           {port.processName || "-"}
-          <span className="sm:hidden text-ide-mute ml-1">
-            {port.pid > 0 && `(${port.pid})`}
-          </span>
+          <span className="sm:hidden text-ide-mute ml-1">{port.pid > 0 && `(${port.pid})`}</span>
         </div>
       </button>
 
@@ -333,17 +329,14 @@ const PortManagerView: React.FC<PageViewProps> = () => {
     });
   }, [killTarget, killProcessMutation]);
 
-  const handleCreateForwardFromPort = useCallback(
-    (portNum: number) => {
-      setNewTargetAddr(`localhost:${portNum}`);
-      setNewListenPort("");
-      setNewProtocol("tcp");
-      setAddError("");
-      setAddDialogOpen(true);
-      setActiveTab("forwards");
-    },
-    []
-  );
+  const handleCreateForwardFromPort = useCallback((portNum: number) => {
+    setNewTargetAddr(`localhost:${portNum}`);
+    setNewListenPort("");
+    setNewProtocol("tcp");
+    setAddError("");
+    setAddDialogOpen(true);
+    setActiveTab("forwards");
+  }, []);
 
   return (
     <div className="h-full flex flex-col bg-ide-bg overflow-hidden">
@@ -470,18 +463,16 @@ const PortManagerView: React.FC<PageViewProps> = () => {
                       />
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className="font-mono font-semibold text-sm text-ide-text">
-                            :{fwd.listenPort}
-                          </span>
-                          <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${getProtocolColor(fwd.protocol)}`}>
+                          <span className="font-mono font-semibold text-sm text-ide-text">:{fwd.listenPort}</span>
+                          <span
+                            className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${getProtocolColor(fwd.protocol)}`}
+                          >
                             {fwd.protocol.toUpperCase()}
                           </span>
                           <ArrowRightLeft size={12} className="text-ide-mute" />
                           <span className="font-mono text-xs text-ide-mute truncate">{fwd.targetAddr}</span>
                         </div>
-                        {fwd.error && (
-                          <div className="mt-1 text-[10px] text-red-500 truncate">{fwd.error}</div>
-                        )}
+                        {fwd.error && <div className="mt-1 text-[10px] text-red-500 truncate">{fwd.error}</div>}
                       </div>
                       <div className="flex items-center gap-1 shrink-0">
                         <Button
@@ -514,7 +505,13 @@ const PortManagerView: React.FC<PageViewProps> = () => {
         </Tabs>
       </div>
 
-      <AlertDialog open={addDialogOpen} onOpenChange={(open) => { setAddDialogOpen(open); if (!open) setAddError(""); }}>
+      <AlertDialog
+        open={addDialogOpen}
+        onOpenChange={(open) => {
+          setAddDialogOpen(open);
+          if (!open) setAddError("");
+        }}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2">
@@ -525,7 +522,13 @@ const PortManagerView: React.FC<PageViewProps> = () => {
           <div className="space-y-3 py-2">
             <div className="space-y-1.5">
               <label className="text-xs text-ide-mute">{t("plugin.portManager.protocol")}</label>
-              <Select value={newProtocol} onValueChange={(v) => { setNewProtocol(v); setAddError(""); }}>
+              <Select
+                value={newProtocol}
+                onValueChange={(v) => {
+                  setNewProtocol(v);
+                  setAddError("");
+                }}
+              >
                 <SelectTrigger className="h-8 text-sm bg-ide-panel border-ide-border">
                   <SelectValue placeholder={t("plugin.portManager.selectProtocol")} />
                 </SelectTrigger>
@@ -542,33 +545,29 @@ const PortManagerView: React.FC<PageViewProps> = () => {
                 type="number"
                 placeholder={t("plugin.portManager.listenPortPlaceholder")}
                 value={newListenPort}
-                onChange={(e) => { setNewListenPort(e.target.value); setAddError(""); }}
+                onChange={(e) => {
+                  setNewListenPort(e.target.value);
+                  setAddError("");
+                }}
                 className="h-8 text-sm bg-ide-panel border-ide-border"
               />
             </div>
             <div className="space-y-1.5">
               <label className="text-xs text-ide-mute">{t("plugin.portManager.targetAddr")}</label>
               <Input
-                placeholder={
-                  newProtocol === "http"
-                    ? "http://localhost:8080"
-                    : "localhost:8080"
-                }
+                placeholder={newProtocol === "http" ? "http://localhost:8080" : "localhost:8080"}
                 value={newTargetAddr}
-                onChange={(e) => { setNewTargetAddr(e.target.value); setAddError(""); }}
+                onChange={(e) => {
+                  setNewTargetAddr(e.target.value);
+                  setAddError("");
+                }}
                 className="h-8 text-sm bg-ide-panel border-ide-border"
               />
               <p className="text-[10px] text-ide-mute">
-                {newProtocol === "http"
-                  ? t("plugin.portManager.httpHint")
-                  : t("plugin.portManager.tcpHint")}
+                {newProtocol === "http" ? t("plugin.portManager.httpHint") : t("plugin.portManager.tcpHint")}
               </p>
             </div>
-            {addError && (
-              <div className="text-xs text-red-500 bg-red-500/10 px-3 py-2 rounded-md">
-                {addError}
-              </div>
-            )}
+            {addError && <div className="text-xs text-red-500 bg-red-500/10 px-3 py-2 rounded-md">{addError}</div>}
           </div>
           <AlertDialogFooter className="gap-2 sm:gap-0">
             <AlertDialogCancel className="text-sm">{t("common.cancel")}</AlertDialogCancel>
@@ -577,9 +576,7 @@ const PortManagerView: React.FC<PageViewProps> = () => {
               disabled={!newListenPort || !newTargetAddr || addForwardMutation.isPending}
               className="text-sm"
             >
-              {addForwardMutation.isPending
-                ? t("plugin.portManager.creating")
-                : t("plugin.portManager.create")}
+              {addForwardMutation.isPending ? t("plugin.portManager.creating") : t("plugin.portManager.create")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

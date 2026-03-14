@@ -188,11 +188,7 @@ const TabBar: React.FC<TabBarProps> = ({ onRefresh, onBackToList }) => {
                 {editMode ? <Eye size={18} /> : <Edit size={18} />}
               </button>
             ) : (
-              <button
-                onClick={onRefresh}
-                className={cornerButtonClass}
-                title={t("common.refresh")}
-              >
+              <button onClick={onRefresh} className={cornerButtonClass} title={t("common.refresh")}>
                 <RefreshCw size={18} />
               </button>
             )}

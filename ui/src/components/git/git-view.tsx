@@ -12,7 +12,15 @@ import {
 } from "lucide-react";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
-import type { BranchStatusInfo, GitBranchesSnapshot, GitCommit, GitDraft, GitWSSnapshot, RemoteInfo, StashEntry } from "@/api/git";
+import type {
+  BranchStatusInfo,
+  GitBranchesSnapshot,
+  GitCommit,
+  GitDraft,
+  GitWSSnapshot,
+  RemoteInfo,
+  StashEntry,
+} from "@/api/git";
 import { gitApi } from "@/api/git";
 import { useDialog } from "@/components/common";
 import { usePageTopBar } from "@/hooks/use-page-top-bar";

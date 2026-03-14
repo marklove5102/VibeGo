@@ -102,7 +102,9 @@ const GroupButton: React.FC<GroupButtonProps> = ({
       <button
         onClick={() => onGroupClick(group.id)}
         className={`w-12 h-12 rounded-xl flex items-center justify-center transition-all ${
-          isActive ? "bg-ide-panel text-ide-accent shadow-sm" : "text-ide-mute hover:text-ide-text hover:bg-ide-panel/50"
+          isActive
+            ? "bg-ide-panel text-ide-accent shadow-sm"
+            : "text-ide-mute hover:text-ide-text hover:bg-ide-panel/50"
         }`}
         title={getTitle(group)}
       >
@@ -117,7 +119,9 @@ const GroupButton: React.FC<GroupButtonProps> = ({
       <button
         onClick={() => onGroupClick(group.id)}
         className={`w-12 h-12 rounded-xl flex items-center justify-center transition-all ${
-          isActive ? "bg-ide-panel text-ide-accent shadow-sm" : "text-ide-mute hover:text-ide-text hover:bg-ide-panel/50"
+          isActive
+            ? "bg-ide-panel text-ide-accent shadow-sm"
+            : "text-ide-mute hover:text-ide-text hover:bg-ide-panel/50"
         }`}
         title={getTitle(group)}
       >
@@ -257,41 +261,39 @@ const SideBar: React.FC<SideBarProps> = ({ onMenuClick, onNewPage }) => {
       <div className="w-10 h-px bg-ide-border/50 shrink-0" />
 
       <div className="flex-1 flex flex-col gap-2 overflow-y-auto no-scrollbar w-full px-2 items-center">
-        {useCustomItems ? (
-          bottomBarConfig.customItems!.map((item) => (
-            <button
-              key={item.id}
-              onClick={item.onClick}
-              className={`w-12 h-12 rounded-xl flex items-center justify-center relative transition-all ${
-                bottomBarConfig.activeItemId === item.id
-                  ? "bg-ide-panel text-ide-accent shadow-sm border border-ide-border/50"
-                  : "text-ide-mute hover:text-ide-text hover:bg-ide-panel/50"
-              }`}
-              title={item.label}
-            >
-              {item.icon}
-              {item.badge && (
-                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] rounded-full px-1 min-w-[16px] h-4 flex items-center justify-center">
-                  {item.badge}
-                </span>
-              )}
-            </button>
-          ))
-        ) : (
-          groups.map((group) => (
-            <GroupButton
-              key={group.id}
-              group={group}
-              isActive={activeGroupId === group.id}
-              isExpanded={shouldExpand(group)}
-              hasMultipleGroups={hasMultipleGroups}
-              getTitle={getGroupTitle}
-              getPageTitle={getPageTitle}
-              onGroupClick={handleGroupClick}
-              onPageClick={handlePageClick}
-            />
-          ))
-        )}
+        {useCustomItems
+          ? bottomBarConfig.customItems!.map((item) => (
+              <button
+                key={item.id}
+                onClick={item.onClick}
+                className={`w-12 h-12 rounded-xl flex items-center justify-center relative transition-all ${
+                  bottomBarConfig.activeItemId === item.id
+                    ? "bg-ide-panel text-ide-accent shadow-sm border border-ide-border/50"
+                    : "text-ide-mute hover:text-ide-text hover:bg-ide-panel/50"
+                }`}
+                title={item.label}
+              >
+                {item.icon}
+                {item.badge && (
+                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] rounded-full px-1 min-w-[16px] h-4 flex items-center justify-center">
+                    {item.badge}
+                  </span>
+                )}
+              </button>
+            ))
+          : groups.map((group) => (
+              <GroupButton
+                key={group.id}
+                group={group}
+                isActive={activeGroupId === group.id}
+                isExpanded={shouldExpand(group)}
+                hasMultipleGroups={hasMultipleGroups}
+                getTitle={getGroupTitle}
+                getPageTitle={getPageTitle}
+                onGroupClick={handleGroupClick}
+                onPageClick={handlePageClick}
+              />
+            ))}
 
         {onNewPage && !useCustomItems && (
           <button

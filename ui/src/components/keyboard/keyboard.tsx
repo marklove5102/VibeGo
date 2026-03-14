@@ -36,7 +36,16 @@ const KeyboardCore: React.FC<KeyboardProps> = ({ onKeyEvent, layout = KEYBOARD_Q
   const emitText = useCallback(
     (text: string) => {
       for (const ch of text) {
-        onKeyEvent({ type: "char", value: ch, ctrl: false, alt: false, shift: false, meta: false, select: false, fn: false });
+        onKeyEvent({
+          type: "char",
+          value: ch,
+          ctrl: false,
+          alt: false,
+          shift: false,
+          meta: false,
+          select: false,
+          fn: false,
+        });
       }
     },
     [onKeyEvent]
@@ -208,7 +217,7 @@ const KeyboardCore: React.FC<KeyboardProps> = ({ onKeyEvent, layout = KEYBOARD_Q
                 modState={
                   keyDef.type === "modifier"
                     ? getModState(keyDef.value)
-                    : keyDef.value === "Mic" && asrStatus === "recording"
+                    : (keyDef.value === "Mic" || keyDef.value === " ") && asrStatus === "recording"
                       ? "latched"
                       : undefined
                 }
@@ -228,13 +237,14 @@ const KeyboardCore: React.FC<KeyboardProps> = ({ onKeyEvent, layout = KEYBOARD_Q
 export const Keyboard: React.FC = () => {
   const { useNativeKeyboard, setUseNativeKeyboard, handlers } = useKeyboardStore();
   const theme = useAppStore((s) => s.theme);
-  
+
   const activeGroupId = useFrameStore((s) => s.activeGroupId);
   const activeTabId = useFrameStore((s) => s.getCurrentActiveTabId());
   const activePageId = useFrameStore((s) => s.getCurrentPage()?.id);
 
-  const [showKeyboard] = useState(() =>
-    typeof window !== "undefined" && (window.matchMedia("(pointer: coarse)").matches || navigator.maxTouchPoints > 0)
+  const [showKeyboard] = useState(
+    () =>
+      typeof window !== "undefined" && (window.matchMedia("(pointer: coarse)").matches || navigator.maxTouchPoints > 0)
   );
 
   const [inputFocused, setInputFocused] = useState(false);
@@ -249,23 +259,26 @@ export const Keyboard: React.FC = () => {
     return false;
   }, []);
 
-  const handleFocusIn = useCallback((e: FocusEvent) => {
-    if (checkFocusTimer.current) clearTimeout(checkFocusTimer.current);
-    const target = e.target as HTMLElement;
-    if (isEditable(target)) {
-      setInputFocused(true);
-      if (!useNativeKeyboard) {
-        if (target.getAttribute("inputmode") !== "none") {
-          target.dataset.originalInputMode = target.getAttribute("inputmode") || "text";
-          target.setAttribute("inputmode", "none");
-        }
-      } else {
-        if (target.dataset.originalInputMode !== undefined) {
-          target.setAttribute("inputmode", target.dataset.originalInputMode || "text");
+  const handleFocusIn = useCallback(
+    (e: FocusEvent) => {
+      if (checkFocusTimer.current) clearTimeout(checkFocusTimer.current);
+      const target = e.target as HTMLElement;
+      if (isEditable(target)) {
+        setInputFocused(true);
+        if (!useNativeKeyboard) {
+          if (target.getAttribute("inputmode") !== "none") {
+            target.dataset.originalInputMode = target.getAttribute("inputmode") || "text";
+            target.setAttribute("inputmode", "none");
+          }
+        } else {
+          if (target.dataset.originalInputMode !== undefined) {
+            target.setAttribute("inputmode", target.dataset.originalInputMode || "text");
+          }
         }
       }
-    }
-  }, [useNativeKeyboard, isEditable]);
+    },
+    [useNativeKeyboard, isEditable]
+  );
 
   const handleFocusOut = useCallback(() => {
     if (checkFocusTimer.current) clearTimeout(checkFocusTimer.current);
@@ -331,11 +344,11 @@ export const Keyboard: React.FC = () => {
     }
   }, [useNativeKeyboard, isEditable]);
 
-const cursorTracker = {
-  element: null as HTMLInputElement | HTMLTextAreaElement | null,
-  cursor: -1,
-  timer: null as ReturnType<typeof setTimeout> | null,
-};
+  const cursorTracker = {
+    element: null as HTMLInputElement | HTMLTextAreaElement | null,
+    cursor: -1,
+    timer: null as ReturnType<typeof setTimeout> | null,
+  };
 
   const handleVirtualKeyEvent = useCallback(
     (e: KeyEvent) => {
@@ -355,8 +368,8 @@ const cursorTracker = {
       if (e.value === "Escape" && e.type === "key") {
         const active = document.activeElement as HTMLElement | null;
         if (active) {
-            active.blur();
-            return;
+          active.blur();
+          return;
         }
       }
 
@@ -383,22 +396,31 @@ const cursorTracker = {
           metaKey: e.meta,
         });
         active.dispatchEvent(keydown);
-        
-        if (e.value.startsWith("Arrow") || e.value === "Home" || e.value === "End" || e.value === "PageUp" || e.value === "PageDown") {
-             const tag = active.tagName.toLowerCase();
-             if (tag === 'input' || tag === 'textarea' || active.isContentEditable) {
-                 if ((tag === 'input' || tag === 'textarea') && active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement) {
-                     const el = active as HTMLInputElement | HTMLTextAreaElement;
-                     const start = el.selectionStart || 0;
-                     if (e.value === "ArrowLeft") {
-                         const pos = Math.max(0, start - 1);
-                         el.setSelectionRange(pos, pos);
-                     } else if (e.value === "ArrowRight") {
-                         const pos = Math.min((el.value || '').length, start + 1);
-                         el.setSelectionRange(pos, pos);
-                     }
-                 }
-             }
+
+        if (
+          e.value.startsWith("Arrow") ||
+          e.value === "Home" ||
+          e.value === "End" ||
+          e.value === "PageUp" ||
+          e.value === "PageDown"
+        ) {
+          const tag = active.tagName.toLowerCase();
+          if (tag === "input" || tag === "textarea" || active.isContentEditable) {
+            if (
+              ((tag === "input" || tag === "textarea") && active instanceof HTMLInputElement) ||
+              active instanceof HTMLTextAreaElement
+            ) {
+              const el = active as HTMLInputElement | HTMLTextAreaElement;
+              const start = el.selectionStart || 0;
+              if (e.value === "ArrowLeft") {
+                const pos = Math.max(0, start - 1);
+                el.setSelectionRange(pos, pos);
+              } else if (e.value === "ArrowRight") {
+                const pos = Math.min((el.value || "").length, start + 1);
+                el.setSelectionRange(pos, pos);
+              }
+            }
+          }
         }
       }
 
@@ -406,10 +428,10 @@ const cursorTracker = {
 
       // Anti-jump mechanism for fast multi-touch typing on React controlled inputs
       if (activeInput && cursorTracker.element === activeInput && cursorTracker.cursor !== -1) {
-          if (activeInput.selectionStart !== cursorTracker.cursor) {
-              activeInput.selectionStart = cursorTracker.cursor;
-              activeInput.selectionEnd = cursorTracker.cursor;
-          }
+        if (activeInput.selectionStart !== cursorTracker.cursor) {
+          activeInput.selectionStart = cursorTracker.cursor;
+          activeInput.selectionEnd = cursorTracker.cursor;
+        }
       }
 
       let targetCursor = -1;
@@ -422,14 +444,14 @@ const cursorTracker = {
       } else if (action.type === "paste") {
         navigator.clipboard.readText().then((text) => {
           if (text) {
-             if (activeInput) targetCursor = (activeInput.selectionStart ?? 0) + text.length;
-             document.execCommand("insertText", false, text);
-             if (activeInput && targetCursor !== -1) {
-                setTimeout(() => {
-                    activeInput.selectionStart = targetCursor;
-                    activeInput.selectionEnd = targetCursor;
-                }, 0);
-             }
+            if (activeInput) targetCursor = (activeInput.selectionStart ?? 0) + text.length;
+            document.execCommand("insertText", false, text);
+            if (activeInput && targetCursor !== -1) {
+              setTimeout(() => {
+                activeInput.selectionStart = targetCursor;
+                activeInput.selectionEnd = targetCursor;
+              }, 0);
+            }
           }
         });
       } else if (action.type === "cut") {
@@ -439,45 +461,45 @@ const cursorTracker = {
         document.execCommand("undo");
       } else if (action.type === "select") {
         if (activeInput) {
-            activeInput.select();
+          activeInput.select();
         } else {
-            document.execCommand("selectAll");
+          document.execCommand("selectAll");
         }
       } else if (e.value === "Backspace") {
         if (activeInput) {
-            const start = activeInput.selectionStart ?? 0;
-            const end = activeInput.selectionEnd ?? 0;
-            targetCursor = start !== end ? start : Math.max(0, start - 1);
+          const start = activeInput.selectionStart ?? 0;
+          const end = activeInput.selectionEnd ?? 0;
+          targetCursor = start !== end ? start : Math.max(0, start - 1);
         }
         document.execCommand("delete");
       } else if (e.value === "Delete") {
         if (activeInput) {
-            const start = activeInput.selectionStart ?? 0;
-            const end = activeInput.selectionEnd ?? 0;
-            targetCursor = start !== end ? start : start;
+          const start = activeInput.selectionStart ?? 0;
+          const end = activeInput.selectionEnd ?? 0;
+          targetCursor = start !== end ? start : start;
         }
         document.execCommand("forwardDelete");
       }
 
       if (activeInput && targetCursor !== -1) {
-          cursorTracker.element = activeInput;
-          cursorTracker.cursor = targetCursor;
-          
-          if (cursorTracker.timer) clearTimeout(cursorTracker.timer);
+        cursorTracker.element = activeInput;
+        cursorTracker.cursor = targetCursor;
+
+        if (cursorTracker.timer) clearTimeout(cursorTracker.timer);
+        cursorTracker.timer = setTimeout(() => {
+          if (cursorTracker.element) {
+            cursorTracker.element.selectionStart = cursorTracker.cursor;
+            cursorTracker.element.selectionEnd = cursorTracker.cursor;
+          }
+          // Clear tracker after a short delay so manual clicks aren't overridden
           cursorTracker.timer = setTimeout(() => {
-              if (cursorTracker.element) {
-                  cursorTracker.element.selectionStart = cursorTracker.cursor;
-                  cursorTracker.element.selectionEnd = cursorTracker.cursor;
-              }
-              // Clear tracker after a short delay so manual clicks aren't overridden
-              cursorTracker.timer = setTimeout(() => {
-                  cursorTracker.element = null;
-                  cursorTracker.cursor = -1;
-              }, 50);
-          }, 0);
+            cursorTracker.element = null;
+            cursorTracker.cursor = -1;
+          }, 50);
+        }, 0);
       } else {
-          cursorTracker.element = null;
-          cursorTracker.cursor = -1;
+        cursorTracker.element = null;
+        cursorTracker.cursor = -1;
       }
     },
     [setUseNativeKeyboard, isEditable]

@@ -45,7 +45,9 @@ function formatTemplate(template: string, values: Record<string, string | number
 function HttpUpgradePage() {
   const [locale, setLocale] = useState<Locale>(detectLocale);
   const [theme, setTheme] = useState<"light" | "dark">(() =>
-    typeof window !== "undefined" && window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"
+    typeof window !== "undefined" && window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches
+      ? "dark"
+      : "light"
   );
   const [autoRedirect, setAutoRedirect] = useState(true);
   const [secondsRemaining, setSecondsRemaining] = useState(REDIRECT_DELAY_SECONDS);
