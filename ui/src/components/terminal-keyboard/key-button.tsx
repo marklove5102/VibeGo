@@ -9,7 +9,16 @@ import {
   ArrowLeftToLine,
   ArrowRightToLine,
   Delete,
-  CornerDownLeft
+  CornerDownLeft,
+  Undo2,
+  Scissors,
+  Copy,
+  Clipboard,
+  Keyboard,
+  Smile,
+  Settings,
+  Mic,
+  BoxSelect
 } from 'lucide-react'
 import type { KeyDef, SwipeDir } from '@/components/terminal-keyboard/core/types'
 import { getSwipeDirection, SWIPE_DIRS, isSpecialKey, MODIFIER_KEYS } from '@/components/terminal-keyboard/core/types'
@@ -33,6 +42,18 @@ const DISPLAY_LABELS: Record<string, React.ReactNode> = {
   Enter: <CornerDownLeft size={12} strokeWidth={2.5} />,
   Insert: 'Ins',
   Delete: 'Del',
+  Tab: '↹',
+  Select: <BoxSelect size={12} strokeWidth={2.5} />,
+  Undo: <Undo2 size={12} strokeWidth={2.5} />,
+  Cut: <Scissors size={12} strokeWidth={2.5} />,
+  Copy: <Copy size={12} strokeWidth={2.5} />,
+  Paste: <Clipboard size={12} strokeWidth={2.5} />,
+  Clipboard: <Clipboard size={12} strokeWidth={2.5} />,
+  Keyboard: <Keyboard size={12} strokeWidth={2.5} />,
+  Emoji: <Smile size={12} strokeWidth={2.5} />,
+  Settings: <Settings size={12} strokeWidth={2.5} />,
+  Mic: <Mic size={12} strokeWidth={2.5} />,
+  Caps: '⇪',
 }
 
 interface KeyButtonProps {
