@@ -18,11 +18,11 @@ import {
   Copy,
   ClipboardPaste,
   ClipboardList,
-  Keyboard,
-  Smile,
   Mic,
   BoxSelect,
-  CheckSquare
+  CheckSquare,
+  Keyboard,
+  Smile
 } from 'lucide-react'
 import type { KeyDef, SwipeDir } from '@/components/keyboard/core/types'
 import { getSwipeDirection, isSpecialKey, MODIFIER_KEYS, SWIPE_DIRS } from '@/components/keyboard/core/types'
@@ -284,12 +284,14 @@ const KeyButton: React.FC<KeyButtonProps> = ({ keyDef, modState, shiftActive, on
         const sub = keyDef.sub?.[dir]
         if (!sub) return null
         const highlight = swipeDir === dir
+        const labelNode = DISPLAY_LABELS[sub] || sub
+        const isLongText = typeof labelNode === 'string' && labelNode.length >= 3
         return (
           <span
             key={dir}
-            className={`tk-sub tk-sub--${dir}${highlight ? ' tk-sub--highlight' : ''}`}
+            className={`tk-sub tk-sub--${dir}${highlight ? ' tk-sub--highlight' : ''}${isLongText ? ' tk-sub--long' : ''}`}
           >
-            {DISPLAY_LABELS[sub] || sub}
+            {labelNode}
           </span>
         )
       })}

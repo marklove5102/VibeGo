@@ -29,7 +29,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--tk-gap-y);
-  padding: 8px var(--tk-side-pad) 8px;
+  padding: 10px var(--tk-side-pad) 8px;
   background: var(--tk-bg);
   font-family: var(--tk-font-family);
   user-select: none;
@@ -67,6 +67,17 @@
   -webkit-tap-highlight-color: transparent;
   transition: background 0.08s;
   min-width: 0;
+}
+
+/* Invisible hit area expansion */
+.tk-key::after {
+  content: "";
+  position: absolute;
+  top: calc(var(--tk-gap-y) * -0.5);
+  bottom: calc(var(--tk-gap-y) * -0.5);
+  left: calc(var(--tk-gap-x) * -0.5);
+  right: calc(var(--tk-gap-x) * -0.5);
+  z-index: 10;
 }
 
 .tk-key--fn {
@@ -118,6 +129,11 @@
   white-space: nowrap;
   overflow: hidden;
   transition: color 0.1s, font-size 0.1s;
+}
+
+.tk-sub--long {
+  font-size: calc(var(--tk-font-sub) - 2px);
+  letter-spacing: -0.5px;
 }
 
 .tk-sub--highlight {

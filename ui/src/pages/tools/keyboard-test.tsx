@@ -32,6 +32,7 @@ const KeyboardTestView: React.FC<PageViewProps> = () => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const logRef = useRef<HTMLDivElement>(null);
   const historyRef = useRef<string[]>([]);
+  const [useNativeKb, setUseNativeKb] = useState(false);
 
   const scrollBottom = useCallback((ref: React.RefObject<HTMLDivElement | null>) => {
     requestAnimationFrame(() => {
@@ -61,6 +62,16 @@ const KeyboardTestView: React.FC<PageViewProps> = () => {
       let nextText = currentText;
       let finalCursor = start;
       let handled = false;
+
+      if (e.value !== "Keyboard") {
+        setUseNativeKb(false);
+        if (textarea.inputMode === "text") {
+          textarea.dataset.ignoreBlur = "true";
+          textarea.inputMode = "none";
+          textarea.blur();
+          textarea.dataset.ignoreBlur = "false";
+        }
+      }
 
       const handleArrow = (deltaFn: (pos: number) => number, isHorizontalLeft = false, isHorizontalRight = false) => {
         if (e.select || e.shift) {
@@ -150,6 +161,18 @@ const KeyboardTestView: React.FC<PageViewProps> = () => {
         return;
       }
 
+      if (e.value === "Keyboard") {
+        setUseNativeKb(true);
+        if (textareaRef.current) {
+          textareaRef.current.dataset.ignoreBlur = "true";
+          textareaRef.current.inputMode = "text";
+          textareaRef.current.blur();
+          textareaRef.current.dataset.ignoreBlur = "false";
+          textareaRef.current.focus();
+        }
+        return;
+      }
+
       if (e.value === "Backspace") {
         if (start !== end) {
           nextText = currentText.slice(0, start) + currentText.slice(end);
@@ -197,6 +220,25 @@ const KeyboardTestView: React.FC<PageViewProps> = () => {
           const nextLineLength = nextLineEnd - (nextNewLine + 1);
           return (nextNewLine + 1) + Math.min(currentColumn, Math.max(0, nextLineLength));
         });
+        return;
+      } else if (e.value === "Home") {
+        handleArrow((pos) => {
+          const textBeforeBox = currentText.slice(0, pos);
+          const lastNewLine = textBeforeBox.lastIndexOf('\n');
+          return lastNewLine + 1;
+        });
+        return;
+      } else if (e.value === "End") {
+        handleArrow((pos) => {
+          const nextNewLine = currentText.indexOf('\n', pos);
+          return nextNewLine === -1 ? currentText.length : nextNewLine;
+        });
+        return;
+      } else if (e.value === "PageUp") {
+        handleArrow((pos) => Math.max(0, pos - 150));
+        return;
+      } else if (e.value === "PageDown") {
+        handleArrow((pos) => Math.min(currentText.length, pos + 150));
         return;
       } else if (!(e.ctrl || e.meta || e.alt)) {
         let insertText = "";
@@ -302,6 +344,11 @@ const KeyboardTestView: React.FC<PageViewProps> = () => {
             if (historyRef.current.length > 100) historyRef.current.shift();
             setText(e.target.value);
           }}
+          onBlur={(e) => {
+            if (e.target.dataset.ignoreBlur === "true") return;
+            setUseNativeKb(false);
+          }}
+          inputMode={useNativeKb ? "text" : "none"}
           placeholder="Click keyboard to type here..."
           style={{
             flex: 1,
