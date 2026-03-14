@@ -6,6 +6,8 @@ ARTIFACTS_DIR ?= artifacts
 BINARY_NAME ?= vibego
 UI_DIR ?= ui
 RELEASE_TARGETS ?= android/arm64 linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64
+CURRENT_GOOS ?= $(shell go env GOOS)
+CURRENT_GOARCH ?= $(shell go env GOARCH)
 
 generate-docs:
 	@echo "Generating docs..."
@@ -25,11 +27,9 @@ dev-server:
 dev-ui:
 	cd ui && pnpm run dev --host
 
-build:
-	@mkdir -p $(DIST_DIR)
-	@ext=""; \
-	if [ "$$(go env GOOS)" = "windows" ]; then ext=".exe"; fi; \
-	CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X github.com/xxnuo/vibego/internal/version.Version=$(VERSION)" -o "$(DIST_DIR)/$(BINARY_NAME)$${ext}" ./
+build: build-frontend
+	$(MAKE) build-backend GOOS=$(CURRENT_GOOS) GOARCH=$(CURRENT_GOARCH) VERSION=$(VERSION)
+	$(MAKE) package-backend GOOS=$(CURRENT_GOOS) GOARCH=$(CURRENT_GOARCH) VERSION=$(VERSION)
 
 download-sherpa:
 	@bash scripts/download-sherpa.sh
