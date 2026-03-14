@@ -4,6 +4,24 @@ A Web IDE built for professionals, designed for Vibe Coding anytime, anywhere. F
 
 为专业人士打造，支持随时随地 Vibe Coding 的 Web IDE。自由使用你的 Claude Code、Gemini CLI、CodeX、OpenCode 及更多工具。
 
+## Preview
+
+<p align="center">
+  <img src="assets/previews/file.png" width="30%" alt="File Explorer" />
+  <img src="assets/previews/git.png" width="30%" alt="Git Integration" />
+  <img src="assets/previews/terminal.png" width="30%" alt="Terminal" />
+</p>
+
+<p align="center">
+  <img src="assets/previews/menu.png" width="45%" alt="Menu" />
+  <img src="assets/previews/setting.png" width="45%" alt="Settings" />
+</p>
+
+<p align="center">
+  <img src="assets/previews/theme1_file.png" width="45%" alt="Theme 1" />
+  <img src="assets/previews/theme2_file.png" width="45%" alt="Theme 2" />
+</p>
+
 ## What is VibeGo? | 什么是 VibeGo？
 
 VibeGo is a lightweight yet powerful Web IDE that allows you to access your local codebase, run terminal commands, and manage your Git repository entirely from your browser. It is optimized for AI-assisted coding (Vibe Coding), providing a secure, seamless remote development environment without the heavy overhead of traditional desktop IDEs.
@@ -48,26 +66,3 @@ You can configure VibeGo using command-line flags or environment variables prefi
 - `--allow-wan, -a` / `VG_ALLOW_WAN`: Allow WAN access. Note: Only works if a key is provided. (允许广域网访问。注意：仅在提供密钥时生效。)
 - `--shell` / `VG_SHELL`: Default shell for terminal sessions. (终端会话的默认 Shell)
 - `--log-level` / `VG_LOG_LEVEL`: Log level (debug, info, warn, error). (日志级别)
-
-## Preview
-
-<p align="center">
-  <img src="assets/previews/file.png" width="30%" alt="File Explorer" />
-  <img src="assets/previews/git.png" width="30%" alt="Git Integration" />
-  <img src="assets/previews/terminal.png" width="30%" alt="Terminal" />
-</p>
-
-<p align="center">
-  <img src="assets/previews/menu.png" width="45%" alt="Menu" />
-  <img src="assets/previews/setting.png" width="45%" alt="Settings" />
-</p>
-
-<p align="center">
-  <img src="assets/previews/theme1_file.png" width="45%" alt="Theme 1" />
-  <img src="assets/previews/theme2_file.png" width="45%" alt="Theme 2" />
-</p>
-
-## Tech Stack | 技术栈
-
-**Backend | 后端:** Go, Gin, GORM (SQLite), Go-git
-**Frontend | 前端:** React 19, Vite, Tailwind CSS v4, Monaco Editor, Xterm.js
