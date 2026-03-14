@@ -68,6 +68,106 @@ const getXtermTheme = (appTheme: Theme): ITheme => {
     };
   }
 
+  if (appTheme === "ocean") {
+    return {
+      background: "#0a1628",
+      foreground: "#e0f2fe",
+      cursor: "#22d3ee",
+      selectionBackground: "rgba(34, 211, 238, 0.3)",
+      black: "#0a1628",
+      red: "#f472b6",
+      green: "#34d399",
+      yellow: "#fbbf24",
+      blue: "#60a5fa",
+      magenta: "#c084fc",
+      cyan: "#22d3ee",
+      white: "#e0f2fe",
+      brightBlack: "#1a3a5c",
+      brightRed: "#fb7185",
+      brightGreen: "#6ee7b7",
+      brightYellow: "#fcd34d",
+      brightBlue: "#93c5fd",
+      brightMagenta: "#d8b4fe",
+      brightCyan: "#67e8f9",
+      brightWhite: "#ffffff",
+    };
+  }
+
+  if (appTheme === "sunset") {
+    return {
+      background: "#1a0f0a",
+      foreground: "#fef3c7",
+      cursor: "#f59e0b",
+      selectionBackground: "rgba(245, 158, 11, 0.3)",
+      black: "#1a0f0a",
+      red: "#fb7185",
+      green: "#a3e635",
+      yellow: "#f59e0b",
+      blue: "#60a5fa",
+      magenta: "#e879f9",
+      cyan: "#22d3ee",
+      white: "#fef3c7",
+      brightBlack: "#4a2c1a",
+      brightRed: "#fda4af",
+      brightGreen: "#bef264",
+      brightYellow: "#fbbf24",
+      brightBlue: "#93c5fd",
+      brightMagenta: "#f0abfc",
+      brightCyan: "#67e8f9",
+      brightWhite: "#ffffff",
+    };
+  }
+
+  if (appTheme === "nord") {
+    return {
+      background: "#2e3440",
+      foreground: "#eceff4",
+      cursor: "#88c0d0",
+      selectionBackground: "rgba(136, 192, 208, 0.3)",
+      black: "#3b4252",
+      red: "#bf616a",
+      green: "#a3be8c",
+      yellow: "#ebcb8b",
+      blue: "#81a1c1",
+      magenta: "#b48ead",
+      cyan: "#88c0d0",
+      white: "#e5e9f0",
+      brightBlack: "#4c566a",
+      brightRed: "#bf616a",
+      brightGreen: "#a3be8c",
+      brightYellow: "#ebcb8b",
+      brightBlue: "#81a1c1",
+      brightMagenta: "#b48ead",
+      brightCyan: "#8fbcbb",
+      brightWhite: "#eceff4",
+    };
+  }
+
+  if (appTheme === "solarized") {
+    return {
+      background: "#002b36",
+      foreground: "#fdf6e3",
+      cursor: "#b58900",
+      selectionBackground: "rgba(181, 137, 0, 0.3)",
+      black: "#073642",
+      red: "#dc322f",
+      green: "#859900",
+      yellow: "#b58900",
+      blue: "#268bd2",
+      magenta: "#d33682",
+      cyan: "#2aa198",
+      white: "#eee8d5",
+      brightBlack: "#586e75",
+      brightRed: "#cb4b16",
+      brightGreen: "#859900",
+      brightYellow: "#b58900",
+      brightBlue: "#268bd2",
+      brightMagenta: "#6c71c4",
+      brightCyan: "#2aa198",
+      brightWhite: "#fdf6e3",
+    };
+  }
+
   if (isDark) {
     return {
       background: "#18181b",

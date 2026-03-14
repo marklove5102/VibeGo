@@ -148,7 +148,6 @@ const SettingsPage: React.FC = () => {
   const { setTopBarConfig } = useFrameController();
   const removeGroup = useFrameStore((s) => s.removeGroup);
 
-  const hiddenKeys = new Set(["theme", "locale"]);
   const [activeTab, setActiveTab] = useState(SETTING_CATEGORIES[0].key);
 
   const handleSettingChange = (key: string, value: string) => {
@@ -201,7 +200,7 @@ const SettingsPage: React.FC = () => {
     );
   }
 
-  const categorySettings = getSettingsByCategory(activeTab).filter((schema) => !hiddenKeys.has(schema.key));
+  const categorySettings = getSettingsByCategory(activeTab);
 
   return (
     <div className="h-full overflow-y-auto bg-ide-bg">

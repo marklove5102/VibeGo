@@ -140,6 +140,18 @@ const App: React.FC = () => {
         root.classList.add("dark", "terminal");
         body.classList.add("scanlines");
         break;
+      case "ocean":
+        root.classList.add("dark", "ocean");
+        break;
+      case "sunset":
+        root.classList.add("dark", "sunset");
+        break;
+      case "nord":
+        root.classList.add("dark", "nord");
+        break;
+      case "solarized":
+        root.classList.add("dark", "solarized");
+        break;
     }
   }, [theme]);
 

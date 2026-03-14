@@ -31,6 +31,10 @@ export const SETTINGS_SCHEMA: SettingSchema[] = [
       { value: "dark", label: "settings.theme.optionDark" },
       { value: "hacker", label: "settings.theme.optionHacker" },
       { value: "terminal", label: "settings.theme.optionTerminal" },
+      { value: "ocean", label: "settings.theme.optionOcean" },
+      { value: "sunset", label: "settings.theme.optionSunset" },
+      { value: "nord", label: "settings.theme.optionNord" },
+      { value: "solarized", label: "settings.theme.optionSolarized" },
     ],
   },
   {

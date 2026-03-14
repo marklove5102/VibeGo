@@ -236,7 +236,11 @@
       "optionLight": "浅色",
       "optionDark": "深色",
       "optionHacker": "黑客",
-      "optionTerminal": "终端"
+      "optionTerminal": "终端",
+      "optionOcean": "深海",
+      "optionSunset": "日落",
+      "optionNord": "北极",
+      "optionSolarized": "曜石"
     },
     "locale": {
       "label": "语言",
@@ -299,6 +303,10 @@
       "dark": "深色",
       "hacker": "黑客",
       "terminal": "终端",
+      "ocean": "深海",
+      "sunset": "日落",
+      "nord": "北极",
+      "solarized": "曜石",
       "english": "英文",
       "chinese": "中文",
       "default": "默认",

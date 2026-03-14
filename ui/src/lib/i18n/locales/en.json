@@ -226,7 +226,11 @@
       "optionLight": "Light",
       "optionDark": "Dark",
       "optionHacker": "Hacker",
-      "optionTerminal": "Terminal"
+      "optionTerminal": "Terminal",
+      "optionOcean": "Ocean",
+      "optionSunset": "Sunset",
+      "optionNord": "Nord",
+      "optionSolarized": "Solarized"
     },
     "locale": {
       "label": "Language",
@@ -289,6 +293,10 @@
       "dark": "Dark",
       "hacker": "Hacker",
       "terminal": "Terminal",
+      "ocean": "Ocean",
+      "sunset": "Sunset",
+      "nord": "Nord",
+      "solarized": "Solarized",
       "english": "English",
       "chinese": "中文",
       "default": "Default",

@@ -1,6 +1,6 @@
 import { create } from "zustand";
 
-export type Theme = "light" | "dark" | "hacker" | "terminal";
+export type Theme = "light" | "dark" | "hacker" | "terminal" | "ocean" | "sunset" | "nord" | "solarized";
 export type Locale = "en" | "zh";
 
 interface AppState {
@@ -15,7 +15,7 @@ interface AppState {
   setMenuOpen: (open: boolean) => void;
 }
 
-const THEME_ORDER: Theme[] = ["light", "dark", "hacker", "terminal"];
+const THEME_ORDER: Theme[] = ["light", "dark", "hacker", "terminal", "ocean", "sunset", "nord", "solarized"];
 
 export const useAppStore = create<AppState>((set, get) => ({
   theme: "light",

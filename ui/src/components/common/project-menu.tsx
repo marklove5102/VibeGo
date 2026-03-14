@@ -10,9 +10,12 @@ import {
   Save,
   Search,
   Settings,
+  Snowflake,
   Sun,
+  Sunset,
   Terminal,
   Undo2,
+  Waves,
   X,
   XCircle,
 } from "lucide-react";
@@ -143,16 +146,17 @@ const ProjectMenu: React.FC<ProjectMenuProps> = ({
     onClose();
   };
 
-  const themeIcon =
-    themeValue === "light" ? (
-      <Sun size={18} />
-    ) : themeValue === "dark" ? (
-      <Moon size={18} />
-    ) : themeValue === "hacker" ? (
-      <Monitor size={18} />
-    ) : (
-      <Terminal size={18} />
-    );
+  const themeIconMap: Record<string, React.ReactNode> = {
+    light: <Sun size={18} />,
+    dark: <Moon size={18} />,
+    hacker: <Monitor size={18} />,
+    terminal: <Terminal size={18} />,
+    ocean: <Waves size={18} />,
+    sunset: <Sunset size={18} />,
+    nord: <Snowflake size={18} />,
+    solarized: <Sun size={18} />,
+  };
+  const themeIcon = themeIconMap[themeValue] || <Sun size={18} />;
 
   const translateOptionLabel = (label: string) => (label.startsWith("settings.") ? t(label) : label);
   const themeLabel = themeSchema?.options?.find((opt) => opt.value === themeValue)?.label || themeValue;
