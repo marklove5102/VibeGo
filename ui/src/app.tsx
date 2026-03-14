@@ -1,4 +1,6 @@
 import React, { useCallback, useEffect, useState } from "react";
+import { authApi } from "@/api/auth";
+import { getStoredAuthKey, LoginPage, setStoredAuthKey } from "@/components/login-page";
 import { fileApi } from "@/api/file";
 import { DirectoryPicker, NewPageMenu, ProjectMenu, useDialog } from "@/components/common";
 import { AppFrame, NewGroupMenu } from "@/components/frame";
@@ -23,6 +25,9 @@ const App: React.FC = () => {
   const { theme, locale, isMenuOpen, setMenuOpen, setTheme, setLocale } = useAppStore();
   const dialog = useDialog();
   const t = useTranslation(locale);
+
+  const [authChecked, setAuthChecked] = useState(false);
+  const [needLogin, setNeedLogin] = useState(false);
 
   const resetPreview = usePreviewStore((s) => s.reset);
   const initSettings = useSettingsStore((s) => s.init);
@@ -53,9 +58,39 @@ const App: React.FC = () => {
     initTerminalCleanup();
   }, [initSettings]);
 
+  useEffect(() => {
+    const checkAuth = async () => {
+      try {
+        const status = await authApi.status();
+        if (status.need_login) {
+          const storedKey = getStoredAuthKey();
+          if (storedKey) {
+            try {
+              const loginRes = await authApi.login(storedKey);
+              if (loginRes.ok) {
+                setNeedLogin(false);
+                setAuthChecked(true);
+                return;
+              }
+            } catch {}
+            setStoredAuthKey(null);
+          }
+          setNeedLogin(true);
+        } else {
+          setNeedLogin(false);
+        }
+      } catch {
+        setNeedLogin(false);
+      }
+      setAuthChecked(true);
+    };
+    checkAuth();
+  }, []);
+
   const initSession = useSessionStore((s) => s.initSession);
 
   useEffect(() => {
+    if (!authChecked || needLogin) return;
     const init = async () => {
       const hasSession = await initSession();
       if (!hasSession) {
@@ -63,7 +98,7 @@ const App: React.FC = () => {
       }
     };
     init();
-  }, [initSession, initDefaultGroups]);
+  }, [initSession, initDefaultGroups, authChecked, needLogin]);
 
   useEffect(() => {
     const handleBeforeUnload = () => {
@@ -240,6 +275,14 @@ const App: React.FC = () => {
         return null;
     }
   };
+
+  if (!authChecked) {
+    return null;
+  }
+
+  if (needLogin) {
+    return <LoginPage locale={locale} onLoginSuccess={() => setNeedLogin(false)} />;
+  }
 
   return (
     <>

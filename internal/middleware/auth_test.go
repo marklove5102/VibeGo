@@ -9,82 +9,82 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestAuthWithValidToken(t *testing.T) {
+func TestAuthWithValidKey(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	r := gin.New()
-	r.Use(Auth("test-token"))
+	r.Use(Auth("test-key"))
 	r.GET("/test", func(c *gin.Context) {
 		c.String(http.StatusOK, "success")
 	})
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/test", nil)
-	req.Header.Set("Authorization", "test-token")
+	req.Header.Set("Authorization", "test-key")
 	r.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
 	assert.Equal(t, "success", w.Body.String())
 }
 
-func TestAuthWithBearerToken(t *testing.T) {
+func TestAuthWithBearerKey(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	r := gin.New()
-	r.Use(Auth("test-token"))
+	r.Use(Auth("test-key"))
 	r.GET("/test", func(c *gin.Context) {
 		c.String(http.StatusOK, "success")
 	})
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/test", nil)
-	req.Header.Set("Authorization", "Bearer test-token")
+	req.Header.Set("Authorization", "Bearer test-key")
 	r.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
 	assert.Equal(t, "success", w.Body.String())
 }
 
-func TestAuthWithValidTokenInQuery(t *testing.T) {
+func TestAuthWithValidKeyInQuery(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	r := gin.New()
-	r.Use(Auth("test-token"))
+	r.Use(Auth("test-key"))
 	r.GET("/test", func(c *gin.Context) {
 		c.String(http.StatusOK, "success")
 	})
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/test?token=test-token", nil)
+	req, _ := http.NewRequest("GET", "/test?key=test-key", nil)
 	r.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
 	assert.Equal(t, "success", w.Body.String())
 }
 
-func TestAuthWithInvalidToken(t *testing.T) {
+func TestAuthWithInvalidKey(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	r := gin.New()
-	r.Use(Auth("test-token"))
+	r.Use(Auth("test-key"))
 	r.GET("/test", func(c *gin.Context) {
 		c.String(http.StatusOK, "success")
 	})
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/test", nil)
-	req.Header.Set("Authorization", "wrong-token")
+	req.Header.Set("Authorization", "wrong-key")
 	r.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
 	assert.Contains(t, w.Body.String(), "Unauthorized")
 }
 
-func TestAuthWithNoToken(t *testing.T) {
+func TestAuthWithNoKey(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	r := gin.New()
-	r.Use(Auth("test-token"))
+	r.Use(Auth("test-key"))
 	r.GET("/test", func(c *gin.Context) {
 		c.String(http.StatusOK, "success")
 	})
@@ -97,7 +97,7 @@ func TestAuthWithNoToken(t *testing.T) {
 	assert.Contains(t, w.Body.String(), "Unauthorized")
 }
 
-func TestAuthWithEmptyConfigToken(t *testing.T) {
+func TestAuthWithEmptyConfigKey(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	r := gin.New()

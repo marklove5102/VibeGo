@@ -2,25 +2,116 @@ package handler
 
 import (
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/hex"
 	"net/http"
-	"os"
-	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/rs/zerolog/log"
 	"github.com/xxnuo/vibego/internal/model"
 	"gorm.io/gorm"
 )
 
-type AuthHandler struct {
-	db    *gorm.DB
-	token string
+const (
+	maxLoginAttempts    = 5
+	baseBanDuration     = 15 * time.Minute
+	banDurationMultiply = 2
+)
+
+type loginAttempt struct {
+	failures    int
+	bannedUntil time.Time
+	banCount    int
 }
 
-func NewAuthHandler(db *gorm.DB, token string) *AuthHandler {
-	return &AuthHandler{db: db, token: token}
+type fail2ban struct {
+	mu       sync.Mutex
+	attempts map[string]*loginAttempt
+}
+
+func newFail2Ban() *fail2ban {
+	f := &fail2ban{attempts: make(map[string]*loginAttempt)}
+	go f.cleanup()
+	return f
+}
+
+func (f *fail2ban) cleanup() {
+	ticker := time.NewTicker(5 * time.Minute)
+	for range ticker.C {
+		f.mu.Lock()
+		now := time.Now()
+		for ip, a := range f.attempts {
+			if a.failures == 0 && now.After(a.bannedUntil) {
+				delete(f.attempts, ip)
+			}
+		}
+		f.mu.Unlock()
+	}
+}
+
+func (f *fail2ban) check(ip string) (blocked bool, retryAfter time.Duration, remaining int) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	a, exists := f.attempts[ip]
+	if !exists {
+		return false, 0, maxLoginAttempts
+	}
+
+	now := time.Now()
+	if !a.bannedUntil.IsZero() && now.Before(a.bannedUntil) {
+		return true, a.bannedUntil.Sub(now), 0
+	}
+
+	if !a.bannedUntil.IsZero() && now.After(a.bannedUntil) {
+		a.failures = 0
+		a.bannedUntil = time.Time{}
+	}
+
+	return false, 0, maxLoginAttempts - a.failures
+}
+
+func (f *fail2ban) recordFailure(ip string) (banned bool, banDuration time.Duration) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	a, exists := f.attempts[ip]
+	if !exists {
+		a = &loginAttempt{}
+		f.attempts[ip] = a
+	}
+
+	a.failures++
+	if a.failures >= maxLoginAttempts {
+		dur := baseBanDuration
+		for i := 0; i < a.banCount; i++ {
+			dur *= banDurationMultiply
+		}
+		a.bannedUntil = time.Now().Add(dur)
+		a.banCount++
+		log.Warn().Str("ip", ip).Dur("duration", dur).Msg("IP banned due to too many failed login attempts")
+		return true, dur
+	}
+	return false, 0
+}
+
+func (f *fail2ban) recordSuccess(ip string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	delete(f.attempts, ip)
+}
+
+type AuthHandler struct {
+	db  *gorm.DB
+	key string
+	ban *fail2ban
+}
+
+func NewAuthHandler(db *gorm.DB, key string) *AuthHandler {
+	return &AuthHandler{db: db, key: key, ban: newFail2Ban()}
 }
 
 func (h *AuthHandler) Register(r *gin.RouterGroup) {
@@ -31,33 +122,24 @@ func (h *AuthHandler) Register(r *gin.RouterGroup) {
 }
 
 type LoginRequest struct {
-	Username string `json:"username"`
-	Password string `json:"password"`
+	Key string `json:"key"`
 }
 
 type LoginResponse struct {
-	OK        bool   `json:"ok"`
-	SessionID string `json:"session_id,omitempty"`
-	UserID    string `json:"user_id,omitempty"`
-	Username  string `json:"username,omitempty"`
-	Error     string `json:"error,omitempty"`
+	OK         bool    `json:"ok"`
+	SessionID  string  `json:"session_id,omitempty"`
+	UserID     string  `json:"user_id,omitempty"`
+	Username   string  `json:"username,omitempty"`
+	Error      string  `json:"error,omitempty"`
+	Remaining  int     `json:"remaining,omitempty"`
+	RetryAfter float64 `json:"retry_after,omitempty"`
 }
 
-// Login godoc
-// @Summary User login
-// @Description Authenticate user with username and password
-// @Tags Auth
-// @Accept json
-// @Produce json
-// @Param request body LoginRequest true "Login request"
-// @Success 200 {object} LoginResponse
-// @Failure 401 {object} LoginResponse
-// @Router /api/auth/login [post]
 func (h *AuthHandler) Login(c *gin.Context) {
 	var req LoginRequest
 	c.ShouldBindJSON(&req)
 
-	if h.token == "" {
+	if h.key == "" {
 		user := h.getOrCreateAnonymousUser()
 		if user == nil {
 			c.JSON(http.StatusForbidden, LoginResponse{
@@ -66,7 +148,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 			})
 			return
 		}
-		session := h.createSession(user.ID, req.Username)
+		session := h.createSession(user.ID, "")
 		c.JSON(http.StatusOK, LoginResponse{
 			OK:        true,
 			SessionID: session.ID,
@@ -76,16 +158,41 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
-	expectedUsername := getExecutableName()
-	if req.Username != expectedUsername || req.Password != h.token {
-		c.JSON(http.StatusUnauthorized, LoginResponse{
-			OK:    false,
-			Error: "invalid credentials",
+	ip := c.ClientIP()
+
+	blocked, retryAfter, _ := h.ban.check(ip)
+	if blocked {
+		log.Warn().Str("ip", ip).Msg("Login attempt from banned IP")
+		c.JSON(http.StatusTooManyRequests, LoginResponse{
+			OK:         false,
+			Error:      "too many failed attempts, try again later",
+			RetryAfter: retryAfter.Seconds(),
+			Remaining:  0,
 		})
 		return
 	}
 
-	user := h.getOrCreateUser(expectedUsername, h.token)
+	if subtle.ConstantTimeCompare([]byte(req.Key), []byte(h.key)) != 1 {
+		banned, banDur := h.ban.recordFailure(ip)
+		resp := LoginResponse{
+			OK:    false,
+			Error: "invalid key",
+		}
+		if banned {
+			resp.RetryAfter = banDur.Seconds()
+			resp.Remaining = 0
+			c.JSON(http.StatusTooManyRequests, resp)
+		} else {
+			_, _, remaining := h.ban.check(ip)
+			resp.Remaining = remaining
+			c.JSON(http.StatusUnauthorized, resp)
+		}
+		return
+	}
+
+	h.ban.recordSuccess(ip)
+
+	user := h.getOrCreateUser("vibego", h.key)
 	if user == nil {
 		c.JSON(http.StatusForbidden, LoginResponse{
 			OK:    false,
@@ -93,7 +200,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		})
 		return
 	}
-	session := h.createSession(user.ID, req.Username)
+	session := h.createSession(user.ID, "")
 	c.JSON(http.StatusOK, LoginResponse{
 		OK:        true,
 		SessionID: session.ID,
@@ -109,15 +216,8 @@ type StatusResponse struct {
 	SessionID string `json:"session_id,omitempty"`
 }
 
-// Status godoc
-// @Summary Check auth status
-// @Description Check if login is required and get current user info
-// @Tags Auth
-// @Produce json
-// @Success 200 {object} StatusResponse
-// @Router /api/auth/status [get]
 func (h *AuthHandler) Status(c *gin.Context) {
-	if h.token == "" {
+	if h.key == "" {
 		user := h.getOrCreateAnonymousUser()
 		if user == nil {
 			c.JSON(http.StatusForbidden, gin.H{"error": "account disabled"})
@@ -133,17 +233,10 @@ func (h *AuthHandler) Status(c *gin.Context) {
 
 	c.JSON(http.StatusOK, StatusResponse{
 		NeedLogin: true,
-		Username:  getExecutableName(),
+		Username:  "vibego",
 	})
 }
 
-// Logout godoc
-// @Summary User logout
-// @Description End user session
-// @Tags Auth
-// @Produce json
-// @Success 200 {object} map[string]bool
-// @Router /api/auth/logout [post]
 func (h *AuthHandler) Logout(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
@@ -169,16 +262,16 @@ func (h *AuthHandler) getOrCreateAnonymousUser() *model.User {
 	return &user
 }
 
-func (h *AuthHandler) getOrCreateUser(username, token string) *model.User {
+func (h *AuthHandler) getOrCreateUser(username, key string) *model.User {
 	var user model.User
-	tokenHash := hashToken(token)
+	keyHash := hashKey(key)
 
 	if err := h.db.First(&user, "username = ? AND deleted_at IS NULL", username).Error; err == nil {
 		if user.Status != "active" {
 			return nil
 		}
 		h.db.Model(&user).Updates(map[string]any{
-			"token_hash":    tokenHash,
+			"token_hash":    keyHash,
 			"last_login_at": time.Now().Unix(),
 		})
 		return &user
@@ -188,7 +281,7 @@ func (h *AuthHandler) getOrCreateUser(username, token string) *model.User {
 	user = model.User{
 		ID:          uuid.New().String(),
 		Username:    username,
-		TokenHash:   tokenHash,
+		TokenHash:   keyHash,
 		Status:      "active",
 		CreatedAt:   now,
 		LastLoginAt: now,
@@ -218,15 +311,7 @@ func (h *AuthHandler) createSession(userID, sessionName string) *model.UserSessi
 	return &session
 }
 
-func hashToken(token string) string {
-	hash := sha256.Sum256([]byte(token))
+func hashKey(key string) string {
+	hash := sha256.Sum256([]byte(key))
 	return hex.EncodeToString(hash[:])
-}
-
-func getExecutableName() string {
-	exe, err := os.Executable()
-	if err != nil {
-		return "vibego"
-	}
-	return filepath.Base(exe)
 }

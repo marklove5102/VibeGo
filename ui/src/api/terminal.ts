@@ -1,16 +1,4 @@
-const API_BASE = "/api";
-
-async function request<T>(endpoint: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(`${API_BASE}${endpoint}`, {
-    headers: { "Content-Type": "application/json", ...options?.headers },
-    ...options,
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error(err.error || "Request failed");
-  }
-  return res.json();
-}
+import { request } from "./request";
 
 export type TerminalStatus = "running" | "exited" | "closed";
 
@@ -63,10 +51,11 @@ export const terminalApi = {
 
   wsUrl: (id: string, cursor?: number) => {
     const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const url = `${proto}//${window.location.host}/api/terminal/ws/${id}`;
-    if (cursor === undefined || cursor <= 0) {
-      return url;
-    }
-    return `${url}?cursor=${cursor}`;
+    const key = localStorage.getItem("vibego_auth_key");
+    const params = new URLSearchParams();
+    if (cursor !== undefined && cursor > 0) params.set("cursor", String(cursor));
+    if (key) params.set("key", key);
+    const qs = params.toString();
+    return `${proto}//${window.location.host}/api/terminal/ws/${id}${qs ? `?${qs}` : ""}`;
   },
 };

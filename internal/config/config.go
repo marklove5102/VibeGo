@@ -21,7 +21,7 @@ type Config struct {
 	Port        string
 	CORSOrigins string
 
-	Token string
+	Key string
 
 	AllowWAN         bool
 	DisableLogToFile bool
@@ -53,8 +53,8 @@ func GetConfig() *Config {
 	flag.StringVar(&cfg.Host, "host", utils.GetEnv("VG_HOST", "0.0.0.0"), "Server host address")
 	flag.StringVar(&cfg.Port, "port", utils.GetEnv("VG_PORT", "1984"), "Server port")
 	flag.StringVar(&cfg.Port, "p", utils.GetEnv("VG_PORT", "1984"), "Server port(shorthand)")
-	flag.StringVar(&cfg.Token, "token", utils.GetEnv("VG_TOKEN", ""), "Access token, if token is empty, allow-wan will be disabled for security reasons")
-	flag.StringVar(&cfg.Token, "t", utils.GetEnv("VG_TOKEN", ""), "Access token(shorthand)")
+	flag.StringVar(&cfg.Key, "key", utils.GetEnv("VG_KEY", ""), "Access key, if key is empty, allow-wan will be disabled for security reasons")
+	flag.StringVar(&cfg.Key, "k", utils.GetEnv("VG_KEY", ""), "Access key(shorthand)")
 	flag.BoolVar(&cfg.AllowWAN, "allow-wan", utils.GetBoolEnv("VG_ALLOW_WAN", true), "Allow WAN access, if allow-wan is false, the service will only be accessible from the LAN")
 	flag.BoolVar(&cfg.AllowWAN, "a", utils.GetBoolEnv("VG_ALLOW_WAN", true), "Allow WAN access(shorthand)")
 	flag.StringVar(&cfg.CORSOrigins, "cors-origins", utils.GetEnv("VG_CORS_ORIGINS", "*"), "CORS origins")
@@ -82,7 +82,7 @@ func GetConfig() *Config {
 		fmt.Fprintf(os.Stderr, "  %s [options]\n\n", os.Args[0])
 		fmt.Fprintf(os.Stderr, "Options:\n")
 		flag.PrintDefaults()
-		fmt.Fprintf(os.Stderr, "\nAll the options also read environment variables prefixed with VG_, e.g. VG_LOG_LEVEL=debug.\n")
+		fmt.Fprintf(os.Stderr, "\nAll options also accept environment variables prefixed with VG_, e.g. VG_LOG_LEVEL=debug.\n")
 	}
 	flag.Parse()
 
@@ -92,7 +92,7 @@ func GetConfig() *Config {
 	}
 
 	// Post process
-	if cfg.Token == "" {
+	if cfg.Key == "" {
 		cfg.AllowWAN = false
 	}
 

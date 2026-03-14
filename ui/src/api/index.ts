@@ -1,5 +1,5 @@
 export * from "./ai-session";
-export * from "./ai-session";
+export * from "./auth";
 export * from "./file";
 export * from "./git";
 export * from "./process";

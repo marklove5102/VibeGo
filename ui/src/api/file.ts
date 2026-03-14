@@ -1,16 +1,4 @@
-const API_BASE = "/api";
-
-async function request<T>(endpoint: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(`${API_BASE}${endpoint}`, {
-    headers: { "Content-Type": "application/json", ...options?.headers },
-    ...options,
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error(err.error || "Request failed");
-  }
-  return res.json();
-}
+import { API_BASE, request } from "./request";
 
 export interface FileInfo {
   path: string;
@@ -173,5 +161,10 @@ export const fileApi = {
       body: JSON.stringify({ path, dst, type }),
     }),
 
-  downloadUrl: (path: string) => `${API_BASE}/file/download?path=${encodeURIComponent(path)}`,
+  downloadUrl: (path: string) => {
+    const key = localStorage.getItem("vibego_auth_key");
+    const params = new URLSearchParams({ path });
+    if (key) params.set("key", key);
+    return `${API_BASE}/file/download?${params.toString()}`;
+  },
 };

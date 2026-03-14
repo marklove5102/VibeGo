@@ -9,22 +9,22 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-func Auth(token string) gin.HandlerFunc {
-	tokenBytes := []byte(token)
+func Auth(key string) gin.HandlerFunc {
+	keyBytes := []byte(key)
 	return func(c *gin.Context) {
-		if token == "" {
+		if key == "" {
 			c.Next()
 			return
 		}
 
-		reqToken := c.GetHeader("Authorization")
-		if reqToken != "" {
-			reqToken = strings.TrimPrefix(reqToken, "Bearer ")
+		reqKey := c.GetHeader("Authorization")
+		if reqKey != "" {
+			reqKey = strings.TrimPrefix(reqKey, "Bearer ")
 		} else {
-			reqToken = c.Query("token")
+			reqKey = c.Query("key")
 		}
 
-		if subtle.ConstantTimeCompare([]byte(reqToken), tokenBytes) != 1 {
+		if subtle.ConstantTimeCompare([]byte(reqKey), keyBytes) != 1 {
 			log.Warn().
 				Str("ip", c.ClientIP()).
 				Str("path", c.Request.URL.Path).

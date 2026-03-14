@@ -1,16 +1,4 @@
-const API_BASE = "/api";
-
-async function request<T>(endpoint: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(`${API_BASE}${endpoint}`, {
-    headers: { "Content-Type": "application/json", ...options?.headers },
-    ...options,
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error(err.error || "Request failed");
-  }
-  return res.json();
-}
+import { API_BASE, request } from "./request";
 
 export interface GitCommit {
   hash: string;
@@ -437,7 +425,10 @@ export const gitApi = {
   connectWs: (path: string, onEvent: (event: GitWSEvent) => void): (() => void) => {
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     const host = window.location.host;
-    const url = `${protocol}//${host}${API_BASE}/git/ws?path=${encodeURIComponent(path)}`;
+    const key = localStorage.getItem("vibego_auth_key");
+    const params = new URLSearchParams({ path });
+    if (key) params.set("key", key);
+    const url = `${protocol}//${host}${API_BASE}/git/ws?${params.toString()}`;
     let ws: WebSocket | null = null;
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
     let closed = false;
