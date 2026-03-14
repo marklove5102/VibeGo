@@ -658,7 +658,8 @@ const TerminalInstance: React.FC<TerminalInstanceProps> = ({
     ];
 
     terminal.attachCustomKeyEventHandler((event) => {
-      if ((event.ctrlKey || event.metaKey) && event.key === "f" && event.type === "keydown") {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "f" && event.type === "keydown") {
+        event.preventDefault();
         openSearchRef.current();
         return false;
       }
@@ -800,6 +801,13 @@ const TerminalInstance: React.FC<TerminalInstanceProps> = ({
         display: isActive ? "block" : "none",
         backgroundColor: getXtermTheme(theme).background,
       }}
+      onKeyDownCapture={(e) => {
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "f") {
+          e.preventDefault();
+          e.stopPropagation();
+          openSearchRef.current();
+        }
+      }}
     >
       <div
         ref={containerRef}
@@ -823,7 +831,7 @@ const TerminalInstance: React.FC<TerminalInstanceProps> = ({
         </div>
       )}
       {searchVisible && (
-        <div className="absolute top-2 right-2 z-10 flex items-center gap-1.5 rounded-lg border border-zinc-700 bg-zinc-900/95 px-2 py-1.5 shadow-lg backdrop-blur-sm">
+        <div className="absolute top-2 right-2 z-10 flex items-center gap-1.5 rounded-md border border-ide-border bg-ide-panel/95 px-2 py-1.5 shadow-lg backdrop-blur-sm">
           <input
             ref={searchInputRef}
             type="text"
@@ -837,38 +845,38 @@ const TerminalInstance: React.FC<TerminalInstanceProps> = ({
               }
             }}
             placeholder="Search..."
-            className="w-40 bg-transparent text-xs text-zinc-200 outline-none placeholder:text-zinc-500"
+            className="w-40 bg-transparent text-xs text-ide-text outline-none placeholder:text-ide-mute/50"
           />
           <button
             onClick={() => setSearchCaseSensitive((v) => !v)}
             title="Case Sensitive"
-            className={`rounded px-1 py-0.5 text-xs font-medium transition-colors ${searchCaseSensitive ? "bg-zinc-600 text-zinc-100" : "text-zinc-400 hover:text-zinc-200"}`}
+            className={`rounded px-1.5 py-0.5 text-xs font-medium transition-colors ${searchCaseSensitive ? "bg-ide-accent text-white" : "text-ide-mute hover:text-ide-text hover:bg-ide-bg"}`}
           >
             Aa
           </button>
           <button
             onClick={() => setSearchRegex((v) => !v)}
             title="Use Regex"
-            className={`rounded px-1 py-0.5 font-mono text-xs transition-colors ${searchRegex ? "bg-zinc-600 text-zinc-100" : "text-zinc-400 hover:text-zinc-200"}`}
+            className={`rounded px-1.5 py-0.5 font-mono text-xs transition-colors ${searchRegex ? "bg-ide-accent text-white" : "text-ide-mute hover:text-ide-text hover:bg-ide-bg"}`}
           >
             .*
           </button>
-          <div className="h-4 w-px bg-zinc-700" />
+          <div className="h-4 w-px bg-ide-border" />
           <button
             onClick={handleSearchPrev}
             title="Previous (Shift+Enter)"
-            className="rounded p-0.5 text-zinc-400 transition-colors hover:text-zinc-200"
+            className="rounded p-0.5 text-ide-mute transition-colors hover:text-ide-text hover:bg-ide-bg"
           >
             <ChevronUp size={14} />
           </button>
           <button
             onClick={handleSearchNext}
             title="Next (Enter)"
-            className="rounded p-0.5 text-zinc-400 transition-colors hover:text-zinc-200"
+            className="rounded p-0.5 text-ide-mute transition-colors hover:text-ide-text hover:bg-ide-bg"
           >
             <ChevronDown size={14} />
           </button>
-          <div className="h-4 w-px bg-zinc-700" />
+          <div className="h-4 w-px bg-ide-border" />
           <button
             onClick={() => {
               const text = serializeAddonRef.current?.serialize();
@@ -879,14 +887,14 @@ const TerminalInstance: React.FC<TerminalInstanceProps> = ({
               });
             }}
             title="Copy all output"
-            className="rounded p-0.5 text-zinc-400 transition-colors hover:text-zinc-200"
+            className="rounded p-0.5 text-ide-mute transition-colors hover:text-ide-text hover:bg-ide-bg"
           >
-            {copySuccess ? <Check size={14} className="text-green-400" /> : <Copy size={14} />}
+            {copySuccess ? <Check size={14} className="text-green-500" /> : <Copy size={14} />}
           </button>
           <button
             onClick={closeSearch}
             title="Close (Escape)"
-            className="rounded p-0.5 text-zinc-400 transition-colors hover:text-zinc-200"
+            className="rounded p-0.5 text-ide-mute transition-colors hover:text-ide-text hover:bg-ide-bg"
           >
             <X size={14} />
           </button>
