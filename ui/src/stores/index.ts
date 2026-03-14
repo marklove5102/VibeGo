@@ -32,10 +32,9 @@ export {
 export {
   createGitStore,
   type GitFileNode,
-  type GitPartialSelection,
-  type GitSyncOptions,
   type GitState,
   type GitStoreApi,
+  type GitSyncOptions,
   getOrCreateGitStore,
   removeGitStore,
   resetGitStores,

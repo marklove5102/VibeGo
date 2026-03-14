@@ -19,10 +19,6 @@ export interface GitFileNode {
   includedState: "none" | "partial" | "all";
 }
 
-export interface GitPartialSelection {
-  selectedRowIds: string[];
-}
-
 export interface GitSyncOptions {
   status?: boolean;
   history?: boolean;
@@ -39,7 +35,6 @@ export interface GitState {
   isRepo: boolean | null;
   allFiles: GitFileNode[];
   checkedFiles: Set<string>;
-  partialSelections: Record<string, GitPartialSelection>;
   workingDiffs: Record<string, GitDiff>;
   interactiveDiffs: Record<string, GitInteractiveDiff>;
   summary: string;
@@ -70,7 +65,6 @@ export interface GitState {
   setSelectedCommit: (c: GitCommit | null) => void;
   toggleFile: (path: string) => Promise<void>;
   toggleAllFiles: () => Promise<void>;
-  setPartialSelection: (path: string, selectedRowIds: string[], selectableRowIds: string[]) => void;
   reset: () => void;
 
   checkRepo: () => Promise<boolean>;
@@ -184,7 +178,6 @@ const createInitialGitSnapshot = () => ({
   isRepo: null as boolean | null,
   allFiles: [] as GitFileNode[],
   checkedFiles: new Set<string>(),
-  partialSelections: {} as Record<string, GitPartialSelection>,
   workingDiffs: {} as Record<string, GitDiff>,
   interactiveDiffs: {} as Record<string, GitInteractiveDiff>,
   summary: getDefaultCommitSummary(),
@@ -241,7 +234,6 @@ const createGitState: StateCreator<GitState> = (set, get) => ({
       set((state) => ({
         allFiles: nodes,
         checkedFiles: getCheckedFilesForNodes(nodes),
-        partialSelections: {},
         workingDiffs: pickWorkingDiffs(nodes, state.workingDiffs),
         interactiveDiffs: {
           ...pickInteractiveDiffs(nodes, state.interactiveDiffs),
@@ -271,9 +263,6 @@ const createGitState: StateCreator<GitState> = (set, get) => ({
       set({ error: err instanceof Error ? err.message : "Failed to update selection" });
     }
   },
-
-  setPartialSelection: () => {},
-
   reset: () => set(createInitialGitSnapshot()),
 
   checkRepo: async () => {
@@ -309,7 +298,6 @@ const createGitState: StateCreator<GitState> = (set, get) => ({
     set({
       allFiles: nodes,
       checkedFiles: getCheckedFilesForNodes(nodes),
-      partialSelections: {},
       workingDiffs: pickWorkingDiffs(nodes, workingDiffs),
       interactiveDiffs: pickInteractiveDiffs(nodes, interactiveDiffs),
     });
@@ -339,7 +327,6 @@ const createGitState: StateCreator<GitState> = (set, get) => ({
       set({
         allFiles: nodes,
         checkedFiles: getCheckedFilesForNodes(nodes),
-        partialSelections: {},
         workingDiffs: pickWorkingDiffs(nodes, workingDiffs),
         interactiveDiffs: pickInteractiveDiffs(nodes, interactiveDiffs),
       });
@@ -514,7 +501,6 @@ const createGitState: StateCreator<GitState> = (set, get) => ({
       const { workingDiffs, interactiveDiffs } = get();
       stateUpdate.allFiles = nodes;
       stateUpdate.checkedFiles = getCheckedFilesForNodes(nodes);
-      stateUpdate.partialSelections = {};
       stateUpdate.workingDiffs = pickWorkingDiffs(nodes, workingDiffs);
       stateUpdate.interactiveDiffs = pickInteractiveDiffs(nodes, interactiveDiffs);
     }
@@ -598,7 +584,6 @@ const createGitState: StateCreator<GitState> = (set, get) => ({
         set({
           allFiles: nodes,
           checkedFiles: getCheckedFilesForNodes(nodes),
-          partialSelections: {},
           workingDiffs: {},
           interactiveDiffs: {},
           commits: res.commits ?? get().commits,
@@ -611,7 +596,6 @@ const createGitState: StateCreator<GitState> = (set, get) => ({
       } else {
         set({
           checkedFiles: new Set<string>(),
-          partialSelections: {},
           workingDiffs: {},
           interactiveDiffs: {},
           selectedCommit: null,
@@ -632,7 +616,6 @@ const createGitState: StateCreator<GitState> = (set, get) => ({
             const nodes = statusFilesToNodes(statusResult.value.files);
             stateUpdate.allFiles = nodes;
             stateUpdate.checkedFiles = getCheckedFilesForNodes(nodes);
-            stateUpdate.partialSelections = {};
             stateUpdate.workingDiffs = {};
             stateUpdate.interactiveDiffs = {};
           }
@@ -684,7 +667,6 @@ const createGitState: StateCreator<GitState> = (set, get) => ({
         set({
           allFiles: nodes,
           checkedFiles: getCheckedFilesForNodes(nodes),
-          partialSelections: {},
           workingDiffs: {},
           interactiveDiffs: {},
           commits: res.commits ?? get().commits,
@@ -697,7 +679,6 @@ const createGitState: StateCreator<GitState> = (set, get) => ({
       } else {
         set({
           checkedFiles: new Set<string>(),
-          partialSelections: {},
           workingDiffs: {},
           interactiveDiffs: {},
           selectedCommit: null,
@@ -718,7 +699,6 @@ const createGitState: StateCreator<GitState> = (set, get) => ({
             const nodes = statusFilesToNodes(statusResult.value.files);
             stateUpdate.allFiles = nodes;
             stateUpdate.checkedFiles = getCheckedFilesForNodes(nodes);
-            stateUpdate.partialSelections = {};
             stateUpdate.workingDiffs = {};
             stateUpdate.interactiveDiffs = {};
           }
@@ -767,7 +747,6 @@ const createGitState: StateCreator<GitState> = (set, get) => ({
       set({
         allFiles: nodes,
         checkedFiles: getCheckedFilesForNodes(nodes),
-        partialSelections: {},
         workingDiffs: {},
         interactiveDiffs: {},
         commits: res.commits,
@@ -797,7 +776,6 @@ const createGitState: StateCreator<GitState> = (set, get) => ({
       set({
         allFiles: nodes,
         checkedFiles: getCheckedFilesForNodes(nodes),
-        partialSelections: {},
         workingDiffs: {},
         interactiveDiffs: {},
         currentBranch: res.branch,
@@ -892,7 +870,6 @@ const createGitState: StateCreator<GitState> = (set, get) => ({
       set({
         allFiles: nodes,
         checkedFiles: getCheckedFilesForNodes(nodes),
-        partialSelections: {},
         workingDiffs: {},
         interactiveDiffs: {},
         commits: res.commits,
@@ -950,7 +927,6 @@ const createGitState: StateCreator<GitState> = (set, get) => ({
         set({
           allFiles: nodes,
           checkedFiles: getCheckedFilesForNodes(nodes),
-          partialSelections: {},
           workingDiffs: {},
           interactiveDiffs: {},
         });
@@ -980,7 +956,6 @@ const createGitState: StateCreator<GitState> = (set, get) => ({
         set({
           allFiles: nodes,
           checkedFiles: getCheckedFilesForNodes(nodes),
-          partialSelections: {},
           workingDiffs: {},
           interactiveDiffs: {},
         });
@@ -1027,7 +1002,6 @@ const createGitState: StateCreator<GitState> = (set, get) => ({
       set((state) => ({
         allFiles: nodes,
         checkedFiles: getCheckedFilesForNodes(nodes),
-        partialSelections: {},
         workingDiffs: pickWorkingDiffs(nodes, state.workingDiffs),
         interactiveDiffs: {
           ...pickInteractiveDiffs(nodes, state.interactiveDiffs),
@@ -1124,7 +1098,6 @@ const createGitState: StateCreator<GitState> = (set, get) => ({
       set((state) => ({
         allFiles: nodes,
         checkedFiles: getCheckedFilesForNodes(nodes),
-        partialSelections: {},
         workingDiffs: pickWorkingDiffs(nodes, state.workingDiffs),
         interactiveDiffs: {
           ...pickInteractiveDiffs(nodes, state.interactiveDiffs),

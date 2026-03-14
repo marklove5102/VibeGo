@@ -222,6 +222,69 @@ func TestGitFullApplySelectionExclude(t *testing.T) {
 	assert.True(t, resp.OK)
 }
 
+func TestGitFullApplySelectionExcludeStagedLine(t *testing.T) {
+	dir := setupFullRepo(t)
+	defer os.RemoveAll(dir)
+	r, _ := setupRouter()
+
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "hello.txt"), []byte("one\ntwo\nthree\n"), 0644))
+	cmd := exec.Command("git", "add", "hello.txt")
+	cmd.Dir = dir
+	require.NoError(t, cmd.Run())
+	cmd = exec.Command("git", "-c", "user.name=Test", "-c", "user.email=test@test.com", "commit", "-m", "seed staged partial")
+	cmd.Dir = dir
+	require.NoError(t, cmd.Run())
+
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "hello.txt"), []byte("ONE\ntwo\nTHREE\n"), 0644))
+	cmd = exec.Command("git", "add", "hello.txt")
+	cmd.Dir = dir
+	require.NoError(t, cmd.Run())
+
+	w := postJSON(r, "/git/file-diff", map[string]interface{}{
+		"path": dir, "filePath": "hello.txt", "mode": "staged",
+	})
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var diffResp InteractiveDiff
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &diffResp))
+	require.NotEmpty(t, diffResp.Hunks)
+
+	lineIDs := make([]string, 0)
+	for _, hunk := range diffResp.Hunks {
+		for _, line := range hunk.Lines {
+			if (line.Content == "three" || line.Content == "THREE") && line.Selectable {
+				lineIDs = append(lineIDs, line.ID)
+			}
+		}
+	}
+	require.Len(t, lineIDs, 2)
+
+	w = postJSON(r, "/git/apply-selection", map[string]interface{}{
+		"path": dir, "filePath": "hello.txt", "mode": "staged",
+		"target": "line", "action": "exclude",
+		"patchHash": diffResp.PatchHash,
+		"lineIds":   lineIDs, "hunkIds": []string{},
+	})
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+	cmd = exec.Command("git", "diff", "--cached", "--", "hello.txt")
+	cmd.Dir = dir
+	stagedDiff, err := cmd.Output()
+	require.NoError(t, err)
+	assert.Contains(t, string(stagedDiff), "-one")
+	assert.Contains(t, string(stagedDiff), "+ONE")
+	assert.NotContains(t, string(stagedDiff), "-three")
+	assert.NotContains(t, string(stagedDiff), "+THREE")
+
+	cmd = exec.Command("git", "diff", "--", "hello.txt")
+	cmd.Dir = dir
+	workingDiff, err := cmd.Output()
+	require.NoError(t, err)
+	assert.Contains(t, string(workingDiff), "-three")
+	assert.Contains(t, string(workingDiff), "+THREE")
+	assert.NotContains(t, string(workingDiff), "-one")
+}
+
 func TestGitFullApplySelectionDiscard(t *testing.T) {
 	dir := setupFullRepo(t)
 	defer os.RemoveAll(dir)

@@ -137,7 +137,9 @@ func main() {
 	handler.NewTerminalHandler(db, cfg.DefaultShell).Register(api)
 	gitHandler := handler.NewGitHandler(db)
 	gitHandler.Register(api)
-	handler.NewGitWSHandler(gitHandler).Register(api)
+	gitWSHandler := handler.NewGitWSHandler(gitHandler)
+	gitHandler.SetWSHandler(gitWSHandler)
+	gitWSHandler.Register(api)
 	handler.NewProcessHandler().Register(api)
 	handler.NewRemoteHandler().Register(api)
 

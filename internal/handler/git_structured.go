@@ -539,6 +539,79 @@ func buildSelectionPatch(diff *InteractiveDiff, selectedLineIDs []string) string
 	return beforeHeader + "\n" + afterHeader + "\n" + strings.Join(hunks, "\n") + "\n"
 }
 
+func buildReverseSelectionPatch(diff *InteractiveDiff, selectedLineIDs []string) string {
+	if diff == nil || len(diff.Hunks) == 0 {
+		return ""
+	}
+
+	selectedLineSet := make(map[string]struct{}, len(selectedLineIDs))
+	for _, lineID := range selectedLineIDs {
+		selectedLineSet[lineID] = struct{}{}
+	}
+
+	beforeHeader, afterHeader := extractPatchFileHeaders(diff.Patch)
+	if beforeHeader == "" || afterHeader == "" {
+		return ""
+	}
+
+	beforeHeader = strings.Replace(beforeHeader, "--- a/", "--- b/", 1)
+
+	hunks := make([]string, 0)
+	delta := 0
+
+	for _, hunk := range diff.Hunks {
+		lines := make([]string, 0, len(hunk.Lines))
+		oldCount := 0
+		newCount := 0
+		hasSelectedChange := false
+
+		for _, line := range hunk.Lines {
+			_, selected := selectedLineSet[line.ID]
+
+			switch line.Kind {
+			case "context":
+				lines = append(lines, " "+line.Content)
+				oldCount++
+				newCount++
+			case "add":
+				if selected {
+					lines = append(lines, "-"+line.Content)
+					oldCount++
+					hasSelectedChange = true
+				} else {
+					lines = append(lines, " "+line.Content)
+					oldCount++
+					newCount++
+				}
+			case "del":
+				if selected {
+					lines = append(lines, "+"+line.Content)
+					newCount++
+					hasSelectedChange = true
+				}
+			}
+		}
+
+		if !hasSelectedChange {
+			continue
+		}
+
+		header := fmt.Sprintf(
+			"@@ -%s +%s @@",
+			formatPatchRange(hunk.NewStart, oldCount),
+			formatPatchRange(hunk.NewStart+delta, newCount),
+		)
+		hunks = append(hunks, header+"\n"+strings.Join(lines, "\n"))
+		delta += newCount - oldCount
+	}
+
+	if len(hunks) == 0 {
+		return ""
+	}
+
+	return beforeHeader + "\n" + afterHeader + "\n" + strings.Join(hunks, "\n") + "\n"
+}
+
 func getSelectableLineIDs(diff *InteractiveDiff) []string {
 	if diff == nil {
 		return nil
@@ -799,18 +872,58 @@ func (h *GitHandler) ApplySelection(c *gin.Context) {
 	repoRoot := w.Filesystem.Root()
 
 	if req.Mode == "staged" {
+		diff, err := getGitDiff(repoRoot, req.FilePath, req.Mode)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+
+		if req.PatchHash != "" && diff.PatchHash != req.PatchHash {
+			c.JSON(http.StatusConflict, gin.H{"error": "diff changed, please refresh"})
+			return
+		}
+
+		targetLineIDs := getTargetLineIDs(diff, req.Target, req.LineIds, req.HunkIds)
+
 		switch req.Action {
+		case "include":
 		case "exclude":
-			cmd := exec.Command("git", "reset", "HEAD", "--", req.FilePath)
-			cmd.Dir = repoRoot
-			if out, cmdErr := cmd.CombinedOutput(); cmdErr != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": gitCommandError(cmdErr, out).Error()})
+			if req.Target == "file" {
+				cmd := exec.Command("git", "reset", "HEAD", "--", req.FilePath)
+				cmd.Dir = repoRoot
+				if out, cmdErr := cmd.CombinedOutput(); cmdErr != nil {
+					c.JSON(http.StatusInternalServerError, gin.H{"error": gitCommandError(cmdErr, out).Error()})
+					return
+				}
+				break
+			}
+
+			patch := buildSelectionPatch(diff, targetLineIDs)
+			patch = buildReverseSelectionPatch(diff, targetLineIDs)
+			if patch == "" {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "no selected changes"})
+				return
+			}
+			if err := applyGitPatch(repoRoot, patch, true, false); err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 				return
 			}
 		case "discard":
-			cmd := exec.Command("git", "checkout", "--", req.FilePath)
-			cmd.Dir = repoRoot
-			if out, cmdErr := cmd.CombinedOutput(); cmdErr != nil {
+			if req.Target != "file" {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "partial staged discard is not supported"})
+				return
+			}
+
+			resetCmd := exec.Command("git", "reset", "HEAD", "--", req.FilePath)
+			resetCmd.Dir = repoRoot
+			if out, cmdErr := resetCmd.CombinedOutput(); cmdErr != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": gitCommandError(cmdErr, out).Error()})
+				return
+			}
+
+			checkoutCmd := exec.Command("git", "checkout", "--", req.FilePath)
+			checkoutCmd.Dir = repoRoot
+			if out, cmdErr := checkoutCmd.CombinedOutput(); cmdErr != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": gitCommandError(cmdErr, out).Error()})
 				return
 			}
@@ -820,11 +933,12 @@ func (h *GitHandler) ApplySelection(c *gin.Context) {
 		}
 
 		files, summary := h.collectStructuredStatus(repoRoot)
-		diff, _ := getGitDiff(repoRoot, req.FilePath, req.Mode)
+		diff, _ = getGitDiff(repoRoot, req.FilePath, req.Mode)
 		result := gin.H{"ok": true, "status": gin.H{"files": files, "summary": summary}}
 		if diff != nil && len(diff.Hunks) > 0 {
 			result["diff"] = diff
 		}
+		h.broadcastStatus(req.Path)
 		c.JSON(http.StatusOK, result)
 		return
 	}
@@ -883,6 +997,7 @@ func (h *GitHandler) ApplySelection(c *gin.Context) {
 	if diff != nil && len(diff.Hunks) > 0 {
 		result["diff"] = diff
 	}
+	h.broadcastStatus(req.Path)
 	c.JSON(http.StatusOK, result)
 }
 

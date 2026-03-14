@@ -24,6 +24,7 @@ import (
 type GitHandler struct {
 	settings       *settings.Store
 	selectionStore *gitSelectionStore
+	wsHandler      *GitWSHandler
 }
 
 func NewGitHandler(db *gorm.DB) *GitHandler {
@@ -34,6 +35,10 @@ func NewGitHandler(db *gorm.DB) *GitHandler {
 		h.settings = settings.New(db)
 	}
 	return h
+}
+
+func (h *GitHandler) SetWSHandler(wsHandler *GitWSHandler) {
+	h.wsHandler = wsHandler
 }
 
 func (h *GitHandler) getGitAuthor() (string, string) {
@@ -901,6 +906,9 @@ func (h *GitHandler) CommitSelected(c *gin.Context) {
 		}
 		h.selectionStore.resetRepo(repoRoot)
 		bs := collectBranchStatus(repoRoot)
+		h.broadcastStatus(req.Path)
+		h.broadcastBranchStatus(req.Path)
+		h.broadcastRepoSyncNeeded(req.Path, gin.H{"history": true})
 		c.JSON(http.StatusOK, gin.H{"ok": true, "hash": hash, "branchStatus": bs})
 		return
 	}
@@ -943,6 +951,9 @@ func (h *GitHandler) CommitSelected(c *gin.Context) {
 	commits := collectCommitLog(repo, 20)
 	repoRoot, _ = h.getRepoRoot(req.Path)
 	bs := collectBranchStatus(repoRoot)
+	h.broadcastStatus(req.Path)
+	h.broadcastBranchStatus(req.Path)
+	h.broadcastRepoSyncNeeded(req.Path, gin.H{"history": true})
 
 	c.JSON(http.StatusOK, gin.H{
 		"ok": true, "hash": hash.String(),
@@ -1006,6 +1017,9 @@ func (h *GitHandler) Amend(c *gin.Context) {
 		}
 		h.selectionStore.resetRepo(repoRoot)
 		bs := collectBranchStatus(repoRoot)
+		h.broadcastStatus(req.Path)
+		h.broadcastBranchStatus(req.Path)
+		h.broadcastRepoSyncNeeded(req.Path, gin.H{"history": true})
 		c.JSON(http.StatusOK, gin.H{"ok": true, "hash": hash, "branchStatus": bs})
 		return
 	}
@@ -1049,6 +1063,9 @@ func (h *GitHandler) Amend(c *gin.Context) {
 	files, summary := h.collectStructuredStatus(repoRoot)
 	commits := collectCommitLog(repo, 20)
 	bs := collectBranchStatus(repoRoot)
+	h.broadcastStatus(req.Path)
+	h.broadcastBranchStatus(req.Path)
+	h.broadcastRepoSyncNeeded(req.Path, gin.H{"history": true})
 
 	c.JSON(http.StatusOK, gin.H{
 		"ok": true, "status": gin.H{"files": files, "summary": summary}, "commits": commits, "branchStatus": bs,
