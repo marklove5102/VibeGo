@@ -1,0 +1,132 @@
+import React, { useState, useCallback, useMemo } from 'react'
+import type { TerminalKeyEvent, ModifiersState, LayoutDef } from './core/types'
+import { MODIFIER_KEYS } from './core/types'
+import { TERMINAL_QWERTY } from './core/layouts'
+import KeyButton from './KeyButton'
+import './terminal-keyboard.css'
+
+interface TerminalKeyboardProps {
+  onKeyEvent: (event: TerminalKeyEvent) => void
+  layout?: LayoutDef
+  theme?: 'light' | 'dark'
+}
+
+const INITIAL_MOD = { active: false, locked: false }
+
+const TerminalKeyboard: React.FC<TerminalKeyboardProps> = ({
+  onKeyEvent,
+  layout = TERMINAL_QWERTY,
+  theme = 'dark',
+}) => {
+  const [modifiers, setModifiers] = useState<ModifiersState>({
+    ctrl: { ...INITIAL_MOD },
+    alt: { ...INITIAL_MOD },
+    shift: { ...INITIAL_MOD },
+    meta: { ...INITIAL_MOD },
+  })
+
+  const modName = useCallback((value: string): keyof ModifiersState | null => {
+    const map: Record<string, keyof ModifiersState> = {
+      Ctrl: 'ctrl', Alt: 'alt', Shift: 'shift', Meta: 'meta',
+    }
+    return map[value] ?? null
+  }, [])
+
+  const clearLatched = useCallback(() => {
+    setModifiers(prev => {
+      const next = { ...prev }
+      let changed = false
+      for (const k of ['ctrl', 'alt', 'shift', 'meta'] as const) {
+        if (prev[k].active && !prev[k].locked) {
+          next[k] = { active: false, locked: false }
+          changed = true
+        }
+      }
+      return changed ? next : prev
+    })
+  }, [])
+
+  const handleKeyOutput = useCallback((value: string, special: boolean) => {
+    if (MODIFIER_KEYS.has(value)) {
+      const name = modName(value)
+      if (!name) return
+      setModifiers(prev => {
+        const cur = prev[name]
+        let next: { active: boolean; locked: boolean }
+        if (!cur.active) {
+          next = { active: true, locked: false }
+        } else if (!cur.locked) {
+          next = { active: true, locked: true }
+        } else {
+          next = { active: false, locked: false }
+        }
+        return { ...prev, [name]: next }
+      })
+      return
+    }
+
+    const event: TerminalKeyEvent = {
+      type: special ? 'key' : 'char',
+      value,
+      ctrl: modifiers.ctrl.active,
+      alt: modifiers.alt.active,
+      shift: modifiers.shift.active,
+      meta: modifiers.meta.active,
+    }
+    onKeyEvent(event)
+    clearLatched()
+  }, [modifiers, onKeyEvent, clearLatched, modName])
+
+  const handleSlide = useCallback((dir: 'left' | 'right') => {
+    const event: TerminalKeyEvent = {
+      type: 'key',
+      value: dir === 'left' ? 'ArrowLeft' : 'ArrowRight',
+      ctrl: modifiers.ctrl.active,
+      alt: modifiers.alt.active,
+      shift: modifiers.shift.active,
+      meta: modifiers.meta.active,
+    }
+    onKeyEvent(event)
+  }, [modifiers, onKeyEvent])
+
+  const getModState = useCallback((value: string): 'inactive' | 'latched' | 'locked' => {
+    const name = modName(value)
+    if (!name) return 'inactive'
+    const m = modifiers[name]
+    if (m.locked) return 'locked'
+    if (m.active) return 'latched'
+    return 'inactive'
+  }, [modifiers, modName])
+
+  const shiftActive = modifiers.shift.active
+
+  const rowClasses = useMemo(() => {
+    return layout.rows.map(row => {
+      let c = 'tk-row'
+      if (row.height && row.height < 1) c += ' tk-row--short'
+      if (row.height && row.height > 1) c += ' tk-row--tall'
+      return c
+    })
+  }, [layout])
+
+  return (
+    <div className="tk-keyboard" data-theme={theme}>
+      {layout.rows.map((row, ri) => (
+        <div key={ri} className={rowClasses[ri]}>
+          {row.keys.map(keyDef => (
+            <KeyButton
+              key={keyDef.id}
+              keyDef={keyDef}
+              modState={keyDef.type === 'modifier' ? getModState(keyDef.value) : undefined}
+              shiftActive={shiftActive}
+              onKeyOutput={handleKeyOutput}
+              onSlide={handleSlide}
+            />
+          ))}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+export default TerminalKeyboard

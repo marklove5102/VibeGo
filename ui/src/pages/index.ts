@@ -9,3 +9,4 @@ import "./workspace/files";
 import "./workspace/git";
 import "./workspace/terminal";
 import "./tools/remote-control";
+import "./tools/keyboard-test";
