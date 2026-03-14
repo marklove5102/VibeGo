@@ -109,6 +109,19 @@ const getTerminalShortcutInput = (
   return null;
 };
 
+const shouldEnableTerminalWebgl = (): boolean => {
+  if (typeof window === "undefined") {
+    return false;
+  }
+  if (window.matchMedia("(pointer: coarse)").matches || window.matchMedia("(hover: none)").matches) {
+    return false;
+  }
+  if (navigator.maxTouchPoints > 0) {
+    return false;
+  }
+  return true;
+};
+
 const encodeUtf8Base64 = (data: string): string => {
   const bytes = new TextEncoder().encode(data);
   let binary = "";
@@ -759,17 +772,19 @@ const TerminalInstance: React.FC<TerminalInstanceProps> = ({
     terminal.open(containerRef.current);
     terminal.unicode.activeVersion = "11";
 
-    try {
-      const webglAddon = new WebglAddon();
-      webglAddon.onContextLoss(() => {
-        webglAddon.dispose();
-      });
-      terminal.loadAddon(webglAddon);
+    if (shouldEnableTerminalWebgl()) {
       try {
-        const ligaturesAddon = new LigaturesAddon();
-        terminal.loadAddon(ligaturesAddon);
+        const webglAddon = new WebglAddon();
+        webglAddon.onContextLoss(() => {
+          webglAddon.dispose();
+        });
+        terminal.loadAddon(webglAddon);
+        try {
+          const ligaturesAddon = new LigaturesAddon();
+          terminal.loadAddon(ligaturesAddon);
+        } catch {}
       } catch {}
-    } catch {}
+    }
 
     fitAddon.fit();
 
