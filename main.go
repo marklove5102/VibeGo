@@ -26,6 +26,7 @@ import (
 	"github.com/xxnuo/vibego/internal/middleware"
 	"github.com/xxnuo/vibego/internal/model"
 	vibegoTls "github.com/xxnuo/vibego/internal/tls"
+	"github.com/xxnuo/vibego/internal/transport"
 	"github.com/xxnuo/vibego/internal/version"
 	"github.com/xxnuo/vibego/ui"
 )
@@ -33,7 +34,6 @@ import (
 func printAccessibleAddresses(host, port, scheme string) {
 	if host == "0.0.0.0" || host == "::" || host == "" {
 		fmt.Printf("VibeGo server listening on:\n")
-		// fmt.Printf("  -> %s://localhost:%s\n", scheme, port)
 		ifaces, err := net.Interfaces()
 		if err == nil {
 			for _, iface := range ifaces {
@@ -153,6 +153,8 @@ func main() {
 	handler.NewPortHandler().Register(api)
 	handler.NewRemoteHandler().Register(api)
 
+	distFS, distErr := ui.GetDistFS()
+
 	if cfg.DevUI != "" {
 		devTarget, err := url.Parse(cfg.DevUI)
 		if err != nil {
@@ -169,8 +171,7 @@ func main() {
 		})
 		log.Info().Str("target", cfg.DevUI).Msg("Dev UI proxy enabled")
 	} else {
-		distFS, err := ui.GetDistFS()
-		if err == nil {
+		if distErr == nil {
 			fileServer := http.FileServer(http.FS(distFS))
 			r.NoRoute(func(c *gin.Context) {
 				path := strings.TrimPrefix(c.Request.URL.Path, "/")
@@ -191,6 +192,44 @@ func main() {
 		Handler: r,
 	}
 
+	var (
+		certFile   string
+		keyFile    string
+		upgradeSrv *http.Server
+		mux        *transport.ProtocolMux
+	)
+
+	if !cfg.NoTLS {
+		var err error
+		certFile, keyFile, err = resolveTLSCert(cfg)
+		if err != nil {
+			log.Fatal().Err(err).Msg("Failed to setup TLS certificate")
+		}
+
+		listener, listenErr := net.Listen("tcp", srv.Addr)
+		if listenErr != nil {
+			log.Fatal().Err(listenErr).Msg("Failed to listen")
+		}
+
+		if distErr != nil {
+			log.Fatal().Err(distErr).Msg("Failed to load UI dist for HTTP upgrade page")
+		}
+
+		upgradeHandler, upgradeErr := transport.NewHTTPSUpgradeHandler(transport.HTTPSUpgradeHandlerConfig{
+			DistFS:          distFS,
+			UpgradePagePath: "http-upgrade.html",
+		})
+		if upgradeErr != nil {
+			log.Fatal().Err(upgradeErr).Msg("Failed to setup HTTP upgrade page")
+		}
+
+		mux = transport.NewProtocolMux(listener)
+		upgradeSrv = &http.Server{
+			Handler: upgradeHandler,
+		}
+		srv.TLSConfig = &tls.Config{MinVersion: tls.VersionTLS12}
+	}
+
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
@@ -199,12 +238,14 @@ func main() {
 		if cfg.NoTLS {
 			err = srv.ListenAndServe()
 		} else {
-			certFile, keyFile, tlsErr := resolveTLSCert(cfg)
-			if tlsErr != nil {
-				log.Fatal().Err(tlsErr).Msg("Failed to setup TLS certificate")
-			}
-			srv.TLSConfig = &tls.Config{MinVersion: tls.VersionTLS12}
-			err = srv.ListenAndServeTLS(certFile, keyFile)
+			go func() {
+				upgradeErr := upgradeSrv.Serve(mux.HTTP())
+				if upgradeErr != nil && upgradeErr != http.ErrServerClosed {
+					log.Fatal().Err(upgradeErr).Msg("HTTP upgrade server error")
+				}
+			}()
+
+			err = srv.ServeTLS(mux.TLS(), certFile, keyFile)
 		}
 		if err != nil && err != http.ErrServerClosed {
 			log.Fatal().Err(err).Msg("Server error")
@@ -217,8 +258,16 @@ func main() {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
+	if upgradeSrv != nil {
+		if err := upgradeSrv.Shutdown(shutdownCtx); err != nil {
+			log.Error().Err(err).Msg("HTTP upgrade server shutdown error")
+		}
+	}
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		log.Error().Err(err).Msg("Server shutdown error")
+	}
+	if mux != nil {
+		_ = mux.Close()
 	}
 }
 

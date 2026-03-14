@@ -3,7 +3,7 @@ import type { KeyEvent, ModifiersState, LayoutDef } from '@/components/keyboard/
 import { MODIFIER_KEYS } from '@/components/keyboard/core/types'
 import { KEYBOARD_QWERTY } from '@/components/keyboard/core/layouts'
 import { keyFeedback } from '@/components/keyboard/core/key-feedback'
-import { startRecording, stopAndRecognize, ensureLoaded } from '@/components/keyboard/core/sherpa-asr'
+import { startRecording, stopAndRecognize } from '@/components/keyboard/core/sherpa-asr'
 import type { SherpaStatus } from '@/components/keyboard/core/sherpa-asr'
 import KeyButton from '@/components/keyboard/key-button'
 import '@/components/keyboard/keyboard.css'

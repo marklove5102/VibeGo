@@ -16,7 +16,6 @@ import {
   Undo2,
   Scissors,
   Copy,
-  Clipboard,
   ClipboardPaste,
   ClipboardList,
   Keyboard,

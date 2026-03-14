@@ -51,7 +51,7 @@ const TerminalPage: React.FC<TerminalPageProps> = ({ groupId, cwd }) => {
   const listManagerOpen = useTerminalStore((s) => s.listManagerOpenByGroup[groupId] ?? true);
   const focusedId = useTerminalStore((s) => s.focusedIdByGroup[groupId] ?? null);
   const [showHistory, setShowHistory] = useState(false);
-  const [showKeyboard, setShowKeyboard] = useState(() =>
+  const [showKeyboard] = useState(() =>
     typeof window !== 'undefined' && (window.matchMedia('(pointer: coarse)').matches || navigator.maxTouchPoints > 0)
   );
   const syncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
