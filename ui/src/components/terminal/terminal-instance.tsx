@@ -9,7 +9,7 @@ import { Unicode11Addon } from "@xterm/addon-unicode11";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { type ITheme, Terminal } from "@xterm/xterm";
-import { ChevronDown, ChevronUp, Copy, Check, X } from "lucide-react";
+import { Check, ChevronDown, ChevronUp, Copy, X } from "lucide-react";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import "@xterm/xterm/css/xterm.css";
 import { terminalApi } from "@/api/terminal";
@@ -39,6 +39,33 @@ interface ParsedTerminalNotification {
 }
 
 type TerminalDisposable = { dispose: () => void };
+
+type TerminalShortcutEvent = Pick<KeyboardEvent, "altKey" | "ctrlKey" | "key" | "metaKey" | "preventDefault" | "type">;
+
+const TERMINAL_CTRL_SHORTCUT_KEYS = new Set(["a", "d", "h", "j", "k", "l", "n", "o", "p", "r", "s", "t", "u", "w"]);
+const TERMINAL_ALT_SHORTCUT_KEYS = new Set(["ArrowLeft", "ArrowRight"]);
+const TERMINAL_FUNCTION_SHORTCUT_KEYS = new Set(["F5"]);
+
+const normalizeShortcutKey = (key: string): string => (key.length === 1 ? key.toLowerCase() : key);
+
+const shouldPreventTerminalBrowserShortcut = (
+  event: Pick<KeyboardEvent, "altKey" | "ctrlKey" | "key" | "metaKey">
+): boolean => {
+  const key = normalizeShortcutKey(event.key);
+  if (event.metaKey) {
+    return false;
+  }
+  if (event.ctrlKey && !event.altKey && TERMINAL_CTRL_SHORTCUT_KEYS.has(key)) {
+    return true;
+  }
+  if (!event.ctrlKey && event.altKey && TERMINAL_ALT_SHORTCUT_KEYS.has(key)) {
+    return true;
+  }
+  if (!event.ctrlKey && !event.altKey && TERMINAL_FUNCTION_SHORTCUT_KEYS.has(key)) {
+    return true;
+  }
+  return false;
+};
 
 const encodeUtf8Base64 = (data: string): string => {
   const bytes = new TextEncoder().encode(data);
@@ -257,6 +284,7 @@ const TerminalInstance: React.FC<TerminalInstanceProps> = ({
   isExited = false,
   onExited,
 }) => {
+  const wrapperRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
@@ -544,6 +572,39 @@ const TerminalInstance: React.FC<TerminalInstanceProps> = ({
     searchAddonRef.current.findPrevious(searchTerm, { caseSensitive: searchCaseSensitive, regex: searchRegex });
   }, [searchTerm, searchCaseSensitive, searchRegex]);
 
+  const isFocusInsideInstance = useCallback(
+    (target: EventTarget | null) => {
+      if (!isActive || !wrapperRef.current) {
+        return false;
+      }
+      if (target instanceof Node && wrapperRef.current.contains(target)) {
+        return true;
+      }
+      const activeElement = document.activeElement;
+      return activeElement instanceof Node && wrapperRef.current.contains(activeElement);
+    },
+    [isActive]
+  );
+
+  useEffect(() => {
+    const handleWindowKeyDown = (event: KeyboardEvent) => {
+      if (!isFocusInsideInstance(event.target)) {
+        return;
+      }
+      const key = normalizeShortcutKey(event.key);
+      if ((event.ctrlKey || event.metaKey) && key === "f") {
+        event.preventDefault();
+        return;
+      }
+      if (shouldPreventTerminalBrowserShortcut(event)) {
+        event.preventDefault();
+      }
+    };
+
+    window.addEventListener("keydown", handleWindowKeyDown, true);
+    return () => window.removeEventListener("keydown", handleWindowKeyDown, true);
+  }, [isFocusInsideInstance]);
+
   useEffect(() => {
     callbacksRef.current = { isActive, isExited, onExited, terminalName, t };
     if (isExited && terminalRef.current) {
@@ -658,10 +719,14 @@ const TerminalInstance: React.FC<TerminalInstanceProps> = ({
     ];
 
     terminal.attachCustomKeyEventHandler((event) => {
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "f" && event.type === "keydown") {
+      const key = normalizeShortcutKey(event.key);
+      if ((event.ctrlKey || event.metaKey) && key === "f" && event.type === "keydown") {
         event.preventDefault();
         openSearchRef.current();
         return false;
+      }
+      if (shouldPreventTerminalBrowserShortcut(event as TerminalShortcutEvent)) {
+        event.preventDefault();
       }
       if (event.key === "Escape" && event.type === "keydown" && searchVisibleRef.current) {
         closeSearchRef.current();
@@ -796,16 +861,22 @@ const TerminalInstance: React.FC<TerminalInstanceProps> = ({
 
   return (
     <div
+      ref={wrapperRef}
       className="absolute inset-0"
       style={{
         display: isActive ? "block" : "none",
         backgroundColor: getXtermTheme(theme).background,
       }}
       onKeyDownCapture={(e) => {
-        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "f") {
+        const key = normalizeShortcutKey(e.key);
+        if ((e.ctrlKey || e.metaKey) && key === "f") {
           e.preventDefault();
           e.stopPropagation();
           openSearchRef.current();
+          return;
+        }
+        if (shouldPreventTerminalBrowserShortcut(e.nativeEvent)) {
+          e.preventDefault();
         }
       }}
     >
@@ -817,11 +888,7 @@ const TerminalInstance: React.FC<TerminalInstanceProps> = ({
         <div className="absolute bottom-0 left-0 right-0 z-10">
           <div
             className={`h-0.5 transition-all duration-300 ${
-              progress.state === 2
-                ? "bg-red-500"
-                : progress.state === 4
-                  ? "bg-yellow-500"
-                  : "bg-blue-500"
+              progress.state === 2 ? "bg-red-500" : progress.state === 4 ? "bg-yellow-500" : "bg-blue-500"
             }`}
             style={{
               width: progress.state === 3 ? "100%" : `${progress.value}%`,
