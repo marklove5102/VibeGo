@@ -872,22 +872,51 @@ func (h *GitHandler) ApplySelection(c *gin.Context) {
 	repoRoot := w.Filesystem.Root()
 
 	if req.Mode == "staged" {
-		diff, err := getGitDiff(repoRoot, req.FilePath, req.Mode)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
-		}
-
-		if req.PatchHash != "" && diff.PatchHash != req.PatchHash {
-			c.JSON(http.StatusConflict, gin.H{"error": "diff changed, please refresh"})
-			return
-		}
-
-		targetLineIDs := getTargetLineIDs(diff, req.Target, req.LineIds, req.HunkIds)
-
 		switch req.Action {
 		case "include":
+			if req.Target == "file" {
+				cmd := exec.Command("git", "add", "--", req.FilePath)
+				cmd.Dir = repoRoot
+				if out, cmdErr := cmd.CombinedOutput(); cmdErr != nil {
+					c.JSON(http.StatusInternalServerError, gin.H{"error": gitCommandError(cmdErr, out).Error()})
+					return
+				}
+				break
+			}
+
+			workingDiff, err := getGitDiff(repoRoot, req.FilePath, "working")
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+
+			if req.PatchHash != "" && workingDiff.PatchHash != req.PatchHash {
+				c.JSON(http.StatusConflict, gin.H{"error": "diff changed, please refresh"})
+				return
+			}
+
+			targetLineIDs := getTargetLineIDs(workingDiff, req.Target, req.LineIds, req.HunkIds)
+			patch := buildSelectionPatch(workingDiff, targetLineIDs)
+			if patch == "" {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "no selected changes"})
+				return
+			}
+			if err := applyPatchToIndex(repoRoot, patch); err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
 		case "exclude":
+			diff, err := getGitDiff(repoRoot, req.FilePath, req.Mode)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+
+			if req.PatchHash != "" && diff.PatchHash != req.PatchHash {
+				c.JSON(http.StatusConflict, gin.H{"error": "diff changed, please refresh"})
+				return
+			}
+
 			if req.Target == "file" {
 				cmd := exec.Command("git", "reset", "HEAD", "--", req.FilePath)
 				cmd.Dir = repoRoot
@@ -898,8 +927,8 @@ func (h *GitHandler) ApplySelection(c *gin.Context) {
 				break
 			}
 
-			patch := buildSelectionPatch(diff, targetLineIDs)
-			patch = buildReverseSelectionPatch(diff, targetLineIDs)
+			targetLineIDs := getTargetLineIDs(diff, req.Target, req.LineIds, req.HunkIds)
+			patch := buildReverseSelectionPatch(diff, targetLineIDs)
 			if patch == "" {
 				c.JSON(http.StatusBadRequest, gin.H{"error": "no selected changes"})
 				return
@@ -933,10 +962,10 @@ func (h *GitHandler) ApplySelection(c *gin.Context) {
 		}
 
 		files, summary := h.collectStructuredStatus(repoRoot)
-		diff, _ = getGitDiff(repoRoot, req.FilePath, req.Mode)
+		nextDiff, _ := getGitDiff(repoRoot, req.FilePath, req.Mode)
 		result := gin.H{"ok": true, "status": gin.H{"files": files, "summary": summary}}
-		if diff != nil && len(diff.Hunks) > 0 {
-			result["diff"] = diff
+		if nextDiff != nil && len(nextDiff.Hunks) > 0 {
+			result["diff"] = nextDiff
 		}
 		h.broadcastStatus(req.Path)
 		c.JSON(http.StatusOK, result)

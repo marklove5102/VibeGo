@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -15,6 +16,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/go-git/go-git/v6"
 	"github.com/go-git/go-git/v6/plumbing/object"
+	"github.com/gorilla/websocket"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -34,6 +36,17 @@ func postJSON(r *gin.Engine, path string, body interface{}) *httptest.ResponseRe
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 	return w
+}
+
+func setupRouterWithGitWS() (*gin.Engine, *GitHandler) {
+	gin.SetMode(gin.TestMode)
+	h := NewGitHandler(nil)
+	wsHandler := NewGitWSHandler(h)
+	h.SetWSHandler(wsHandler)
+	r := gin.New()
+	h.Register(r.Group("/"))
+	wsHandler.Register(r.Group("/"))
+	return r, h
 }
 
 func setupGitRepoWithMultipleCommits(t *testing.T) string {
@@ -127,7 +140,7 @@ func TestGitBranches(t *testing.T) {
 
 	var resp struct {
 		Branches      []BranchInfo `json:"branches"`
-		CurrentBranch string           `json:"currentBranch"`
+		CurrentBranch string       `json:"currentBranch"`
 	}
 	json.Unmarshal(w.Body.Bytes(), &resp)
 	assert.GreaterOrEqual(t, len(resp.Branches), 2)
@@ -276,6 +289,81 @@ func TestGitStashDrop(t *testing.T) {
 	}
 	json.Unmarshal(w.Body.Bytes(), &listResp)
 	assert.Empty(t, listResp.Stashes)
+}
+
+func TestGitWSBroadcastsSelectionChangesImmediately(t *testing.T) {
+	dir := setupGitRepoWithMultipleCommits(t)
+	defer os.RemoveAll(dir)
+
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "file1.txt"), []byte("ONE\nTWO\nthree"), 0644))
+
+	router, _ := setupRouterWithGitWS()
+	server := httptest.NewServer(router)
+	defer server.Close()
+
+	wsURL := "ws" + strings.TrimPrefix(server.URL, "http") + "/git/ws?path=" + url.QueryEscape(dir)
+
+	connA, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+	require.NoError(t, err)
+	defer connA.Close()
+
+	connB, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+	require.NoError(t, err)
+	defer connB.Close()
+
+	w := postJSON(router, "/git/file-diff", map[string]interface{}{
+		"path": dir, "filePath": "file1.txt", "mode": "working",
+	})
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var diffResp InteractiveDiff
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &diffResp))
+
+	lineIDs := make([]string, 0)
+	for _, hunk := range diffResp.Hunks {
+		for _, line := range hunk.Lines {
+			if (line.Content == "two" || line.Content == "TWO") && line.Selectable {
+				lineIDs = append(lineIDs, line.ID)
+			}
+		}
+	}
+	require.Len(t, lineIDs, 1)
+
+	w = postJSON(router, "/git/apply-selection", map[string]interface{}{
+		"path": dir, "filePath": "file1.txt", "mode": "working",
+		"target": "line", "action": "exclude",
+		"patchHash": diffResp.PatchHash,
+		"lineIds":   lineIDs, "hunkIds": []string{},
+	})
+	require.Equal(t, http.StatusOK, w.Code)
+
+	require.NoError(t, connB.SetReadDeadline(time.Now().Add(1*time.Second)))
+
+	for {
+		var event GitWSEvent
+		require.NoError(t, connB.ReadJSON(&event))
+		if event.Type != "file_changed" {
+			continue
+		}
+
+		rawData, err := json.Marshal(event.Data)
+		require.NoError(t, err)
+
+		var payload struct {
+			Files []StructuredFile `json:"files"`
+		}
+		require.NoError(t, json.Unmarshal(rawData, &payload))
+
+		found := false
+		for _, file := range payload.Files {
+			if file.Path == "file1.txt" {
+				found = true
+				assert.Equal(t, "partial", file.IncludedState)
+			}
+		}
+		require.True(t, found)
+		return
+	}
 }
 
 func TestGitAmend(t *testing.T) {
