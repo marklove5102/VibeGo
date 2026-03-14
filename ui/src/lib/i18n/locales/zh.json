@@ -169,7 +169,9 @@
     "notARepoHint": "当前文件夹尚未初始化为 Git 仓库，初始化后即可开始追踪文件变更。",
     "initRepo": "初始化仓库",
     "initRepoConfirmTitle": "初始化 Git 仓库？",
-    "initRepoConfirmMessage": "这将在当前文件夹创建 .git 目录并开始追踪文件变更。"
+    "initRepoConfirmMessage": "这将在当前文件夹创建 .git 目录并开始追踪文件变更。",
+    "unpushedCommit": "此提交尚未推送",
+    "unpushedCommits": "个未推送提交"
   },
   "terminal": {
     "noActiveSession": "无活动终端会话",

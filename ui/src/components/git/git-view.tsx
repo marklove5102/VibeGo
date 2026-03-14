@@ -485,7 +485,7 @@ const GitView: React.FC<GitViewProps> = ({ groupId, path, locale, onFileDiff, on
             )}
           </button>
           <div className="flex-1" />
-          {(hasRemote || aheadCount > 0) && (allFiles.length > 0 || conflicts.length > 0) && (
+          {(hasRemote || aheadCount > 0) && (
             <button
               className="flex items-center gap-1.5 px-2 py-1 rounded text-xs text-ide-accent hover:bg-ide-accent/10 active:bg-ide-accent/15 transition-colors disabled:opacity-50 shrink-0"
               onClick={smartAction.action}
@@ -529,6 +529,7 @@ const GitView: React.FC<GitViewProps> = ({ groupId, path, locale, onFileDiff, on
               isLoading={isLoading}
               locale={locale}
               remoteUrls={remoteUrls}
+              aheadCount={aheadCount}
               onCommitSelect={handleCommitSelect}
               onUndoCommit={handleHistoryUndoCommit}
               onFileClick={handleHistoryFileClick}

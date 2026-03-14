@@ -92,7 +92,7 @@ export interface GitState {
   deleteBranch: (branch: string) => Promise<boolean>;
   gitFetch: () => Promise<boolean>;
   gitPull: () => Promise<boolean>;
-  gitPush: () => Promise<boolean>;
+  gitPush: (force?: boolean) => Promise<boolean>;
   stash: (message?: string, files?: string[]) => Promise<boolean>;
   stashPop: (index?: number) => Promise<boolean>;
   stashDrop: (index?: number) => Promise<boolean>;
@@ -983,7 +983,7 @@ const createGitState =
     }
   },
 
-  gitPush: async () => {
+  gitPush: async (force?: boolean) => {
     const { currentPath } = get();
     if (!currentPath) {
       return false;
@@ -992,7 +992,7 @@ const createGitState =
     set({ isLoading: true, error: null });
 
     try {
-      const res = await gitApi.push(currentPath);
+      const res = await gitApi.push(currentPath, "origin", force);
       if (res.branchStatus) {
         get().applyBranchStatus(res.branchStatus);
       }

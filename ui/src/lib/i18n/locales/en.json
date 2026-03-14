@@ -160,7 +160,9 @@
     "notARepoHint": "This folder is not initialized as a Git repository. Initialize one to start tracking changes.",
     "initRepo": "Initialize Repository",
     "initRepoConfirmTitle": "Initialize Git repository?",
-    "initRepoConfirmMessage": "This will create a .git directory in the current folder and start tracking file changes."
+    "initRepoConfirmMessage": "This will create a .git directory in the current folder and start tracking file changes.",
+    "unpushedCommit": "This commit has not been pushed",
+    "unpushedCommits": "unpushed commits"
   },
   "terminal": {
     "noActiveSession": "No terminal session active",
