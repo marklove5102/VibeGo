@@ -10,6 +10,7 @@ import "@/components/keyboard/keyboard.css";
 import { translateKeyEvent } from "@/components/keyboard/core/key-translator";
 import { useKeyboardStore } from "@/stores/keyboard-store";
 import { useAppStore } from "@/stores/app-store";
+import { useFrameStore } from "@/stores/frame-store";
 
 interface KeyboardProps {
   onKeyEvent: (event: KeyEvent) => void;
@@ -18,7 +19,7 @@ interface KeyboardProps {
 
 const INITIAL_MOD = { active: false, locked: false };
 
-const Keyboard: React.FC<KeyboardProps> = ({ onKeyEvent, layout = KEYBOARD_QWERTY }) => {
+const KeyboardCore: React.FC<KeyboardProps> = ({ onKeyEvent, layout = KEYBOARD_QWERTY }) => {
   const [modifiers, setModifiers] = useState<ModifiersState>({
     ctrl: { ...INITIAL_MOD },
     alt: { ...INITIAL_MOD },
@@ -228,6 +229,10 @@ export const Keyboard: React.FC = () => {
   const { useNativeKeyboard, setUseNativeKeyboard, handlers } = useKeyboardStore();
   const theme = useAppStore((s) => s.theme);
   
+  const activeGroupId = useFrameStore((s) => s.activeGroupId);
+  const activeTabId = useFrameStore((s) => s.getCurrentActiveTabId());
+  const activePageId = useFrameStore((s) => s.getCurrentPage()?.id);
+
   const [showKeyboard] = useState(() =>
     typeof window !== "undefined" && (window.matchMedia("(pointer: coarse)").matches || navigator.maxTouchPoints > 0)
   );
@@ -274,14 +279,44 @@ export const Keyboard: React.FC = () => {
   }, [isEditable, setUseNativeKeyboard]);
 
   useEffect(() => {
+    const handleClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (isEditable(target)) {
+        const state = useKeyboardStore.getState();
+        if (state.useNativeKeyboard) {
+          state.setUseNativeKeyboard(false);
+          if (target.getAttribute("inputmode") !== "none") {
+            target.dataset.originalInputMode = target.getAttribute("inputmode") || "text";
+            target.setAttribute("inputmode", "none");
+            target.dataset.ignoreBlur = "true";
+            target.blur();
+            target.dataset.ignoreBlur = "false";
+            target.focus();
+          }
+        }
+      }
+    };
+
     document.addEventListener("focusin", handleFocusIn, true);
     document.addEventListener("focusout", handleFocusOut, true);
+    document.addEventListener("pointerup", handleClick, true);
     return () => {
       document.removeEventListener("focusin", handleFocusIn, true);
       document.removeEventListener("focusout", handleFocusOut, true);
+      document.removeEventListener("pointerup", handleClick, true);
       if (checkFocusTimer.current) clearTimeout(checkFocusTimer.current);
     };
-  }, [handleFocusIn, handleFocusOut]);
+  }, [handleFocusIn, handleFocusOut, isEditable]);
+
+  useEffect(() => {
+    // When the frame changes (page/tab switch), we check if the active element is still editable and attached to the DOM.
+    // This catches instances where a component unmounts while focused, which doesn't fire a document 'focusout' event.
+    const active = document.activeElement as HTMLElement | null;
+    if (!active || !document.body.contains(active) || !isEditable(active)) {
+      setInputFocused(false);
+      setUseNativeKeyboard(false);
+    }
+  }, [activeGroupId, activeTabId, activePageId, isEditable, setUseNativeKeyboard]);
 
   useEffect(() => {
     const active = document.activeElement as HTMLElement | null;
@@ -295,6 +330,12 @@ export const Keyboard: React.FC = () => {
       }
     }
   }, [useNativeKeyboard, isEditable]);
+
+const cursorTracker = {
+  element: null as HTMLInputElement | HTMLTextAreaElement | null,
+  cursor: -1,
+  timer: null as ReturnType<typeof setTimeout> | null,
+};
 
   const handleVirtualKeyEvent = useCallback(
     (e: KeyEvent) => {
@@ -344,20 +385,11 @@ export const Keyboard: React.FC = () => {
         active.dispatchEvent(keydown);
         
         if (e.value.startsWith("Arrow") || e.value === "Home" || e.value === "End" || e.value === "PageUp" || e.value === "PageDown") {
-             // For simple inputs without complex event handling, dispatching keydown sometimes isn't enough,
-             // but Monaco and Xterm intercept keydown. If it's a simple input/textarea, we might need manual handling:
              const tag = active.tagName.toLowerCase();
              if (tag === 'input' || tag === 'textarea' || active.isContentEditable) {
-                 // The manual cursor moving logic isn't perfect with standard keydown on native inputs in JS, 
-                 // but most of the complex inputs are Xterm or Monaco.
-                 // We will skip explicit cursor moving for standard inputs to keep it simple, since they usually
-                 // aren't the main focus, OR we could implement it if requested. Wait! The prompt said 
-                 // text editor, terminal, or any input box.
-                 // So we must try to support arrows for raw input/textareas!
                  if ((tag === 'input' || tag === 'textarea') && active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement) {
                      const el = active as HTMLInputElement | HTMLTextAreaElement;
                      const start = el.selectionStart || 0;
-                     const end = el.selectionEnd || 0;
                      if (e.value === "ArrowLeft") {
                          const pos = Math.max(0, start - 1);
                          el.setSelectionRange(pos, pos);
@@ -371,6 +403,15 @@ export const Keyboard: React.FC = () => {
       }
 
       const activeInput = active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement ? active : null;
+
+      // Anti-jump mechanism for fast multi-touch typing on React controlled inputs
+      if (activeInput && cursorTracker.element === activeInput && cursorTracker.cursor !== -1) {
+          if (activeInput.selectionStart !== cursorTracker.cursor) {
+              activeInput.selectionStart = cursorTracker.cursor;
+              activeInput.selectionEnd = cursorTracker.cursor;
+          }
+      }
+
       let targetCursor = -1;
 
       if (action.type === "input") {
@@ -419,10 +460,24 @@ export const Keyboard: React.FC = () => {
       }
 
       if (activeInput && targetCursor !== -1) {
-          setTimeout(() => {
-              activeInput.selectionStart = targetCursor;
-              activeInput.selectionEnd = targetCursor;
+          cursorTracker.element = activeInput;
+          cursorTracker.cursor = targetCursor;
+          
+          if (cursorTracker.timer) clearTimeout(cursorTracker.timer);
+          cursorTracker.timer = setTimeout(() => {
+              if (cursorTracker.element) {
+                  cursorTracker.element.selectionStart = cursorTracker.cursor;
+                  cursorTracker.element.selectionEnd = cursorTracker.cursor;
+              }
+              // Clear tracker after a short delay so manual clicks aren't overridden
+              cursorTracker.timer = setTimeout(() => {
+                  cursorTracker.element = null;
+                  cursorTracker.cursor = -1;
+              }, 50);
           }, 0);
+      } else {
+          cursorTracker.element = null;
+          cursorTracker.cursor = -1;
       }
     },
     [setUseNativeKeyboard, isEditable]
@@ -441,9 +496,7 @@ export const Keyboard: React.FC = () => {
       onMouseDown={(e) => e.preventDefault()}
       onContextMenu={(e) => e.preventDefault()}
     >
-      <Keyboard onKeyEvent={handleVirtualKeyEvent} />
+      <KeyboardCore onKeyEvent={handleVirtualKeyEvent} />
     </div>
   );
 };
-
-export default Keyboard;

@@ -120,6 +120,8 @@ const KeyButton: React.FC<KeyButtonProps> = ({ keyDef, modState, shiftActive, on
     if (timersRef.current.interval) { clearInterval(timersRef.current.interval); timersRef.current.interval = undefined }
   }, [])
 
+const REQUIRES_GESTURE = new Set(['Keyboard', 'Mic']);
+
   const startLongPress = useCallback((dir: SwipeDir | null) => {
     clearTimers()
     if (keyDef.type === 'modifier') return
@@ -128,6 +130,10 @@ const KeyButton: React.FC<KeyButtonProps> = ({ keyDef, modState, shiftActive, on
 
     timersRef.current.delay = setTimeout(() => {
       stateRef.current.firedByRepeat = true
+      if (REQUIRES_GESTURE.has(resolved.value)) {
+        navigator.vibrate?.(50)
+        return
+      }
       onKeyOutput(resolved.value, resolved.special)
       timersRef.current.interval = setInterval(() => {
         const curDir = stateRef.current.swiped
@@ -163,6 +169,10 @@ const KeyButton: React.FC<KeyButtonProps> = ({ keyDef, modState, shiftActive, on
         timersRef.current.delay = setTimeout(() => {
           if (stateRef.current.isSliding || stateRef.current.didSlide) return
           stateRef.current.firedByRepeat = true
+          if (REQUIRES_GESTURE.has(subVal)) {
+             navigator.vibrate?.(50)
+             return
+          }
           onKeyOutput(subVal, isSpecialKey(subVal) || true)
         }, LONG_PRESS_DELAY)
       }
@@ -221,7 +231,14 @@ const KeyButton: React.FC<KeyButtonProps> = ({ keyDef, modState, shiftActive, on
     clearTimers()
 
     if (keyDef.slider === 'horizontal') {
-      if (!s.didSlide && !s.firedByRepeat) fireKey(null)
+      if (!s.didSlide && !s.firedByRepeat) {
+         fireKey(null)
+      } else if (s.firedByRepeat && !s.didSlide) {
+         const subVal = keyDef.sub?.s;
+         if (subVal && REQUIRES_GESTURE.has(subVal)) {
+            onKeyOutput(subVal, isSpecialKey(subVal) || true);
+         }
+      }
       setSliding(false)
       setPressed(false)
       return
@@ -229,11 +246,16 @@ const KeyButton: React.FC<KeyButtonProps> = ({ keyDef, modState, shiftActive, on
 
     if (!s.firedByRepeat) {
       fireKey(s.swiped)
+    } else {
+      const resolved = resolveValue(s.swiped);
+      if (resolved && REQUIRES_GESTURE.has(resolved.value)) {
+         onKeyOutput(resolved.value, resolved.special);
+      }
     }
 
     setPressed(false)
     setSwipeDir(null)
-  }, [keyDef, fireKey, clearTimers])
+  }, [keyDef, fireKey, clearTimers, resolveValue, onKeyOutput])
 
   const handleContextMenu = useCallback((e: React.MouseEvent) => {
     e.preventDefault()
