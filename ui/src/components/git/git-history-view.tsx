@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import type { CommitFileInfo, GitCommit } from "@/api/git";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { getIntlLocale, getTranslation, type Locale } from "@/lib/i18n";
 
 type AvatarPlatform = "github" | "gitlab" | "gravatar";
@@ -237,10 +237,13 @@ const CommitItem: React.FC<CommitItemProps> = ({
         onClick={onToggle}
       >
         <Avatar className="mt-0.5 size-7 shrink-0">
-          {authorAvatarUrl ? <AvatarImage src={authorAvatarUrl} alt={commit.author} /> : null}
-          <AvatarFallback className={`${hashColor(commit.author)} text-[10px] font-bold text-white`}>
-            {getInitials(commit.author)}
-          </AvatarFallback>
+          {authorAvatarUrl ? (
+            <img src={authorAvatarUrl} alt={commit.author} className="aspect-square size-full rounded-full" />
+          ) : (
+            <AvatarFallback className={`${hashColor(commit.author)} text-[10px] font-bold text-white`}>
+              {getInitials(commit.author)}
+            </AvatarFallback>
+          )}
         </Avatar>
         <div className="flex-1 min-w-0">
           <div className="text-sm text-ide-text font-medium truncate">{firstLine}</div>
