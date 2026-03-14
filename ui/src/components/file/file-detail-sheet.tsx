@@ -175,7 +175,7 @@ const FileDetailSheet: React.FC<FileDetailSheetProps> = ({ file, open, onClose, 
     >
       <DialogContent
         showCloseButton={false}
-        className="inset-x-0 top-auto bottom-0 translate-x-0 translate-y-0 w-full max-w-2xl rounded-t-2xl rounded-b-none border-t border-x-0 border-b-0 bg-ide-panel p-4 pb-5"
+        className="inset-x-0 top-auto bottom-0 translate-x-0 translate-y-0 w-full max-w-2xl rounded-t-2xl rounded-b-none border-t border-x-0 border-b-0 bg-ide-panel p-4 pb-5 md:inset-auto md:top-[50%] md:left-[50%] md:-translate-x-[50%] md:-translate-y-[50%] md:w-[480px] md:max-w-md md:rounded-2xl md:border md:pb-6"
       >
         <div className="bg-muted mx-auto h-1.5 w-10 rounded-full" />
 

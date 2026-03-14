@@ -179,7 +179,7 @@ export const DialogProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             showCloseButton={false}
             onKeyDown={handleKeyDown}
             style={{ bottom: viewportInset ? `${viewportInset}px` : undefined }}
-            className="inset-x-0 top-auto bottom-0 translate-x-0 translate-y-0 w-full max-w-2xl max-h-[calc(100dvh-0.75rem)] overflow-y-auto rounded-t-2xl rounded-b-none border-t border-x-0 border-b-0 p-4 pb-5"
+            className="inset-x-0 top-auto bottom-0 translate-x-0 translate-y-0 w-full max-w-2xl max-h-[calc(100dvh-0.75rem)] overflow-y-auto rounded-t-2xl rounded-b-none border-t border-x-0 border-b-0 p-4 pb-5 md:inset-auto md:top-[50%] md:left-[50%] md:-translate-x-[50%] md:-translate-y-[50%] md:w-full md:max-w-md md:rounded-2xl md:border md:p-6 md:pb-6"
           >
             <div className="bg-muted mx-auto h-1.5 w-10 rounded-full" />
             <DialogHeader>

@@ -256,7 +256,7 @@ const BottomBar: React.FC<BottomBarProps> = ({ onMenuClick, onNewPage }) => {
 
   return (
     <>
-      <footer className="h-14 pb-safe bg-ide-panel border-t border-ide-border flex items-center justify-between z-20 shadow-[0_-5px_15px_rgba(0,0,0,0.1)]">
+      <footer className="md:hidden h-14 pb-safe bg-ide-panel border-t border-ide-border flex items-center justify-between z-20 shadow-[0_-5px_15px_rgba(0,0,0,0.1)]">
         <button onClick={onMenuClick} className="h-full px-4 flex items-center gap-3">
           <div className={cornerButtonClass}>
             <Menu size={18} />
