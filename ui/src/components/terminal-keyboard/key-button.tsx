@@ -130,7 +130,12 @@ const KeyButton: React.FC<KeyButtonProps> = ({ keyDef, modState, shiftActive, on
       return
     }
 
-    const dir = getSwipeDirection(dx, dy, SWIPE_THRESHOLD)
+    const availableDirs = keyDef.sub
+      ? (Object.entries(keyDef.sub)
+          .filter(([_, v]) => v)
+          .map(([k]) => k) as SwipeDir[])
+      : undefined
+    const dir = getSwipeDirection(dx, dy, SWIPE_THRESHOLD, availableDirs)
     if (dir !== s.swiped) {
       s.swiped = dir
       setSwipeDir(dir)
