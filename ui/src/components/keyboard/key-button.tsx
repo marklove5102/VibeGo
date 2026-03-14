@@ -4,6 +4,8 @@ import {
   ArrowDown,
   ArrowLeft,
   ArrowRight,
+  ArrowBigUp,
+  ArrowBigUpDash,
   ChevronsUp,
   ChevronsDown,
   ArrowLeftToLine,
@@ -16,7 +18,6 @@ import {
   Clipboard,
   Keyboard,
   Smile,
-  Settings,
   Mic,
   BoxSelect
 } from 'lucide-react'
@@ -42,7 +43,7 @@ const DISPLAY_LABELS: Record<string, React.ReactNode> = {
   Enter: <CornerDownLeft size={12} strokeWidth={2.5} />,
   Insert: 'Ins',
   Delete: 'Del',
-  Tab: '↹',
+  Tab: '⇥',
   Select: <BoxSelect size={12} strokeWidth={2.5} />,
   Undo: <Undo2 size={12} strokeWidth={2.5} />,
   Cut: <Scissors size={12} strokeWidth={2.5} />,
@@ -51,9 +52,15 @@ const DISPLAY_LABELS: Record<string, React.ReactNode> = {
   Clipboard: <Clipboard size={12} strokeWidth={2.5} />,
   Keyboard: <Keyboard size={12} strokeWidth={2.5} />,
   Emoji: <Smile size={12} strokeWidth={2.5} />,
-  Settings: <Settings size={12} strokeWidth={2.5} />,
   Mic: <Mic size={12} strokeWidth={2.5} />,
-  Caps: '⇪',
+  Caps: <ArrowBigUpDash size={12} strokeWidth={2.5} />,
+}
+
+const MAIN_LABELS: Record<string, React.ReactNode> = {
+  '⇧': <ArrowBigUp size={18} strokeWidth={2} />,
+  '⌫': <Delete size={18} strokeWidth={2} />,
+  '↵': <CornerDownLeft size={18} strokeWidth={2} />,
+  '⌨': <Keyboard size={18} strokeWidth={2} />,
 }
 
 interface KeyButtonProps {
@@ -232,13 +239,13 @@ const KeyButton: React.FC<KeyButtonProps> = ({ keyDef, modState, shiftActive, on
 
   const swipeSubVal = swipeDir && keyDef.sub?.[swipeDir]
 
-  const displayLabel = (() => {
-    if (keyDef.value === 'Shift' && modState === 'locked') return '⇪'
-    if (keyDef.value === 'Shift' && modState === 'latched') return '⬆'
+  const displayLabel: React.ReactNode = (() => {
+    if (keyDef.value === 'Shift' && modState === 'locked') return <ArrowBigUpDash size={18} strokeWidth={2} />
+    if (keyDef.value === 'Shift' && modState === 'latched') return <ArrowBigUp size={18} strokeWidth={2.5} fill="currentColor" />
     if (keyDef.type === 'char' && shiftActive && keyDef.value.length === 1 && /^[a-z]$/.test(keyDef.value)) {
       return keyDef.value.toUpperCase()
     }
-    return keyDef.label
+    return MAIN_LABELS[keyDef.label] ?? keyDef.label
   })()
 
   const renderSwipePreview = (content: React.ReactNode, compact = false) => (
