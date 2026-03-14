@@ -277,52 +277,65 @@ const GitChangesView: React.FC<GitChangesViewProps> = ({
               <button
                 onClick={onPush}
                 disabled={isLoading}
-                className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-ide-accent/10 border border-ide-accent/20 hover:bg-ide-accent/15 transition-colors disabled:opacity-50 text-left"
+                className="flex items-center gap-2.5 px-3 py-2 rounded border border-ide-border bg-ide-panel hover:bg-ide-panel/80 hover:border-ide-accent/50 transition-colors disabled:opacity-50 text-left group shadow-sm"
               >
-                <CloudUpload size={16} className="text-ide-accent shrink-0" />
-                <span className="text-xs text-ide-accent font-medium">{t("git.publish")}</span>
+                <CloudUpload
+                  size={14}
+                  className="text-ide-mute group-hover:text-ide-accent shrink-0 transition-colors"
+                />
+                <span className="text-xs text-ide-text group-hover:text-ide-accent font-medium transition-colors">
+                  {t("git.publish")}
+                </span>
               </button>
             )}
             {hasRemote && behindCount > 0 && (
               <button
                 onClick={onPull}
                 disabled={isLoading}
-                className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-orange-500/10 border border-orange-500/20 hover:bg-orange-500/15 transition-colors disabled:opacity-50 text-left"
+                className="flex items-center gap-2.5 px-3 py-2 rounded border border-ide-border bg-ide-panel hover:bg-ide-panel/80 hover:border-orange-500/50 transition-colors disabled:opacity-50 text-left group shadow-sm"
               >
-                <ArrowDown size={16} className="text-orange-400 shrink-0" />
-                <span className="text-xs text-orange-400 font-medium">{t("git.pull")} ({behindCount})</span>
+                <ArrowDown size={14} className="text-ide-mute group-hover:text-orange-400 shrink-0 transition-colors" />
+                <span className="text-xs text-ide-text group-hover:text-orange-400 font-medium transition-colors">
+                  {t("git.pull")} ({behindCount})
+                </span>
               </button>
             )}
             {hasRemote && aheadCount > 0 && (
               <button
                 onClick={onPush}
                 disabled={isLoading}
-                className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-blue-500/10 border border-blue-500/20 hover:bg-blue-500/15 transition-colors disabled:opacity-50 text-left"
+                className="flex items-center gap-2.5 px-3 py-2 rounded border border-ide-border bg-ide-panel hover:bg-ide-panel/80 hover:border-blue-500/50 transition-colors disabled:opacity-50 text-left group shadow-sm"
               >
-                <ArrowUp size={16} className="text-blue-400 shrink-0" />
-                <span className="text-xs text-blue-400 font-medium">{t("git.push")} ({aheadCount})</span>
+                <ArrowUp size={14} className="text-ide-mute group-hover:text-blue-400 shrink-0 transition-colors" />
+                <span className="text-xs text-ide-text group-hover:text-blue-400 font-medium transition-colors">
+                  {t("git.push")} ({aheadCount})
+                </span>
               </button>
             )}
             {hasRemote && aheadCount === 0 && behindCount === 0 && (
               <button
                 onClick={onFetch}
                 disabled={isLoading}
-                className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-ide-panel border border-ide-border hover:bg-ide-accent/10 transition-colors disabled:opacity-50 text-left"
+                className="flex items-center gap-2.5 px-3 py-2 rounded border border-ide-border bg-ide-panel hover:bg-ide-panel/80 hover:border-ide-text/30 transition-colors disabled:opacity-50 text-left group shadow-sm"
               >
-                <RefreshCw size={16} className="text-ide-mute shrink-0" />
-                <span className="text-xs text-ide-text font-medium">{t("git.fetch")}</span>
+                <RefreshCw size={14} className="text-ide-mute group-hover:text-ide-text shrink-0 transition-colors" />
+                <span className="text-xs text-ide-text font-medium transition-colors">{t("git.fetch")}</span>
               </button>
             )}
             {safeStashes.length > 0 && (
               <button
                 onClick={() => onStashPop(safeStashes[0].index)}
                 disabled={isLoading}
-                className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-purple-500/10 border border-purple-500/20 hover:bg-purple-500/15 transition-colors disabled:opacity-50 text-left"
+                className="flex items-center gap-2.5 px-3 py-2 rounded border border-ide-border bg-ide-panel hover:bg-ide-panel/80 hover:border-purple-500/50 transition-colors disabled:opacity-50 text-left group shadow-sm"
               >
-                <Archive size={16} className="text-purple-400 shrink-0" />
-                <div className="flex flex-col min-w-0">
-                  <span className="text-xs text-purple-400 font-medium">{t("git.stashes")} ({safeStashes.length})</span>
-                  <span className="text-[10px] text-purple-400/70 truncate">{safeStashes[0].message}</span>
+                <Archive size={14} className="text-ide-mute group-hover:text-purple-400 shrink-0 transition-colors" />
+                <div className="flex flex-col min-w-0 flex-1">
+                  <span className="text-xs text-ide-text group-hover:text-purple-400 font-medium transition-colors">
+                    {t("git.stashes")} ({safeStashes.length})
+                  </span>
+                  <span className="text-[10px] text-ide-mute truncate group-hover:text-ide-mute/80 transition-colors">
+                    {safeStashes[0].message}
+                  </span>
                 </div>
               </button>
             )}
@@ -332,18 +345,21 @@ const GitChangesView: React.FC<GitChangesViewProps> = ({
         {hasChanges && (
           <>
             {showFilter && (
-              <div className="px-3 py-1.5 border-b border-ide-border bg-ide-panel/30">
-                <div className="flex items-center gap-1.5 bg-ide-bg border border-ide-border rounded px-2 py-1">
+              <div className="px-3 py-2 border-b border-ide-border/50 bg-ide-bg">
+                <div className="flex items-center gap-1.5 bg-ide-panel border border-ide-border rounded px-2 py-1.5 focus-within:border-ide-accent focus-within:ring-1 focus-within:ring-ide-accent/20 transition-all">
                   <Search size={12} className="text-ide-mute shrink-0" />
                   <input
                     type="text"
                     value={filterText}
                     onChange={(e) => setFilterText(e.target.value)}
                     placeholder={t("git.searchFiles")}
-                    className="flex-1 bg-transparent text-xs text-ide-text placeholder-ide-mute/50 focus:outline-none min-w-0"
+                    className="flex-1 bg-transparent text-xs text-ide-text placeholder-ide-mute focus:outline-none min-w-0"
                   />
                   {filterText && (
-                    <button onClick={() => setFilterText("")} className="text-ide-mute hover:text-ide-text">
+                    <button
+                      onClick={() => setFilterText("")}
+                      className="text-ide-mute hover:text-ide-text transition-colors"
+                    >
                       <X size={12} />
                     </button>
                   )}
@@ -427,9 +443,7 @@ const GitChangesView: React.FC<GitChangesViewProps> = ({
                 );
               })}
               {filterText && filteredFiles.length === 0 && (
-                <div className="flex items-center justify-center py-6 text-ide-mute text-xs">
-                  {t("git.noChanges")}
-                </div>
+                <div className="flex items-center justify-center py-6 text-ide-mute text-xs">{t("git.noChanges")}</div>
               )}
             </div>
           </>
@@ -489,16 +503,16 @@ const GitChangesView: React.FC<GitChangesViewProps> = ({
             placeholder={t("git.summaryPlaceholder")}
             value={summary}
             onChange={(e) => setSummary(e.target.value)}
-            className={`w-full bg-ide-bg border rounded px-3 py-2 text-sm text-ide-text focus:outline-none placeholder-ide-mute/50 ${
+            className={`w-full bg-ide-bg border rounded px-3 py-2 text-sm text-ide-text focus:outline-none placeholder-ide-mute ${
               summary.length > 72
-                ? "border-yellow-500/50 focus:border-yellow-500"
-                : "border-ide-border focus:border-ide-accent"
+                ? "border-orange-500/50 focus:border-orange-500 focus:ring-1 focus:ring-orange-500/20"
+                : "border-ide-border focus:border-ide-accent focus:ring-1 focus:ring-ide-accent/20"
             }`}
           />
           {summary.length > 0 && (
             <span
-              className={`absolute right-2 top-1/2 -translate-y-1/2 text-[10px] ${
-                summary.length > 72 ? "text-yellow-500" : "text-ide-mute/50"
+              className={`absolute right-3 top-1/2 -translate-y-1/2 text-[10px] ${
+                summary.length > 72 ? "text-orange-500 font-medium" : "text-ide-mute"
               }`}
             >
               {summary.length}
@@ -586,19 +600,20 @@ const GitChangesView: React.FC<GitChangesViewProps> = ({
       )}
 
       {undoToast && (
-        <div className="absolute bottom-20 left-3 right-3 z-50 animate-in slide-in-from-bottom-4 fade-in duration-300">
-          <div className="flex items-center gap-2 bg-green-500/15 border border-green-500/30 rounded-lg px-3 py-2 shadow-lg backdrop-blur-sm">
-            <Check size={14} className="text-green-400 shrink-0" />
-            <span className="flex-1 text-xs text-green-400 font-medium">{t("git.commit")}</span>
+        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-50 animate-in slide-in-from-bottom-4 fade-in duration-300">
+          <div className="flex items-center gap-2.5 bg-ide-panel border border-ide-border rounded-md px-3 py-2 shadow-xl shadow-black/20">
+            <Check size={14} className="text-green-500 shrink-0" />
+            <span className="text-xs text-ide-text mr-1">{t("git.commit")}</span>
             <button
               onClick={handleUndoFromToast}
-              className="flex items-center gap-1 px-2 py-0.5 rounded text-xs text-ide-accent hover:bg-ide-accent/10 font-medium"
+              className="flex items-center gap-1 px-2 py-0.5 rounded text-[11px] text-ide-accent hover:bg-ide-accent/10 font-medium transition-colors"
             >
               <Undo2 size={10} />
               {t("git.undo")}
             </button>
-            <button onClick={() => setUndoToast(false)} className="text-ide-mute hover:text-ide-text">
-              <X size={12} />
+            <div className="w-px h-3 bg-ide-border mx-1"></div>
+            <button onClick={() => setUndoToast(false)} className="text-ide-mute hover:text-ide-text transition-colors">
+              <X size={14} />
             </button>
           </div>
         </div>

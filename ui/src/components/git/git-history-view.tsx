@@ -1,4 +1,13 @@
-import { Check, ChevronDown, ChevronRight, Clock, Copy, GitCommit as GitCommitIcon, Loader2, Undo2 } from "lucide-react";
+import {
+  Check,
+  ChevronDown,
+  ChevronRight,
+  Clock,
+  Copy,
+  GitCommit as GitCommitIcon,
+  Loader2,
+  Undo2,
+} from "lucide-react";
 import React, { useCallback, useRef, useState } from "react";
 import type { CommitFileInfo, GitCommit } from "@/api/git";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";

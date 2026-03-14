@@ -20,8 +20,7 @@ export function useDefaultPageCloseButton(): TopBarButton | null {
       return null;
     }
 
-    const isFolderGroup =
-      activeGroup.type === "group" && activeGroup.pages.some((p) => p.path);
+    const isFolderGroup = activeGroup.type === "group" && activeGroup.pages.some((p) => p.path);
 
     return {
       icon: <X size={18} />,

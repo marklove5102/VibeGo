@@ -301,9 +301,7 @@ export const useFrameStore = create<FrameState>((set, get) => ({
       type: "group",
       id: groupId,
       name: "Terminal",
-      pages: [
-        { id: `${groupId}-terminal`, type: "terminal", label: "Terminal", tabs: [], activeTabId: null },
-      ],
+      pages: [{ id: `${groupId}-terminal`, type: "terminal", label: "Terminal", tabs: [], activeTabId: null }],
       activePageId: `${groupId}-terminal`,
     };
     set((s) => ({ groups: [...s.groups, group], activeGroupId: group.id }));

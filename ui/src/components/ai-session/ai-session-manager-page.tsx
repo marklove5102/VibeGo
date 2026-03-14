@@ -16,8 +16,8 @@ import React from "react";
 import { toast } from "sonner";
 import { aiSessionApi } from "@/api";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { usePageTopBar } from "@/hooks/use-page-top-bar";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { usePageTopBar } from "@/hooks/use-page-top-bar";
 import { getIntlLocale, useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { useAppStore } from "@/stores/app-store";
@@ -240,13 +240,7 @@ const AISessionManagerPage: React.FC = () => {
       if (!needle) {
         return true;
       }
-      const haystack = [
-        session.sessionId,
-        session.title,
-        session.summary,
-        session.projectDir,
-        session.sourcePath,
-      ]
+      const haystack = [session.sessionId, session.title, session.summary, session.projectDir, session.sourcePath]
         .filter(Boolean)
         .join(" ")
         .toLowerCase();
@@ -361,9 +355,7 @@ const AISessionManagerPage: React.FC = () => {
         {
           icon: view === "settings" ? <History size={18} /> : <Settings2 size={18} />,
           title:
-            view === "settings"
-              ? t("plugin.aiSessionManager.backToSessions")
-              : t("plugin.aiSessionManager.settings"),
+            view === "settings" ? t("plugin.aiSessionManager.backToSessions") : t("plugin.aiSessionManager.settings"),
           onClick: () => setView((current) => (current === "settings" ? "list" : "settings")),
         },
       ],
@@ -414,7 +406,9 @@ const AISessionManagerPage: React.FC = () => {
             <div className="text-ide-mute">{t("plugin.aiSessionManager.sourceMode")}</div>
             <div className="mt-1 flex items-center gap-1.5 text-xs font-medium text-ide-text">
               <Database size={14} className="text-ide-accent" />
-              <span>{response?.fromCache ? t("plugin.aiSessionManager.cached") : t("plugin.aiSessionManager.live")}</span>
+              <span>
+                {response?.fromCache ? t("plugin.aiSessionManager.cached") : t("plugin.aiSessionManager.live")}
+              </span>
             </div>
           </div>
         </div>
@@ -574,7 +568,9 @@ const AISessionManagerPage: React.FC = () => {
         <div className="border-b border-ide-border px-4 py-4">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
-              <div className="text-lg font-semibold text-ide-text">{selectedSession.title || selectedSession.sessionId}</div>
+              <div className="text-lg font-semibold text-ide-text">
+                {selectedSession.title || selectedSession.sessionId}
+              </div>
               <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-ide-mute">
                 <span className="rounded-md border border-ide-border bg-ide-panel px-2 py-0.5">
                   {providerLabels[selectedSession.providerId as AIProviderId] || selectedSession.providerId}
@@ -625,7 +621,9 @@ const AISessionManagerPage: React.FC = () => {
             {detailLoading ? (
               <div className="flex h-full items-center justify-center text-sm text-ide-mute">{t("common.loading")}</div>
             ) : detailError ? (
-              <div className="rounded-md border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-400">{detailError}</div>
+              <div className="rounded-md border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-400">
+                {detailError}
+              </div>
             ) : messages.length === 0 ? (
               <div className="flex h-full items-center justify-center text-sm text-ide-mute">
                 {t("plugin.aiSessionManager.emptyMessages")}
@@ -683,9 +681,7 @@ const AISessionManagerPage: React.FC = () => {
     });
   };
 
-  const allEnabled = providerOrder.every(
-    (id) => (configDraft.providers[id] || { enabled: true }).enabled
-  );
+  const allEnabled = providerOrder.every((id) => (configDraft.providers[id] || { enabled: true }).enabled);
 
   const renderSettings = () => (
     <div className="flex h-full min-h-0 flex-col bg-ide-bg">
@@ -696,9 +692,17 @@ const AISessionManagerPage: React.FC = () => {
           </div>
           <div className="rounded-lg border border-ide-border bg-ide-panel">
             {[
-              ["autoRescanOnOpen", "plugin.aiSessionManager.autoRescanOnOpen", "plugin.aiSessionManager.autoRescanOnOpenDesc"],
+              [
+                "autoRescanOnOpen",
+                "plugin.aiSessionManager.autoRescanOnOpen",
+                "plugin.aiSessionManager.autoRescanOnOpenDesc",
+              ],
               ["cacheEnabled", "plugin.aiSessionManager.cacheEnabled", "plugin.aiSessionManager.cacheEnabledDesc"],
-              ["showParseErrors", "plugin.aiSessionManager.showParseErrors", "plugin.aiSessionManager.showParseErrorsDesc"],
+              [
+                "showParseErrors",
+                "plugin.aiSessionManager.showParseErrors",
+                "plugin.aiSessionManager.showParseErrorsDesc",
+              ],
             ].map(([key, label, desc], index, arr) => {
               const checked = configDraft[key as keyof AISessionConfig] as boolean;
               return (
@@ -791,7 +795,9 @@ const AISessionManagerPage: React.FC = () => {
                             : "border-ide-border bg-ide-bg text-ide-mute"
                         )}
                       >
-                        {providerConfig.enabled ? t("plugin.aiSessionManager.enabled") : t("plugin.aiSessionManager.disabled")}
+                        {providerConfig.enabled
+                          ? t("plugin.aiSessionManager.enabled")
+                          : t("plugin.aiSessionManager.disabled")}
                       </span>
                       {hasErrors ? (
                         <span className="shrink-0 rounded-md border border-red-500/30 bg-red-500/10 px-1.5 py-0.5 text-[11px] text-red-400">
@@ -805,10 +811,7 @@ const AISessionManagerPage: React.FC = () => {
                       </span>
                       <ChevronDown
                         size={16}
-                        className={cn(
-                          "text-ide-mute transition-transform duration-200",
-                          collapsed ? "-rotate-90" : ""
-                        )}
+                        className={cn("text-ide-mute transition-transform duration-200", collapsed ? "-rotate-90" : "")}
                       />
                     </div>
                   </button>
@@ -819,10 +822,7 @@ const AISessionManagerPage: React.FC = () => {
                         <div className="flex items-center justify-between gap-3">
                           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ide-mute">
                             <span
-                              className={cn(
-                                "inline-flex items-center gap-1",
-                                !status?.available ? "text-red-400" : ""
-                              )}
+                              className={cn("inline-flex items-center gap-1", !status?.available ? "text-red-400" : "")}
                             >
                               {!status?.available ? <AlertTriangle size={12} /> : null}
                               {status?.available
@@ -903,7 +903,9 @@ const AISessionManagerPage: React.FC = () => {
                         <div className="mt-1 flex items-center gap-2 rounded-md border border-ide-border bg-ide-bg px-3 py-2 text-xs">
                           <FolderSearch size={14} className="shrink-0 text-ide-accent" />
                           <span className="text-ide-mute">{t("plugin.aiSessionManager.currentResolvedPath")}</span>
-                          <span className="min-w-0 flex-1 truncate font-mono text-ide-text">{status?.paths?.[0] || "-"}</span>
+                          <span className="min-w-0 flex-1 truncate font-mono text-ide-text">
+                            {status?.paths?.[0] || "-"}
+                          </span>
                         </div>
                       </div>
                     </>

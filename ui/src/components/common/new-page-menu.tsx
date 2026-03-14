@@ -12,7 +12,14 @@ interface NewPageMenuProps {
   onNewTool: (pageId: string) => void;
 }
 
-const NewPageMenu: React.FC<NewPageMenuProps> = ({ isOpen, onClose, locale, onOpenDirectory, onNewTerminal, onNewTool }) => {
+const NewPageMenu: React.FC<NewPageMenuProps> = ({
+  isOpen,
+  onClose,
+  locale,
+  onOpenDirectory,
+  onNewTerminal,
+  onNewTool,
+}) => {
   const t = useTranslation(locale);
   const tools = pageRegistry.getAll().filter((p) => p.category === "tool");
 

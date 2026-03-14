@@ -1,9 +1,4 @@
-import type {
-  AIListResponse,
-  AIMessagesResponse,
-  AIOverviewResponse,
-  AISessionConfig,
-} from "@/types/ai-session";
+import type { AIListResponse, AIMessagesResponse, AIOverviewResponse, AISessionConfig } from "@/types/ai-session";
 
 const API_BASE = "/api";
 
