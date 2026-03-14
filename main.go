@@ -25,6 +25,7 @@ import (
 	"github.com/xxnuo/vibego/internal/logger"
 	"github.com/xxnuo/vibego/internal/middleware"
 	"github.com/xxnuo/vibego/internal/model"
+	"github.com/xxnuo/vibego/internal/service/asr"
 	vibegoTls "github.com/xxnuo/vibego/internal/tls"
 	"github.com/xxnuo/vibego/internal/transport"
 	"github.com/xxnuo/vibego/internal/version"
@@ -119,6 +120,11 @@ func main() {
 	})
 
 	handler.NewSystemHandler().Register(r)
+	asrService := asr.New(asr.Config{
+		Version: cfg.AsrVersion,
+		WasmURL: cfg.AsrWasmURL,
+		DataURL: cfg.AsrDataURL,
+	})
 
 	db := config.GetDB(
 		&model.User{},
@@ -140,6 +146,7 @@ func main() {
 	}
 
 	handler.NewSettingsHandler(db).Register(api)
+	handler.NewASRHandler(asrService).Register(api)
 	handler.NewSessionHandler(db).Register(api)
 	handler.NewAISessionHandler(db).Register(api)
 	handler.NewFileHandler().Register(api)
@@ -173,6 +180,7 @@ func main() {
 	} else {
 		if distErr == nil {
 			fileServer := http.FileServer(http.FS(distFS))
+			transport.RegisterASRAssets(r, asr.BaseURL, distFS)
 			r.NoRoute(func(c *gin.Context) {
 				path := strings.TrimPrefix(c.Request.URL.Path, "/")
 				if path == "" {

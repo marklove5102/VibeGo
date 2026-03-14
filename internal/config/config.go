@@ -28,9 +28,12 @@ type Config struct {
 	DisableLogToFile bool
 	NoTLS            bool
 
-	TlsCert string
-	TlsKey  string
-	DevUI   string
+	TlsCert    string
+	TlsKey     string
+	DevUI      string
+	AsrVersion string
+	AsrWasmURL string
+	AsrDataURL string
 
 	OS           string
 	DefaultShell string
@@ -70,6 +73,9 @@ func GetConfig() *Config {
 	flag.StringVar(&cfg.TlsKey, "tls-key", utils.GetEnv("VG_TLS_KEY", ""), "TLS private key file path (uses self-signed if empty)")
 	flag.BoolVar(&cfg.NoTLS, "no-tls", utils.GetBoolEnv("VG_NO_TLS", false), "Disable TLS and use plain HTTP")
 	flag.StringVar(&cfg.DevUI, "dev-ui", utils.GetEnv("VG_DEV_UI", ""), "Dev UI proxy target (e.g. http://localhost:5173)")
+	flag.StringVar(&cfg.AsrVersion, "asr-version", utils.GetEnv("VG_ASR_VERSION", ""), "ASR asset version for cache busting")
+	flag.StringVar(&cfg.AsrWasmURL, "asr-wasm-url", utils.GetEnv("VG_ASR_WASM_URL", ""), "ASR wasm asset URL")
+	flag.StringVar(&cfg.AsrDataURL, "asr-data-url", utils.GetEnv("VG_ASR_DATA_URL", ""), "ASR data asset URL")
 
 	defaultShell := ""
 	switch runtime.GOOS {

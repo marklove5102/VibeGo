@@ -1,9 +1,4 @@
-.PHONY: generate-docs clean-code format dev-server dev-ui build build-frontend build-backend package-backend build-release prepare-test test download-sherpa
-
-SHERPA_VERSION ?= 1.12.36
-SHERPA_ARCHIVE ?= sherpa-onnx-wasm-simd-$(SHERPA_VERSION)-vad-asr-zh_en_ja_ko_cantonese-sense_voice_small.tar.bz2
-SHERPA_URL ?= https://github.com/k2-fsa/sherpa-onnx/releases/download/v$(SHERPA_VERSION)/$(SHERPA_ARCHIVE)
-SHERPA_DIR ?= $(UI_DIR)/public/sherpa
+.PHONY: generate-docs clean-code format dev-server dev-ui build build-frontend build-backend package-backend build-release prepare-test test
 
 VERSION ?= $(shell git describe --tags --match 'v*' 2>/dev/null || echo v0.0.0-dev)
 DIST_DIR ?= dist
@@ -36,22 +31,7 @@ build:
 	if [ "$$(go env GOOS)" = "windows" ]; then ext=".exe"; fi; \
 	CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X github.com/xxnuo/vibego/internal/version.Version=$(VERSION)" -o "$(DIST_DIR)/$(BINARY_NAME)$${ext}" ./
 
-download-sherpa:
-	@if [ -f "$(SHERPA_DIR)/sherpa-onnx-wasm-main-vad-asr.wasm" ]; then \
-		echo "Sherpa WASM files already exist, skipping download"; \
-	else \
-		echo "Downloading sherpa-onnx WASM VAD+ASR (SenseVoice)..."; \
-		mkdir -p $(SHERPA_DIR); \
-		curl -L "$(SHERPA_URL)" -o /tmp/$(SHERPA_ARCHIVE); \
-		tar xf /tmp/$(SHERPA_ARCHIVE) -C /tmp; \
-		cp /tmp/sherpa-onnx-wasm-simd-$(SHERPA_VERSION)-vad-asr-zh_en_ja_ko_cantonese-sense_voice_small/*.js $(SHERPA_DIR)/; \
-		cp /tmp/sherpa-onnx-wasm-simd-$(SHERPA_VERSION)-vad-asr-zh_en_ja_ko_cantonese-sense_voice_small/*.wasm $(SHERPA_DIR)/; \
-		cp /tmp/sherpa-onnx-wasm-simd-$(SHERPA_VERSION)-vad-asr-zh_en_ja_ko_cantonese-sense_voice_small/*.data $(SHERPA_DIR)/; \
-		rm -rf /tmp/$(SHERPA_ARCHIVE) /tmp/sherpa-onnx-wasm-simd-$(SHERPA_VERSION)-vad-asr-zh_en_ja_ko_cantonese-sense_voice_small; \
-		echo "Sherpa WASM files downloaded to $(SHERPA_DIR)"; \
-	fi
-
-build-frontend: download-sherpa
+build-frontend:
 	cd $(UI_DIR) && pnpm install --frozen-lockfile
 	cd $(UI_DIR) && pnpm run build
 

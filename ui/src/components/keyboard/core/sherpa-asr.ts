@@ -1,259 +1,411 @@
-export type SherpaStatus = 'idle' | 'loading' | 'recording' | 'recognizing' | 'error'
-export type SherpaResultCallback = (text: string) => void
+import { asrApi } from "@/api/asr";
+
+export type SherpaStatus = "idle" | "loading" | "recording" | "recognizing" | "error";
+export type SherpaResultCallback = (text: string) => void;
 
 declare global {
   interface Window {
-    Module: any
-    createVad: any
-    CircularBuffer: any
-    OfflineRecognizer: any
+    Module: any;
+    createVad: any;
+    CircularBuffer: any;
+    OfflineRecognizer: any;
   }
 }
 
-const SHERPA_LOCAL_BASE = '/sherpa/'
-const EXPECTED_SAMPLE_RATE = 16000
+const EXPECTED_SAMPLE_RATE = 16000;
 
-let sherpaBase = SHERPA_LOCAL_BASE
-let moduleLoaded = false
-let moduleLoading = false
-let loadError: string | null = null
+let sherpaBase = "";
+let sherpaVersion = "";
+let sherpaWasmUrl = "";
+let sherpaDataUrl = "";
+let moduleLoaded = false;
+let moduleLoadingPromise: Promise<void> | null = null;
+let binaryAssetsPromise: Promise<{ wasmBinary: ArrayBuffer; dataPackage: ArrayBuffer }> | null = null;
+let loadError: string | null = null;
+let assetInfoLoading: Promise<void> | null = null;
 
-let vad: any = null
-let recognizer: any = null
+let vad: any = null;
+let recognizer: any = null;
 
-let audioCtx: AudioContext | null = null
-let mediaStreamNode: MediaStreamAudioSourceNode | null = null
-let recorder: ScriptProcessorNode | null = null
-let micStream: MediaStream | null = null
-let recordSampleRate = 0
+let audioCtx: AudioContext | null = null;
+let mediaStreamNode: MediaStreamAudioSourceNode | null = null;
+let recorder: ScriptProcessorNode | null = null;
+let micStream: MediaStream | null = null;
+let recordSampleRate = 0;
 
-let recordedChunks: Float32Array[] = []
-let statusCb: ((status: SherpaStatus, progress?: string) => void) | null = null
+let recordedChunks: Float32Array[] = [];
+let statusCb: ((status: SherpaStatus, progress?: string) => void) | null = null;
 
 function loadScript(src: string): Promise<void> {
   return new Promise((resolve, reject) => {
-    const script = document.createElement('script')
-    script.src = src
-    script.onload = () => resolve()
-    script.onerror = () => reject(new Error(`Failed to load ${src}`))
-    document.head.appendChild(script)
-  })
+    const script = document.createElement("script");
+    script.src = src;
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error(`Failed to load ${src}`));
+    document.head.appendChild(script);
+  });
+}
+
+function withVersion(path: string): string {
+  if (!sherpaVersion) return path;
+  const sep = path.includes("?") ? "&" : "?";
+  return `${path}${sep}v=${encodeURIComponent(sherpaVersion)}`;
+}
+
+async function ensureAssetInfo(): Promise<void> {
+  if (sherpaBase) return;
+  if (assetInfoLoading) return assetInfoLoading;
+
+  assetInfoLoading = (async () => {
+    const info = await asrApi.info();
+    if (!info.enabled || !info.baseUrl || !info.wasmUrl || !info.dataUrl) {
+      throw new Error(info.message || "Speech model assets are unavailable");
+    }
+    sherpaBase = info.baseUrl;
+    sherpaVersion = info.version || "dev";
+    sherpaWasmUrl = info.wasmUrl;
+    sherpaDataUrl = info.dataUrl;
+  })();
+
+  try {
+    await assetInfoLoading;
+  } finally {
+    assetInfoLoading = null;
+  }
 }
 
 function assignGlobals(code: string) {
-  const script = document.createElement('script')
-  script.textContent = code
-  document.head.appendChild(script)
-  document.head.removeChild(script)
+  const script = document.createElement("script");
+  script.textContent = code;
+  document.head.appendChild(script);
+  document.head.removeChild(script);
+}
+
+function formatMegabytes(value: number): string {
+  return (value / 1048576).toFixed(1);
+}
+
+async function readResponseBuffer(
+  response: Response,
+  onProgress?: (loaded: number, total: number) => void
+): Promise<ArrayBuffer> {
+  if (!response.body) {
+    const buffer = await response.arrayBuffer();
+    onProgress?.(buffer.byteLength, buffer.byteLength);
+    return buffer;
+  }
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  const total = Number(response.headers.get("content-length") || 0);
+  let loaded = 0;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (!value) continue;
+    chunks.push(value);
+    loaded += value.byteLength;
+    onProgress?.(loaded, total);
+  }
+
+  const merged = new Uint8Array(loaded);
+  let offset = 0;
+  for (const chunk of chunks) {
+    merged.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  onProgress?.(loaded, total || loaded);
+  return merged.buffer;
+}
+
+async function loadBinaryAsset(
+  url: string,
+  label: string,
+  onStatus?: (status: SherpaStatus, progress?: string) => void
+): Promise<ArrayBuffer> {
+  const assetUrl = withVersion(url);
+  const cacheName = `vibego-speech-assets-${encodeURIComponent(sherpaVersion || "dev")}`;
+  if (typeof caches !== "undefined") {
+    try {
+      const cache = await caches.open(cacheName);
+      const cached = await cache.match(assetUrl);
+      if (cached) {
+        onStatus?.("loading", `Loading ${label} from local cache...`);
+        return cached.arrayBuffer();
+      }
+
+      onStatus?.("loading", `Downloading ${label}...`);
+      const response = await fetch(assetUrl, { mode: "cors" });
+      if (!response.ok) {
+        throw new Error(`Failed to download ${label}`);
+      }
+      const cacheWrite = cache.put(assetUrl, response.clone());
+      const buffer = await readResponseBuffer(response, (loaded, total) => {
+        if (total > 0) {
+          const pct = (loaded / total) * 100;
+          onStatus?.("loading", `${label} ${pct.toFixed(0)}% (${formatMegabytes(loaded)}/${formatMegabytes(total)}MB)`);
+        }
+      });
+      try {
+        await cacheWrite;
+      } catch {}
+      return buffer;
+    } catch {
+      onStatus?.("loading", `Downloading ${label}...`);
+    }
+  }
+
+  onStatus?.("loading", `Downloading ${label}...`);
+  const response = await fetch(assetUrl, { mode: "cors" });
+  if (!response.ok) {
+    throw new Error(`Failed to download ${label}`);
+  }
+  return readResponseBuffer(response, (loaded, total) => {
+    if (total > 0) {
+      const pct = (loaded / total) * 100;
+      onStatus?.("loading", `${label} ${pct.toFixed(0)}% (${formatMegabytes(loaded)}/${formatMegabytes(total)}MB)`);
+    }
+  });
+}
+
+async function ensureBinaryAssets(
+  onStatus?: (status: SherpaStatus, progress?: string) => void
+): Promise<{ wasmBinary: ArrayBuffer; dataPackage: ArrayBuffer }> {
+  if (binaryAssetsPromise) return binaryAssetsPromise;
+  binaryAssetsPromise = (async () => {
+    const wasmBinary = await loadBinaryAsset(sherpaWasmUrl, "speech engine", onStatus);
+    const dataPackage = await loadBinaryAsset(sherpaDataUrl, "speech model", onStatus);
+    return { wasmBinary, dataPackage };
+  })();
+  try {
+    return await binaryAssetsPromise;
+  } finally {
+    binaryAssetsPromise = null;
+  }
 }
 
 function fileExists(filename: string): boolean {
-  const M = window.Module
-  const len = M.lengthBytesUTF8(filename) + 1
-  const buf = M._malloc(len)
-  M.stringToUTF8(filename, buf, len)
-  const exists = M._SherpaOnnxFileExists(buf)
-  M._free(buf)
-  return exists === 1
+  const M = window.Module;
+  const len = M.lengthBytesUTF8(filename) + 1;
+  const buf = M._malloc(len);
+  M.stringToUTF8(filename, buf, len);
+  const exists = M._SherpaOnnxFileExists(buf);
+  M._free(buf);
+  return exists === 1;
 }
 
 function initOfflineRecognizer() {
-  const config: any = { modelConfig: { debug: 0, tokens: './tokens.txt' } }
-  if (fileExists('sense-voice.onnx')) {
-    config.modelConfig.senseVoice = { model: './sense-voice.onnx', useInverseTextNormalization: 1 }
+  const config: any = { modelConfig: { debug: 0, tokens: "./tokens.txt" } };
+  if (fileExists("sense-voice.onnx")) {
+    config.modelConfig.senseVoice = { model: "./sense-voice.onnx", useInverseTextNormalization: 1 };
   }
-  recognizer = new window.OfflineRecognizer(config, window.Module)
+  recognizer = new window.OfflineRecognizer(config, window.Module);
 }
 
-export async function ensureLoaded(
-  onStatus?: (status: SherpaStatus, progress?: string) => void,
-): Promise<void> {
-  if (moduleLoaded) return
-  if (moduleLoading) {
-    return new Promise((resolve, reject) => {
-      const check = setInterval(() => {
-        if (moduleLoaded) { clearInterval(check); resolve() }
-        if (loadError) { clearInterval(check); reject(new Error(loadError)) }
-      }, 200)
-    })
-  }
-  moduleLoading = true
-  onStatus?.('loading', 'Loading...')
+export async function ensureLoaded(onStatus?: (status: SherpaStatus, progress?: string) => void): Promise<void> {
+  if (moduleLoaded) return;
+  if (moduleLoadingPromise) return moduleLoadingPromise;
+  onStatus?.("loading", "Loading speech model...");
 
-  try {
-    window.Module = {
-      locateFile: (path: string) => sherpaBase + path,
-      setStatus(status: string) {
-        const m = status.match(/Downloading data... \((\d+)\/(\d+)\)/)
-        if (m) {
-          const pct = Number(m[2]) === 0 ? 0 : (Number(m[1]) / Number(m[2]) * 100)
-          const dl = (Number(m[1]) / 1048576).toFixed(1)
-          const tot = (Number(m[2]) / 1048576).toFixed(1)
-          onStatus?.('loading', `${pct.toFixed(0)}% (${dl}/${tot}MB)`)
-        } else if (status === 'Running...') {
-          onStatus?.('loading', 'Initializing...')
-        }
-      },
-      onRuntimeInitialized() {
-        vad = window.createVad(window.Module)
-        initOfflineRecognizer()
-        moduleLoaded = true
-        moduleLoading = false
-      },
+  loadError = null;
+  moduleLoadingPromise = (async () => {
+    try {
+      await ensureAssetInfo();
+      const { wasmBinary, dataPackage } = await ensureBinaryAssets(onStatus);
+      window.Module = {
+        wasmBinary,
+        getPreloadedPackage: () => dataPackage,
+        locateFile: (path: string) => {
+          if (path.endsWith(".wasm")) return withVersion(sherpaWasmUrl);
+          if (path.endsWith(".data")) return withVersion(sherpaDataUrl);
+          return withVersion(sherpaBase + path);
+        },
+        setStatus(status: string) {
+          if (status === "Running...") {
+            onStatus?.("loading", "Initializing...");
+          }
+        },
+        onRuntimeInitialized() {
+          vad = window.createVad(window.Module);
+          initOfflineRecognizer();
+          moduleLoaded = true;
+        },
+      };
+
+      await loadScript(withVersion(sherpaBase + "sherpa-onnx-vad.js"));
+      assignGlobals("window.createVad = createVad; window.CircularBuffer = CircularBuffer;");
+      await loadScript(withVersion(sherpaBase + "sherpa-onnx-asr.js"));
+      assignGlobals("window.OfflineRecognizer = OfflineRecognizer;");
+      await loadScript(withVersion(sherpaBase + "sherpa-onnx-wasm-main-vad-asr.js"));
+
+      await new Promise<void>((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          if (!moduleLoaded) {
+            loadError = "Timeout";
+            reject(new Error(loadError));
+          }
+        }, 300000);
+        const check = setInterval(() => {
+          if (moduleLoaded) {
+            clearInterval(check);
+            clearTimeout(timeout);
+            resolve();
+          }
+        }, 100);
+      });
+    } catch (e) {
+      loadError = (e as Error).message;
+      throw e;
+    } finally {
+      moduleLoadingPromise = null;
     }
+  })();
 
-    await loadScript(sherpaBase + 'sherpa-onnx-vad.js')
-    assignGlobals('window.createVad = createVad; window.CircularBuffer = CircularBuffer;')
-    await loadScript(sherpaBase + 'sherpa-onnx-asr.js')
-    assignGlobals('window.OfflineRecognizer = OfflineRecognizer;')
-    await loadScript(sherpaBase + 'sherpa-onnx-wasm-main-vad-asr.js')
-
-    await new Promise<void>((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        if (!moduleLoaded) { loadError = 'Timeout'; reject(new Error(loadError)) }
-      }, 300000)
-      const check = setInterval(() => {
-        if (moduleLoaded) { clearInterval(check); clearTimeout(timeout); resolve() }
-      }, 100)
-    })
-  } catch (e) {
-    loadError = (e as Error).message
-    moduleLoading = false
-    throw e
-  }
+  return moduleLoadingPromise;
 }
 
 function downsample(buf: Float32Array, target: number): Float32Array {
-  if (target === recordSampleRate) return buf
-  const ratio = recordSampleRate / target
-  const len = Math.round(buf.length / ratio)
-  const out = new Float32Array(len)
+  if (target === recordSampleRate) return buf;
+  const ratio = recordSampleRate / target;
+  const len = Math.round(buf.length / ratio);
+  const out = new Float32Array(len);
   for (let i = 0; i < len; i++) {
-    const next = Math.round((i + 1) * ratio)
-    let s = 0, c = 0
-    for (let j = Math.round(i * ratio); j < next && j < buf.length; j++) { s += buf[j]; c++ }
-    out[i] = s / c
+    const next = Math.round((i + 1) * ratio);
+    let s = 0,
+      c = 0;
+    for (let j = Math.round(i * ratio); j < next && j < buf.length; j++) {
+      s += buf[j];
+      c++;
+    }
+    out[i] = s / c;
   }
-  return out
+  return out;
 }
 
 function recognizeAudio(samples: Float32Array): string {
-  if (!vad || !recognizer) return ''
+  if (!vad || !recognizer) return "";
 
-  const circularBuffer = new window.CircularBuffer(samples.length + 1024, window.Module)
-  circularBuffer.push(samples)
+  const circularBuffer = new window.CircularBuffer(samples.length + 1024, window.Module);
+  circularBuffer.push(samples);
 
-  const results: string[] = []
+  const results: string[] = [];
 
   while (circularBuffer.size() > vad.config.sileroVad.windowSize) {
-    const s = circularBuffer.get(circularBuffer.head(), vad.config.sileroVad.windowSize)
-    vad.acceptWaveform(s)
-    circularBuffer.pop(vad.config.sileroVad.windowSize)
+    const s = circularBuffer.get(circularBuffer.head(), vad.config.sileroVad.windowSize);
+    vad.acceptWaveform(s);
+    circularBuffer.pop(vad.config.sileroVad.windowSize);
 
     while (!vad.isEmpty()) {
-      const seg = vad.front()
-      vad.pop()
-      const stream = recognizer.createStream()
-      stream.acceptWaveform(EXPECTED_SAMPLE_RATE, seg.samples)
-      recognizer.decode(stream)
-      const r = recognizer.getResult(stream)
-      stream.free()
-      const t = r.text?.trim()
-      if (t) results.push(t)
+      const seg = vad.front();
+      vad.pop();
+      const stream = recognizer.createStream();
+      stream.acceptWaveform(EXPECTED_SAMPLE_RATE, seg.samples);
+      recognizer.decode(stream);
+      const r = recognizer.getResult(stream);
+      stream.free();
+      const t = r.text?.trim();
+      if (t) results.push(t);
     }
   }
 
-  vad.flush()
+  vad.flush();
   while (!vad.isEmpty()) {
-    const seg = vad.front()
-    vad.pop()
-    const stream = recognizer.createStream()
-    stream.acceptWaveform(EXPECTED_SAMPLE_RATE, seg.samples)
-    recognizer.decode(stream)
-    const r = recognizer.getResult(stream)
-    stream.free()
-    const t = r.text?.trim()
-    if (t) results.push(t)
+    const seg = vad.front();
+    vad.pop();
+    const stream = recognizer.createStream();
+    stream.acceptWaveform(EXPECTED_SAMPLE_RATE, seg.samples);
+    recognizer.decode(stream);
+    const r = recognizer.getResult(stream);
+    stream.free();
+    const t = r.text?.trim();
+    if (t) results.push(t);
   }
 
-  vad.reset()
-  circularBuffer.free()
-  return results.join('')
+  vad.reset();
+  circularBuffer.free();
+  return results.join("");
 }
 
-export async function startRecording(
-  onStatus: (status: SherpaStatus, progress?: string) => void,
-): Promise<void> {
-  statusCb = onStatus
+export async function startRecording(onStatus: (status: SherpaStatus, progress?: string) => void): Promise<void> {
+  statusCb = onStatus;
 
   try {
-    await ensureLoaded(onStatus)
-  } catch {
-    onStatus('error', 'Failed to load model')
-    return
+    await ensureLoaded(onStatus);
+  } catch (e) {
+    onStatus("error", (e as Error).message || "Failed to load model");
+    statusCb = null;
+    return;
   }
 
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-    micStream = stream
-    recordedChunks = []
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    micStream = stream;
+    recordedChunks = [];
 
     if (!audioCtx) {
-      audioCtx = new AudioContext({ sampleRate: EXPECTED_SAMPLE_RATE })
+      audioCtx = new AudioContext({ sampleRate: EXPECTED_SAMPLE_RATE });
     }
-    recordSampleRate = audioCtx.sampleRate
-    mediaStreamNode = audioCtx.createMediaStreamSource(stream)
-    recorder = audioCtx.createScriptProcessor(4096, 1, 2)
+    recordSampleRate = audioCtx.sampleRate;
+    mediaStreamNode = audioCtx.createMediaStreamSource(stream);
+    recorder = audioCtx.createScriptProcessor(4096, 1, 2);
 
     recorder.onaudioprocess = (e) => {
-      const raw = new Float32Array(e.inputBuffer.getChannelData(0))
-      recordedChunks.push(downsample(raw, EXPECTED_SAMPLE_RATE))
-    }
+      const raw = new Float32Array(e.inputBuffer.getChannelData(0));
+      recordedChunks.push(downsample(raw, EXPECTED_SAMPLE_RATE));
+    };
 
-    mediaStreamNode.connect(recorder)
-    recorder.connect(audioCtx.destination)
-    onStatus('recording')
+    mediaStreamNode.connect(recorder);
+    recorder.connect(audioCtx.destination);
+    onStatus("recording");
   } catch {
-    onStatus('error', 'Microphone denied')
+    onStatus("error", "Microphone denied");
+    statusCb = null;
   }
 }
 
 export function stopAndRecognize(): string {
   if (recorder && audioCtx) {
-    try { recorder.disconnect(audioCtx.destination) } catch {}
-    try { mediaStreamNode?.disconnect(recorder) } catch {}
-    recorder = null
+    try {
+      recorder.disconnect(audioCtx.destination);
+    } catch {}
+    try {
+      mediaStreamNode?.disconnect(recorder);
+    } catch {}
+    recorder = null;
   }
   if (micStream) {
-    micStream.getTracks().forEach(t => t.stop())
-    micStream = null
+    micStream.getTracks().forEach((t) => t.stop());
+    micStream = null;
   }
 
   if (recordedChunks.length === 0) {
-    statusCb?.('idle')
-    statusCb = null
-    return ''
+    statusCb?.("idle");
+    statusCb = null;
+    return "";
   }
 
-  statusCb?.('recognizing')
+  statusCb?.("recognizing");
 
-  let total = 0
-  for (const c of recordedChunks) total += c.length
-  const merged = new Float32Array(total)
-  let off = 0
-  for (const c of recordedChunks) { merged.set(c, off); off += c.length }
-  recordedChunks = []
+  let total = 0;
+  for (const c of recordedChunks) total += c.length;
+  const merged = new Float32Array(total);
+  let off = 0;
+  for (const c of recordedChunks) {
+    merged.set(c, off);
+    off += c.length;
+  }
+  recordedChunks = [];
 
-  const text = recognizeAudio(merged)
-  statusCb?.('idle')
-  statusCb = null
-  return text
+  const text = recognizeAudio(merged);
+  statusCb?.("idle");
+  statusCb = null;
+  return text;
 }
 
 export function isLoaded(): boolean {
-  return moduleLoaded
+  return moduleLoaded;
 }
 
 export function isLoading(): boolean {
-  return moduleLoading
+  return moduleLoadingPromise !== null;
 }
