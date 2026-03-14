@@ -71,7 +71,7 @@ const GitViewPage: React.FC<PageViewProps> = ({ context }) => {
         locale={locale}
         onFileDiff={handleGitDiff}
         onConflict={handleConflict}
-        isActive={true}
+        isActive={context.isActive}
       />
     );
   }

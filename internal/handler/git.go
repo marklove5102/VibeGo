@@ -213,6 +213,7 @@ func (h *GitHandler) Init(c *gin.Context) {
 		return
 	}
 
+	h.broadcastStatus(req.Path)
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 
@@ -245,6 +246,7 @@ func (h *GitHandler) Clone(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"ok": true})
+	h.broadcastStatus(req.Path)
 }
 
 type GitPathRequest struct {
@@ -525,6 +527,7 @@ func (h *GitHandler) Add(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"ok": true})
+	h.broadcastStatus(req.Path)
 }
 
 type GitResetRequest struct {
@@ -614,6 +617,8 @@ func (h *GitHandler) Checkout(c *gin.Context) {
 	}
 
 	checkoutFiles := collectFileStatus(repoRoot)
+	h.broadcastStatus(req.Path)
+	h.broadcastRepoSyncNeeded(req.Path, gin.H{"conflicts": true})
 	c.JSON(http.StatusOK, gin.H{"ok": true, "status": gin.H{"files": checkoutFiles}})
 }
 
@@ -674,6 +679,9 @@ func (h *GitHandler) Commit(c *gin.Context) {
 	hashCmd.Dir = repoRoot
 	hashOut, _ := hashCmd.Output()
 
+	h.broadcastStatus(req.Path)
+	h.broadcastBranchStatus(req.Path)
+	h.broadcastRepoSyncNeeded(req.Path, gin.H{"history": true, "conflicts": true})
 	c.JSON(http.StatusOK, gin.H{"ok": true, "hash": strings.TrimSpace(string(hashOut))})
 }
 
@@ -717,6 +725,9 @@ func (h *GitHandler) UndoCommit(c *gin.Context) {
 
 	undoFiles := collectFileStatus(repoRoot)
 	undoCommits := collectCommitLog(repoRoot, 20)
+	h.broadcastStatus(req.Path)
+	h.broadcastBranchStatus(req.Path)
+	h.broadcastRepoSyncNeeded(req.Path, gin.H{"history": true, "conflicts": true})
 	c.JSON(http.StatusOK, gin.H{"ok": true, "status": gin.H{"files": undoFiles}, "commits": undoCommits})
 }
 
@@ -1291,6 +1302,8 @@ func (h *GitHandler) Fetch(c *gin.Context) {
 	}
 
 	fetchBS := collectBranchStatus(repoRoot)
+	h.broadcastBranchStatus(req.Path)
+	h.broadcastRepoSyncNeeded(req.Path, gin.H{"branches": true})
 	c.JSON(http.StatusOK, gin.H{"ok": true, "branchStatus": fetchBS})
 }
 
@@ -1348,6 +1361,9 @@ func (h *GitHandler) Pull(c *gin.Context) {
 	pullCommits := collectCommitLog(repoRoot, 20)
 	pullConflicts := collectConflictFiles(repoRoot)
 	pullBS := collectBranchStatus(repoRoot)
+	h.broadcastStatus(req.Path)
+	h.broadcastBranchStatus(req.Path)
+	h.broadcastRepoSyncNeeded(req.Path, gin.H{"history": true, "branches": true, "conflicts": true})
 	c.JSON(http.StatusOK, gin.H{
 		"ok": true, "status": gin.H{"files": pullFiles},
 		"commits": pullCommits, "conflicts": pullConflicts, "branchStatus": pullBS,
@@ -1436,6 +1452,8 @@ func (h *GitHandler) Push(c *gin.Context) {
 	}
 
 	pushBS := collectBranchStatus(repoRoot)
+	h.broadcastBranchStatus(req.Path)
+	h.broadcastRepoSyncNeeded(req.Path, gin.H{"branches": true})
 	c.JSON(http.StatusOK, gin.H{"ok": true, "branchStatus": pushBS})
 }
 
@@ -1487,6 +1505,8 @@ func (h *GitHandler) Stash(c *gin.Context) {
 
 	stashResult := gin.H{"ok": true, "message": strings.TrimSpace(string(output))}
 	stashResult["status"] = gin.H{"files": collectFileStatus(repoRoot)}
+	h.broadcastStatus(req.Path)
+	h.broadcastRepoSyncNeeded(req.Path, gin.H{"stashes": true, "conflicts": true})
 	c.JSON(http.StatusOK, stashResult)
 }
 
@@ -1584,6 +1604,8 @@ func (h *GitHandler) StashPop(c *gin.Context) {
 
 	popResult := gin.H{"ok": true}
 	popResult["status"] = gin.H{"files": collectFileStatus(repoRoot)}
+	h.broadcastStatus(req.Path)
+	h.broadcastRepoSyncNeeded(req.Path, gin.H{"stashes": true, "conflicts": true})
 	c.JSON(http.StatusOK, popResult)
 }
 
@@ -1623,6 +1645,7 @@ func (h *GitHandler) StashDrop(c *gin.Context) {
 		return
 	}
 
+	h.broadcastRepoSyncNeeded(req.Path, gin.H{"stashes": true})
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 
@@ -1766,5 +1789,6 @@ func (h *GitHandler) AddPatch(c *gin.Context) {
 		return
 	}
 
+	h.broadcastStatus(req.Path)
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }

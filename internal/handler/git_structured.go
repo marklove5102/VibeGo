@@ -1383,6 +1383,8 @@ func (h *GitHandler) ConflictResolve(c *gin.Context) {
 	conflicts := collectConflictFiles(repoRoot)
 	files, summary := h.collectStructuredStatus(repoRoot)
 
+	h.broadcastStatus(req.Path)
+	h.broadcastRepoSyncNeeded(req.Path, gin.H{"conflicts": true})
 	c.JSON(http.StatusOK, gin.H{
 		"ok":        true,
 		"conflicts": conflicts,

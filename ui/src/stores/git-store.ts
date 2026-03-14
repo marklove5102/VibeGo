@@ -3,12 +3,15 @@ import { createStore, type StateCreator } from "zustand/vanilla";
 import {
   type BranchStatusInfo,
   type CommitFileInfo,
+  type GitBranchesSnapshot,
   type GitCommit,
   type GitDiff,
   type GitDraft,
   type GitInteractiveDiff,
   type GitStructuredFile,
+  type GitWSSnapshot,
   gitApi,
+  type RemoteInfo,
   type StashEntry,
 } from "@/api/git";
 import { useSettingsStore } from "@/lib/settings";
@@ -115,6 +118,12 @@ export interface GitState {
 
   applyStatusUpdate: (files: GitStructuredFile[]) => void;
   applyBranchStatus: (bs: BranchStatusInfo) => void;
+  applyBranchesSnapshot: (snapshot: GitBranchesSnapshot) => void;
+  applyRemotes: (remotes: RemoteInfo[]) => void;
+  applyStashes: (stashes: StashEntry[]) => void;
+  applyConflicts: (conflicts: string[]) => void;
+  applyDraft: (draft?: Partial<GitDraftSnapshot>) => void;
+  applySnapshot: (snapshot: GitWSSnapshot) => void;
 }
 
 type GitSelector<T> = (state: GitState) => T;
@@ -472,6 +481,63 @@ const createGitState =
           aheadCount: branchStatus.ahead || 0,
           behindCount: branchStatus.behind || 0,
         });
+      },
+
+      applyBranchesSnapshot: (snapshot) => {
+        set({
+          branches: snapshot.branches ?? [],
+          remoteBranches: snapshot.remoteBranches ?? [],
+          currentBranch: snapshot.currentBranch || get().currentBranch,
+        });
+      },
+
+      applyRemotes: (remotes) => {
+        set({
+          hasRemote: remotes.length > 0,
+          remoteUrls: remotes.flatMap((remote) => remote.urls),
+        });
+      },
+
+      applyStashes: (stashes) => {
+        set({ stashes: stashes ?? [] });
+      },
+
+      applyConflicts: (conflicts) => {
+        set({ conflicts: conflicts ?? [] });
+      },
+
+      applyDraft: (draft) => {
+        const nextDraft = applyIncomingDraft(draft);
+        if (nextDraft) {
+          set(nextDraft);
+        }
+      },
+
+      applySnapshot: (snapshot) => {
+        const nodes = statusFilesToNodes(snapshot.status.files);
+        const { workingDiffs, interactiveDiffs } = get();
+        const stateUpdate: Partial<GitState> = {
+          allFiles: nodes,
+          workingDiffs: pickWorkingDiffs(nodes, workingDiffs),
+          interactiveDiffs: pickInteractiveDiffs(nodes, interactiveDiffs),
+          branches: snapshot.branches.branches ?? [],
+          remoteBranches: snapshot.branches.remoteBranches ?? [],
+          currentBranch: snapshot.branches.currentBranch || get().currentBranch,
+          hasRemote: snapshot.remotes.length > 0,
+          remoteUrls: snapshot.remotes.flatMap((remote) => remote.urls),
+          stashes: snapshot.stashes ?? [],
+          conflicts: snapshot.conflicts ?? [],
+        };
+
+        const nextDraft = applyIncomingDraft(snapshot.draft);
+        if (nextDraft) {
+          stateUpdate.summary = nextDraft.summary;
+          stateUpdate.description = nextDraft.description;
+          stateUpdate.isAmend = nextDraft.isAmend;
+        }
+
+        set(stateUpdate);
+        get().applyBranchStatus(snapshot.branchStatus);
       },
 
       fetchStatus: async () => {
@@ -968,7 +1034,7 @@ const createGitState =
       },
 
       smartSwitchBranch: async (branch) => {
-        const { currentPath, fetchBranches, fetchStashes } = get();
+        const { currentPath } = get();
         if (!currentPath) {
           return false;
         }
@@ -987,8 +1053,6 @@ const createGitState =
           if (res.branchStatus) {
             get().applyBranchStatus(res.branchStatus);
           }
-          await fetchBranches();
-          await fetchStashes();
           return true;
         } catch (err) {
           set({ error: err instanceof Error ? err.message : "Failed to switch branch" });
@@ -999,7 +1063,7 @@ const createGitState =
       },
 
       createBranch: async (branch, from) => {
-        const { currentPath, fetchBranches } = get();
+        const { currentPath } = get();
         if (!currentPath) {
           return false;
         }
@@ -1008,7 +1072,6 @@ const createGitState =
 
         try {
           await gitApi.createBranch(currentPath, branch, from);
-          await fetchBranches();
           return true;
         } catch (err) {
           set({ error: err instanceof Error ? err.message : "Failed to create branch" });
@@ -1019,7 +1082,7 @@ const createGitState =
       },
 
       deleteBranch: async (branch) => {
-        const { currentPath, fetchBranches } = get();
+        const { currentPath } = get();
         if (!currentPath) {
           return false;
         }
@@ -1028,7 +1091,6 @@ const createGitState =
 
         try {
           await gitApi.deleteBranch(currentPath, branch);
-          await fetchBranches();
           return true;
         } catch (err) {
           set({ error: err instanceof Error ? err.message : "Failed to delete branch" });
@@ -1116,7 +1178,7 @@ const createGitState =
       },
 
       stash: async (message, files) => {
-        const { currentPath, fetchStashes } = get();
+        const { currentPath } = get();
         if (!currentPath) {
           return false;
         }
@@ -1133,7 +1195,6 @@ const createGitState =
               interactiveDiffs: {},
             });
           }
-          await fetchStashes();
           return true;
         } catch (err) {
           set({ error: err instanceof Error ? err.message : "Failed to stash" });
@@ -1144,7 +1205,7 @@ const createGitState =
       },
 
       stashPop: async (index = 0) => {
-        const { currentPath, fetchStashes } = get();
+        const { currentPath } = get();
         if (!currentPath) {
           return false;
         }
@@ -1161,7 +1222,6 @@ const createGitState =
               interactiveDiffs: {},
             });
           }
-          await fetchStashes();
           return true;
         } catch (err) {
           set({ error: err instanceof Error ? err.message : "Failed to pop stash" });
@@ -1172,7 +1232,7 @@ const createGitState =
       },
 
       stashDrop: async (index = 0) => {
-        const { currentPath, fetchStashes } = get();
+        const { currentPath } = get();
         if (!currentPath) {
           return false;
         }
@@ -1181,7 +1241,6 @@ const createGitState =
 
         try {
           await gitApi.stashDrop(currentPath, index);
-          await fetchStashes();
           return true;
         } catch (err) {
           set({ error: err instanceof Error ? err.message : "Failed to drop stash" });
@@ -1224,7 +1283,7 @@ const createGitState =
       },
 
       resolveConflict: async (filePath, content) => {
-        const { currentPath, fetchStatus, fetchConflicts } = get();
+        const { currentPath } = get();
         if (!currentPath) {
           return false;
         }
@@ -1232,9 +1291,14 @@ const createGitState =
         set({ isLoading: true, error: null });
 
         try {
-          await gitApi.resolveConflict(currentPath, filePath, content);
-          await fetchStatus();
-          await fetchConflicts();
+          const res = await gitApi.resolveConflict(currentPath, filePath, content);
+          const nodes = statusFilesToNodes(res.status.files);
+          set((state) => ({
+            allFiles: nodes,
+            workingDiffs: pickWorkingDiffs(nodes, state.workingDiffs),
+            interactiveDiffs: pickInteractiveDiffs(nodes, state.interactiveDiffs),
+            conflicts: res.conflicts ?? [],
+          }));
           return true;
         } catch (err) {
           set({ error: err instanceof Error ? err.message : "Failed to resolve conflict" });
@@ -1361,7 +1425,7 @@ const createGitState =
       },
 
       addPatch: async (filePath, patch) => {
-        const { currentPath, fetchStatus } = get();
+        const { currentPath } = get();
         if (!currentPath) {
           return false;
         }
@@ -1370,7 +1434,6 @@ const createGitState =
 
         try {
           await gitApi.addPatch(currentPath, filePath, patch);
-          await fetchStatus();
           return true;
         } catch (err) {
           set({ error: err instanceof Error ? err.message : "Failed to add patch" });

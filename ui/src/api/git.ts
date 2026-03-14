@@ -148,6 +148,12 @@ export interface BranchInfo {
   isCurrent: boolean;
 }
 
+export interface GitBranchesSnapshot {
+  branches: string[];
+  remoteBranches: string[];
+  currentBranch: string;
+}
+
 export interface CommitSelectedResponse {
   ok: boolean;
   hash?: string;
@@ -174,16 +180,33 @@ export interface SmartSwitchResponse {
 }
 
 export type GitWSEventType =
-  | "file_changed"
-  | "remote_updated"
-  | "repo_sync_needed"
+  | "snapshot"
+  | "status_changed"
+  | "branch_status_changed"
+  | "branches_changed"
+  | "remotes_changed"
+  | "stashes_changed"
+  | "conflicts_changed"
+  | "draft_changed"
+  | "history_changed"
   | "push_progress"
   | "pull_progress"
   | "operation_done";
 
+export interface GitWSSnapshot {
+  status: GitStructuredStatus;
+  branchStatus: BranchStatusInfo;
+  branches: GitBranchesSnapshot;
+  remotes: RemoteInfo[];
+  stashes: StashEntry[];
+  conflicts: string[];
+  draft: GitDraft;
+  headHash: string;
+}
+
 export interface GitWSEvent {
   type: GitWSEventType;
-  data: Record<string, unknown>;
+  data: unknown;
 }
 
 export interface GitDraft {

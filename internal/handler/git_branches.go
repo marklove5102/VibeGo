@@ -123,6 +123,9 @@ func (h *GitHandler) SwitchBranch(c *gin.Context) {
 		return
 	}
 
+	h.broadcastStatus(req.Path)
+	h.broadcastBranchStatus(req.Path)
+	h.broadcastRepoSyncNeeded(req.Path, gin.H{"history": true, "branches": true, "conflicts": true})
 	c.JSON(http.StatusOK, gin.H{"ok": true, "branch": req.Branch})
 }
 
@@ -208,6 +211,9 @@ func (h *GitHandler) SmartSwitchBranch(c *gin.Context) {
 	files := collectFileStatus(repoRoot)
 	bs := collectBranchStatus(repoRoot)
 
+	h.broadcastStatus(req.Path)
+	h.broadcastBranchStatus(req.Path)
+	h.broadcastRepoSyncNeeded(req.Path, gin.H{"history": true, "branches": true, "stashes": true, "conflicts": true})
 	c.JSON(http.StatusOK, gin.H{
 		"ok": true, "branch": req.Branch,
 		"stashed": stashed, "stashConflict": stashConflict,
@@ -287,6 +293,7 @@ func (h *GitHandler) CreateBranch(c *gin.Context) {
 		return
 	}
 
+	h.broadcastRepoSyncNeeded(req.Path, gin.H{"branches": true})
 	c.JSON(http.StatusOK, gin.H{"ok": true, "branch": req.Branch})
 }
 
@@ -338,5 +345,6 @@ func (h *GitHandler) DeleteBranch(c *gin.Context) {
 		return
 	}
 
+	h.broadcastRepoSyncNeeded(req.Path, gin.H{"branches": true})
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }

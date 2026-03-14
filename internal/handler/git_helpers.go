@@ -62,6 +62,16 @@ func collectFileStatus(repoRoot string) []FileStatus {
 	return files
 }
 
+func collectStatusFingerprint(repoRoot string) string {
+	cmd := newGitCommand("status", "--porcelain=v1", "-z", "--untracked-files=all")
+	cmd.Dir = repoRoot
+	output, err := cmd.Output()
+	if err != nil {
+		return ""
+	}
+	return string(output)
+}
+
 func collectCommitLog(repoRoot string, limit int) []CommitInfo {
 	if limit <= 0 {
 		limit = 20

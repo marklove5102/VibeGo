@@ -337,7 +337,7 @@ func TestGitWSBroadcastsSelectionChangesImmediately(t *testing.T) {
 	for {
 		var event GitWSEvent
 		require.NoError(t, connB.ReadJSON(&event))
-		if event.Type != "file_changed" {
+		if event.Type != "status_changed" {
 			continue
 		}
 
