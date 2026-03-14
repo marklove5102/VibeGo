@@ -234,6 +234,7 @@ registerPage({
   icon: KeyboardIcon,
   order: 20,
   category: "tool",
+  singleton: true,
   View: KeyboardTestView,
 });
 

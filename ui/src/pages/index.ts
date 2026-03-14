@@ -5,6 +5,7 @@ import "@/pages/tools/ai-session-manager";
 import "@/pages/system/home";
 import "@/pages/system/settings";
 import "@/pages/tools/process-monitor";
+import "@/pages/tools/port-manager";
 import "@/pages/workspace/files";
 import "@/pages/workspace/git";
 import "@/pages/workspace/terminal";

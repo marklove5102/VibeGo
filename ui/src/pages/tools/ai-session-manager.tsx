@@ -15,6 +15,7 @@ registerPage({
   icon: Bot,
   category: "tool",
   order: 20,
+  singleton: true,
   View: AISessionManagerView,
 });
 

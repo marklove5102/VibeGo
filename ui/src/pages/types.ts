@@ -23,5 +23,6 @@ export interface PageDefinition {
   icon: LucideIcon;
   category: PageCategory;
   order?: number;
+  singleton?: boolean;
   View: React.ComponentType<PageViewProps>;
 }

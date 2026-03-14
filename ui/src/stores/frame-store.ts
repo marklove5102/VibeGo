@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { create } from "zustand";
+import { pageRegistry } from "@/pages/registry";
 
 export type GroupType = "home" | "group" | "tool" | "settings";
 
@@ -291,6 +292,15 @@ export const useFrameStore = create<FrameState>((set, get) => ({
     })),
 
   addToolGroup: (pageId, name, id) => {
+    const { groups } = get();
+    const pageDef = pageRegistry.get(pageId);
+    if (pageDef?.singleton) {
+      const existing = groups.find((g) => g.type === "tool" && (g as ToolGroup).pageId === pageId);
+      if (existing) {
+        set({ activeGroupId: existing.id });
+        return;
+      }
+    }
     const group = createToolGroup(pageId, name, id);
     set((s) => ({ groups: [...s.groups, group], activeGroupId: group.id }));
   },

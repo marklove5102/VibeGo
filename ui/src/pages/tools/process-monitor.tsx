@@ -895,6 +895,7 @@ registerPage({
   icon: Activity,
   order: 10,
   category: "tool",
+  singleton: true,
   View: ProcessMonitorView,
 });
 

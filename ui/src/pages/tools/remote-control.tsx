@@ -275,6 +275,7 @@ registerPage({
   icon: Radius,
   order: 15,
   category: "tool",
+  singleton: true,
   View: RemoteControlView,
 });
 

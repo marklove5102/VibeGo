@@ -141,6 +141,7 @@ func main() {
 	gitHandler.SetWSHandler(gitWSHandler)
 	gitWSHandler.Register(api)
 	handler.NewProcessHandler().Register(api)
+	handler.NewPortHandler().Register(api)
 	handler.NewRemoteHandler().Register(api)
 
 	distFS, err := ui.GetDistFS()
