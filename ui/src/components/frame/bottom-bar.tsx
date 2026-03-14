@@ -266,7 +266,7 @@ const BottomBar: React.FC<BottomBarProps> = ({ onMenuClick, onNewPage }) => {
         {showGroupBar ? (
           <div
             ref={containerRef}
-            className="flex h-10 bg-ide-bg rounded-lg p-1 border border-ide-border gap-1 overflow-x-auto no-scrollbar max-w-[70vw]"
+            className="flex h-10 bg-ide-bg rounded-lg p-1 border border-ide-border gap-1 overflow-x-auto custom-scrollbar max-w-[70vw]"
           >
             {groups.map((group) => (
               <GroupButton
@@ -285,7 +285,7 @@ const BottomBar: React.FC<BottomBarProps> = ({ onMenuClick, onNewPage }) => {
         ) : useCustomItems ? (
           <div
             ref={containerRef}
-            className="flex h-10 bg-ide-bg rounded-lg p-1 border border-ide-border gap-1 overflow-x-auto no-scrollbar max-w-[70vw]"
+            className="flex h-10 bg-ide-bg rounded-lg p-1 border border-ide-border gap-1 overflow-x-auto custom-scrollbar max-w-[70vw]"
           >
             {bottomBarConfig.customItems!.map((item) => (
               <button
@@ -310,7 +310,7 @@ const BottomBar: React.FC<BottomBarProps> = ({ onMenuClick, onNewPage }) => {
         ) : isOnlyHome && onNewPage ? (
           <div
             ref={containerRef}
-            className="flex h-10 bg-ide-bg rounded-lg p-1 border border-ide-border gap-1 overflow-x-auto no-scrollbar"
+            className="flex h-10 bg-ide-bg rounded-lg p-1 border border-ide-border gap-1 overflow-x-auto custom-scrollbar"
           >
             <button
               onClick={onNewPage}

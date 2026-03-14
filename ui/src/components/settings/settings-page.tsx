@@ -166,7 +166,7 @@ const SettingsPage: React.FC = () => {
       show: true,
       leftButtons: [{ icon: <Settings size={18} />, active: true }],
       centerContent: (
-        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar touch-pan-x h-full">
+        <div className="flex items-center gap-2 overflow-x-auto custom-scrollbar touch-pan-x h-full">
           {SETTING_CATEGORIES.map((cat) => (
             <div
               key={cat.key}

@@ -21,7 +21,7 @@ const TerminalTabs: React.FC<TerminalTabsProps> = ({ terminals, activeTerminalId
   );
 
   return (
-    <div className="flex items-center gap-2 overflow-x-auto no-scrollbar touch-pan-x h-full w-full">
+    <div className="flex items-center gap-2 overflow-x-auto custom-scrollbar touch-pan-x h-full w-full">
       {terminals.map((terminal) => (
         <div
           key={terminal.id}

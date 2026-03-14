@@ -146,7 +146,7 @@ const FileManagerBreadcrumb: React.FC<FileManagerBreadcrumbProps> = ({ className
       ) : (
         <div
           ref={scrollRef}
-          className="flex-1 flex items-center gap-0.5 overflow-x-auto no-scrollbar touch-pan-x"
+          className="flex-1 flex items-center gap-0.5 overflow-x-auto custom-scrollbar touch-pan-x"
           onTouchStart={handleLongPressStart}
           onTouchEnd={handleLongPressEnd}
           onTouchMove={handleLongPressEnd}

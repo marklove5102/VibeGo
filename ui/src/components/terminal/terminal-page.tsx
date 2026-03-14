@@ -143,7 +143,7 @@ const TerminalPage: React.FC<TerminalPageProps> = ({ groupId, cwd }) => {
       ],
       centerContent:
         terminals.length > 0 ? (
-          <div className="flex items-center gap-2 overflow-x-auto no-scrollbar touch-pan-x h-full">
+          <div className="flex items-center gap-2 overflow-x-auto custom-scrollbar touch-pan-x h-full">
             {displayTerminals.map((terminal) => {
               const isActive = !listManagerOpen && terminal.id === activeTerminalId;
               const isClosed = terminal.status !== "running";

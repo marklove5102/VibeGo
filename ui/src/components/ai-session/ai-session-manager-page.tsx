@@ -421,7 +421,7 @@ const AISessionManagerPage: React.FC = () => {
             className="h-9 w-full rounded-md border border-ide-border bg-ide-panel pl-9 pr-3 text-sm text-ide-text placeholder:text-ide-mute outline-none transition-colors focus:border-ide-accent"
           />
         </div>
-        <div className="mt-3 flex gap-2 overflow-x-auto pb-0.5 no-scrollbar">
+        <div className="mt-3 flex gap-2 overflow-x-auto pb-0.5 custom-scrollbar">
           <button
             type="button"
             onClick={() => setProviderFilter("all")}

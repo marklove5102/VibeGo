@@ -55,7 +55,7 @@ const TopBar: React.FC = () => {
 
       {hasCenter && (
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 overflow-x-auto no-scrollbar touch-pan-x h-full">
+          <div className="flex items-center gap-2 overflow-x-auto custom-scrollbar touch-pan-x h-full">
             {typeof topBarConfig.centerContent === "string" ? (
               <span className="text-sm font-medium text-ide-text whitespace-nowrap">{topBarConfig.centerContent}</span>
             ) : (
