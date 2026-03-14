@@ -8,8 +8,9 @@ import TerminalInstance from "@/components/terminal/terminal-instance";
 import type { TerminalInstanceHandle } from "@/components/terminal/terminal-instance";
 import TerminalListManager from "@/components/terminal/terminal-list-manager";
 import TerminalSplitView from "@/components/terminal/terminal-split-view";
-import { Keyboard, translateKeyEvent } from "@/components/keyboard";
+import { translateKeyEvent } from "@/components/keyboard";
 import type { KeyEvent } from "@/components/keyboard";
+import { useKeyboardStore } from "@/stores/keyboard-store";
 import { usePageTopBar } from "@/hooks/use-page-top-bar";
 import { terminalKeys, useTerminalCreate, useTerminalRename } from "@/hooks/use-terminal";
 import { useTranslation } from "@/lib/i18n";
@@ -51,9 +52,6 @@ const TerminalPage: React.FC<TerminalPageProps> = ({ groupId, cwd }) => {
   const listManagerOpen = useTerminalStore((s) => s.listManagerOpenByGroup[groupId] ?? true);
   const focusedId = useTerminalStore((s) => s.focusedIdByGroup[groupId] ?? null);
   const [showHistory, setShowHistory] = useState(false);
-  const [showKeyboard] = useState(() =>
-    typeof window !== 'undefined' && (window.matchMedia('(pointer: coarse)').matches || navigator.maxTouchPoints > 0)
-  );
   const syncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const terminalRefsMap = useRef<Map<string, TerminalInstanceHandle>>(new Map());
 
@@ -427,36 +425,54 @@ const TerminalPage: React.FC<TerminalPageProps> = ({ groupId, cwd }) => {
   const handleVirtualKeyEvent = useCallback((event: KeyEvent) => {
     const action = translateKeyEvent(event);
     const handle = getFocusedTerminalRef();
+    if (!handle) return false;
+    
     switch (action.type) {
       case 'input':
-        handle?.sendInput(action.data);
-        break;
+        handle.sendInput(action.data);
+        return true;
       case 'copy': {
-        const text = handle?.getSelection() ?? '';
+        const text = handle.getSelection();
         if (text) void navigator.clipboard.writeText(text);
-        break;
+        return true;
       }
       case 'paste':
         void navigator.clipboard.readText().then((text) => {
-          if (text) handle?.paste(text);
+          if (text) handle.paste(text);
         });
-        break;
+        return true;
       case 'cut': {
-        const sel = handle?.getSelection() ?? '';
+        const sel = handle.getSelection();
         if (sel) {
           void navigator.clipboard.writeText(sel);
-          handle?.sendInput('\x18');
+          handle.sendInput('\x18');
         }
-        break;
+        return true;
       }
       case 'undo':
-        handle?.sendInput('\x1a');
-        break;
+        handle.sendInput('\x1a');
+        return true;
       case 'select':
-        handle?.selectAll();
-        break;
+        handle.selectAll();
+        return true;
     }
+    return false;
   }, [getFocusedTerminalRef]);
+
+  const registerHandler = useKeyboardStore((s) => s.registerHandler);
+
+  useEffect(() => {
+    return registerHandler((e) => {
+      const active = document.activeElement;
+      if (!active || !active.classList.contains('xterm-helper-textarea')) return false;
+
+      // Only handle if this terminal page instance owns the focused terminal
+      const handle = getFocusedTerminalRef();
+      if (!handle) return false;
+
+      return handleVirtualKeyEvent(e);
+    });
+  }, [registerHandler, handleVirtualKeyEvent, getFocusedTerminalRef]);
 
   const setTerminalRef = useCallback((id: string) => (ref: TerminalInstanceHandle | null) => {
     if (ref) {
@@ -533,11 +549,6 @@ const TerminalPage: React.FC<TerminalPageProps> = ({ groupId, cwd }) => {
           ))
         )}
       </div>
-      {showKeyboard && !listManagerOpen && !showHistory && (
-        <div className="flex-shrink-0">
-          <Keyboard onKeyEvent={handleVirtualKeyEvent} />
-        </div>
-      )}
     </div>
   );
 };

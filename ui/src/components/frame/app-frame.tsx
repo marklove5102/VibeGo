@@ -4,6 +4,7 @@ import BottomBar from "@/components/frame/bottom-bar";
 import SideBar from "@/components/frame/side-bar";
 import TabBar from "@/components/frame/tab-bar";
 import TopBar from "@/components/frame/top-bar";
+import { Keyboard } from "@/components/keyboard";
 
 interface AppFrameProps {
   children: React.ReactNode;
@@ -22,6 +23,7 @@ const AppFrame: React.FC<AppFrameProps> = ({ children, onMenuOpen, onRefresh, on
       <div className="flex-1 flex flex-col min-w-0">
         {topBarConfig.show ? <TopBar /> : <TabBar onRefresh={onRefresh} onBackToList={onBackToList} />}
         <main className="flex-1 overflow-hidden relative">{children}</main>
+        <Keyboard />
         <BottomBar onMenuClick={onMenuOpen} onNewPage={onNewPage} />
       </div>
     </div>

@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { keyFeedback } from "@/components/keyboard/core/key-feedback";
 import { KEYBOARD_QWERTY } from "@/components/keyboard/core/layouts";
 import type { SherpaStatus } from "@/components/keyboard/core/sherpa-asr";
@@ -7,6 +7,9 @@ import type { KeyEvent, LayoutDef, ModifiersState } from "@/components/keyboard/
 import { MODIFIER_KEYS } from "@/components/keyboard/core/types";
 import KeyButton from "@/components/keyboard/key-button";
 import "@/components/keyboard/keyboard.css";
+import { translateKeyEvent } from "@/components/keyboard/core/key-translator";
+import { useKeyboardStore } from "@/stores/keyboard-store";
+import { useAppStore } from "@/stores/app-store";
 
 interface KeyboardProps {
   onKeyEvent: (event: KeyEvent) => void;
@@ -180,6 +183,8 @@ const Keyboard: React.FC<KeyboardProps> = ({ onKeyEvent, layout = KEYBOARD_QWERT
     <div
       className="tk-keyboard"
       onPointerDown={(e) => e.preventDefault()}
+      onTouchStart={(e) => e.preventDefault()}
+      onMouseDown={(e) => e.preventDefault()}
       onContextMenu={(e) => e.preventDefault()}
     >
       {showLoadingBar && (
@@ -215,6 +220,228 @@ const Keyboard: React.FC<KeyboardProps> = ({ onKeyEvent, layout = KEYBOARD_QWERT
           })}
         </div>
       ))}
+    </div>
+  );
+};
+
+export const Keyboard: React.FC = () => {
+  const { useNativeKeyboard, setUseNativeKeyboard, handlers } = useKeyboardStore();
+  const theme = useAppStore((s) => s.theme);
+  
+  const [showKeyboard] = useState(() =>
+    typeof window !== "undefined" && (window.matchMedia("(pointer: coarse)").matches || navigator.maxTouchPoints > 0)
+  );
+
+  const [inputFocused, setInputFocused] = useState(false);
+  const checkFocusTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const isEditable = useCallback((el: HTMLElement | null): boolean => {
+    if (!el) return false;
+    const tag = el.tagName.toLowerCase();
+    if (tag === "input" || tag === "textarea") return true;
+    if (el.isContentEditable) return true;
+    if (el.classList.contains("inputarea") || el.classList.contains("xterm-helper-textarea")) return true;
+    return false;
+  }, []);
+
+  const handleFocusIn = useCallback((e: FocusEvent) => {
+    if (checkFocusTimer.current) clearTimeout(checkFocusTimer.current);
+    const target = e.target as HTMLElement;
+    if (isEditable(target)) {
+      setInputFocused(true);
+      if (!useNativeKeyboard) {
+        if (target.getAttribute("inputmode") !== "none") {
+          target.dataset.originalInputMode = target.getAttribute("inputmode") || "text";
+          target.setAttribute("inputmode", "none");
+        }
+      } else {
+        if (target.dataset.originalInputMode !== undefined) {
+          target.setAttribute("inputmode", target.dataset.originalInputMode || "text");
+        }
+      }
+    }
+  }, [useNativeKeyboard, isEditable]);
+
+  const handleFocusOut = useCallback(() => {
+    if (checkFocusTimer.current) clearTimeout(checkFocusTimer.current);
+    checkFocusTimer.current = setTimeout(() => {
+      const active = document.activeElement as HTMLElement | null;
+      if (!isEditable(active)) {
+        setInputFocused(false);
+        setUseNativeKeyboard(false);
+      }
+    }, 50);
+  }, [isEditable, setUseNativeKeyboard]);
+
+  useEffect(() => {
+    document.addEventListener("focusin", handleFocusIn, true);
+    document.addEventListener("focusout", handleFocusOut, true);
+    return () => {
+      document.removeEventListener("focusin", handleFocusIn, true);
+      document.removeEventListener("focusout", handleFocusOut, true);
+      if (checkFocusTimer.current) clearTimeout(checkFocusTimer.current);
+    };
+  }, [handleFocusIn, handleFocusOut]);
+
+  useEffect(() => {
+    const active = document.activeElement as HTMLElement | null;
+    if (isEditable(active)) {
+      setInputFocused(true);
+      if (!useNativeKeyboard && active) {
+        if (active.getAttribute("inputmode") !== "none") {
+          active.dataset.originalInputMode = active.getAttribute("inputmode") || "text";
+          active.setAttribute("inputmode", "none");
+        }
+      }
+    }
+  }, [useNativeKeyboard, isEditable]);
+
+  const handleVirtualKeyEvent = useCallback(
+    (e: KeyEvent) => {
+      if (e.value === "Keyboard") {
+        setUseNativeKeyboard(true);
+        const active = document.activeElement as HTMLElement | null;
+        if (active && isEditable(active)) {
+          active.dataset.ignoreBlur = "true";
+          active.setAttribute("inputmode", active.dataset.originalInputMode || "text");
+          active.blur();
+          active.dataset.ignoreBlur = "false";
+          active.focus();
+        }
+        return;
+      }
+
+      if (e.value === "Escape" && e.type === "key") {
+        const active = document.activeElement as HTMLElement | null;
+        if (active) {
+            active.blur();
+            return;
+        }
+      }
+
+      const { handlers } = useKeyboardStore.getState();
+      for (let i = handlers.length - 1; i >= 0; i--) {
+        if (handlers[i](e)) return;
+      }
+
+      const active = document.activeElement as HTMLElement | null;
+      if (!active || !isEditable(active)) return;
+
+      const action = translateKeyEvent(e);
+
+      // Trigger standard KeyboardEvent
+      if (e.type === "key") {
+        const keydown = new KeyboardEvent("keydown", {
+          key: e.value,
+          code: e.value,
+          bubbles: true,
+          cancelable: true,
+          ctrlKey: e.ctrl,
+          altKey: e.alt,
+          shiftKey: e.shift,
+          metaKey: e.meta,
+        });
+        active.dispatchEvent(keydown);
+        
+        if (e.value.startsWith("Arrow") || e.value === "Home" || e.value === "End" || e.value === "PageUp" || e.value === "PageDown") {
+             // For simple inputs without complex event handling, dispatching keydown sometimes isn't enough,
+             // but Monaco and Xterm intercept keydown. If it's a simple input/textarea, we might need manual handling:
+             const tag = active.tagName.toLowerCase();
+             if (tag === 'input' || tag === 'textarea' || active.isContentEditable) {
+                 // The manual cursor moving logic isn't perfect with standard keydown on native inputs in JS, 
+                 // but most of the complex inputs are Xterm or Monaco.
+                 // We will skip explicit cursor moving for standard inputs to keep it simple, since they usually
+                 // aren't the main focus, OR we could implement it if requested. Wait! The prompt said 
+                 // text editor, terminal, or any input box.
+                 // So we must try to support arrows for raw input/textareas!
+                 if ((tag === 'input' || tag === 'textarea') && active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement) {
+                     const el = active as HTMLInputElement | HTMLTextAreaElement;
+                     const start = el.selectionStart || 0;
+                     const end = el.selectionEnd || 0;
+                     if (e.value === "ArrowLeft") {
+                         const pos = Math.max(0, start - 1);
+                         el.setSelectionRange(pos, pos);
+                     } else if (e.value === "ArrowRight") {
+                         const pos = Math.min((el.value || '').length, start + 1);
+                         el.setSelectionRange(pos, pos);
+                     }
+                 }
+             }
+        }
+      }
+
+      const activeInput = active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement ? active : null;
+      let targetCursor = -1;
+
+      if (action.type === "input") {
+        if (activeInput) targetCursor = (activeInput.selectionStart ?? 0) + action.data.length;
+        document.execCommand("insertText", false, action.data);
+      } else if (action.type === "copy") {
+        document.execCommand("copy");
+      } else if (action.type === "paste") {
+        navigator.clipboard.readText().then((text) => {
+          if (text) {
+             if (activeInput) targetCursor = (activeInput.selectionStart ?? 0) + text.length;
+             document.execCommand("insertText", false, text);
+             if (activeInput && targetCursor !== -1) {
+                setTimeout(() => {
+                    activeInput.selectionStart = targetCursor;
+                    activeInput.selectionEnd = targetCursor;
+                }, 0);
+             }
+          }
+        });
+      } else if (action.type === "cut") {
+        if (activeInput) targetCursor = activeInput.selectionStart ?? 0;
+        document.execCommand("cut");
+      } else if (action.type === "undo") {
+        document.execCommand("undo");
+      } else if (action.type === "select") {
+        if (activeInput) {
+            activeInput.select();
+        } else {
+            document.execCommand("selectAll");
+        }
+      } else if (e.value === "Backspace") {
+        if (activeInput) {
+            const start = activeInput.selectionStart ?? 0;
+            const end = activeInput.selectionEnd ?? 0;
+            targetCursor = start !== end ? start : Math.max(0, start - 1);
+        }
+        document.execCommand("delete");
+      } else if (e.value === "Delete") {
+        if (activeInput) {
+            const start = activeInput.selectionStart ?? 0;
+            const end = activeInput.selectionEnd ?? 0;
+            targetCursor = start !== end ? start : start;
+        }
+        document.execCommand("forwardDelete");
+      }
+
+      if (activeInput && targetCursor !== -1) {
+          setTimeout(() => {
+              activeInput.selectionStart = targetCursor;
+              activeInput.selectionEnd = targetCursor;
+          }, 0);
+      }
+    },
+    [setUseNativeKeyboard, isEditable]
+  );
+
+  if (!showKeyboard || useNativeKeyboard || !inputFocused) return null;
+
+  return (
+    <div
+      className="flex-shrink-0 relative z-50 bg-ide-bg select-none touch-none"
+      style={{
+        boxShadow: "0 -4px 12px rgba(0,0,0,0.08)",
+      }}
+      onPointerDown={(e) => e.preventDefault()}
+      onTouchStart={(e) => e.preventDefault()}
+      onMouseDown={(e) => e.preventDefault()}
+      onContextMenu={(e) => e.preventDefault()}
+    >
+      <Keyboard onKeyEvent={handleVirtualKeyEvent} />
     </div>
   );
 };
