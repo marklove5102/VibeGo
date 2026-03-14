@@ -459,6 +459,18 @@
       "roleSystem": "System",
       "roleUnknown": "Unknown",
       "unknownTime": "Unknown time"
+    },
+    "remoteControl": {
+      "name": "Remote Control",
+      "title": "Remote Control",
+      "volume": "Volume",
+      "mute": "Mute",
+      "unmute": "Unmute",
+      "media": "Media",
+      "brightness": "Brightness",
+      "screen": "Screen",
+      "screenOff": "Screen Off",
+      "screenOn": "Screen On"
     }
   },
   "newPage": {

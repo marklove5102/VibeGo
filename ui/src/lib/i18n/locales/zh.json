@@ -475,6 +475,18 @@
       "roleSystem": "系统",
       "roleUnknown": "未知",
       "unknownTime": "未知时间"
+    },
+    "remoteControl": {
+      "name": "遥控器",
+      "title": "遥控器",
+      "volume": "音量",
+      "mute": "静音",
+      "unmute": "取消静音",
+      "media": "媒体控制",
+      "brightness": "屏幕亮度",
+      "screen": "屏幕",
+      "screenOff": "关闭屏幕",
+      "screenOn": "开启屏幕"
     }
   },
   "newPage": {

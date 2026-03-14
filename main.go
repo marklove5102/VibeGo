@@ -139,6 +139,7 @@ func main() {
 	gitHandler.Register(api)
 	handler.NewGitWSHandler(gitHandler).Register(api)
 	handler.NewProcessHandler().Register(api)
+	handler.NewRemoteHandler().Register(api)
 
 	distFS, err := ui.GetDistFS()
 	if err == nil {

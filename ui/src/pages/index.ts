@@ -8,3 +8,4 @@ import "./tools/process-monitor";
 import "./workspace/files";
 import "./workspace/git";
 import "./workspace/terminal";
+import "./tools/remote-control";
