@@ -1,7 +1,7 @@
 import type { SherpaStatus } from "./sherpa-asr";
 
 const DB_NAME = "VibeGoSpeechAssets";
-const DB_VERSION = 2; // Bumped version to clear corrupted cache
+const DB_VERSION = 2;
 const STORE_NAME = "assets";
 
 function openDB(): Promise<IDBDatabase> {
@@ -59,13 +59,8 @@ export async function fetchBinaryAsset(
   label: string,
   onStatus?: (status: SherpaStatus, progress?: string) => void
 ): Promise<ArrayBuffer> {
-  // We can skip cache in dev mode to ensure we get fresh files when debugging,
-  // but for models it is often better to keep caching even in dev to avoid repeating huge downloads.
-  // We use version as part of the key to bust cache properly.
-  const isDev = version === "dev" || !version;
   const cacheKey = `vibego-speech-v2-${label}-${version || "dev"}`;
 
-  // 1. Try IndexedDB Cache
   onStatus?.("loading", `Checking cache for ${label}...`);
   const cached = await getFromDB(cacheKey);
   if (cached) {
@@ -73,7 +68,6 @@ export async function fetchBinaryAsset(
     return cached;
   }
 
-  // 2. Download via XMLHttpRequest for zero JS copy and reliable progress events
   onStatus?.("loading", `Downloading ${label}...`);
   const assetUrl = version && version !== "dev" ? `${url}${url.includes('?') ? '&' : '?'}v=${encodeURIComponent(version)}` : url;
 
@@ -100,7 +94,6 @@ export async function fetchBinaryAsset(
         }
 
         const buffer = xhr.response as ArrayBuffer;
-        // Verify buffer isn't weirdly empty
         if (buffer && buffer.byteLength > 0) {
           await saveToDB(cacheKey, buffer);
           resolve(buffer);
