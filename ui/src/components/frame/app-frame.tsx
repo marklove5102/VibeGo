@@ -8,19 +8,19 @@ import TopBar from "./top-bar";
 interface AppFrameProps {
   children: React.ReactNode;
   onMenuOpen?: () => void;
-  onTabAction?: () => void;
+  onRefresh?: () => void;
   onBackToList?: () => void;
   onNewPage?: () => void;
 }
 
-const AppFrame: React.FC<AppFrameProps> = ({ children, onMenuOpen, onTabAction, onBackToList, onNewPage }) => {
+const AppFrame: React.FC<AppFrameProps> = ({ children, onMenuOpen, onRefresh, onBackToList, onNewPage }) => {
   const topBarConfig = useFrameStore((s) => s.topBarConfig);
 
   return (
     <div className="h-dvh min-h-dvh flex bg-ide-bg text-ide-text overflow-hidden font-mono transition-colors duration-300">
       <SideBar onMenuClick={onMenuOpen} onNewPage={onNewPage} />
       <div className="flex-1 flex flex-col min-w-0">
-        {topBarConfig.show ? <TopBar /> : <TabBar onAction={onTabAction} onBackToList={onBackToList} />}
+        {topBarConfig.show ? <TopBar /> : <TabBar onRefresh={onRefresh} onBackToList={onBackToList} />}
         <main className="flex-1 overflow-hidden relative">{children}</main>
         <BottomBar onMenuClick={onMenuOpen} onNewPage={onNewPage} />
       </div>
