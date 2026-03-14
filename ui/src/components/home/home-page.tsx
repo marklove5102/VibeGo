@@ -36,6 +36,10 @@ const HomePage: React.FC<HomePageProps> = ({ onOpenFolder, locale }) => {
     <div className="h-full flex flex-col bg-ide-bg overflow-hidden">
       <div className="flex-1 overflow-y-auto">
         <div className="w-full max-w-2xl mx-auto px-4 py-6 space-y-6">
+          <div className="hidden sm:flex items-center justify-center p-3 sm:p-4 bg-orange-500/10 border border-orange-500/20 text-orange-600 dark:text-orange-400 rounded-lg text-sm text-center">
+            {t("home.mobileOnlyWarning")}
+          </div>
+
           <div className="text-center py-6 sm:py-8">
             <div className="inline-flex items-center justify-center w-14 h-14 sm:w-16 sm:h-16 bg-ide-panel border border-ide-border rounded-2xl mb-3 sm:mb-4">
               <Terminal size={28} className="text-ide-accent sm:hidden" />

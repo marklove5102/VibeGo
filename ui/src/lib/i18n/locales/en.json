@@ -318,7 +318,8 @@
   "home": {
     "welcome": "Select a folder to get started",
     "openDirectory": "Open Directory",
-    "enterPath": "Enter server path..."
+    "enterPath": "Enter server path...",
+    "mobileOnlyWarning": "Designed for mobile — for the best experience, please visit on your phone."
   },
   "session": {
     "sessions": "Sessions",

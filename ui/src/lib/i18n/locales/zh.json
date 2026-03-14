@@ -328,7 +328,8 @@
   "home": {
     "welcome": "选择一个文件夹开始",
     "openDirectory": "打开目录",
-    "enterPath": "输入服务器路径..."
+    "enterPath": "输入服务器路径...",
+    "mobileOnlyWarning": "专为手机端打造，使用手机访问可获得最佳体验。"
   },
   "newGroup": {
     "openFolderDescription": "浏览并打开文件夹",
