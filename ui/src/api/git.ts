@@ -126,6 +126,11 @@ export interface CommitFileInfo {
   status: string;
 }
 
+export interface GitFileStatus {
+  path: string;
+  status: string;
+}
+
 export interface RemoteInfo {
   name: string;
   urls: string[];
@@ -262,16 +267,16 @@ export const gitApi = {
       body: JSON.stringify({ path, message, author, email }),
     }),
 
-  commitSelected: (path: string, files: string[], summary: string, description?: string) =>
+  commitSelected: (path: string, files: string[], patches: { filePath: string; patch: string }[], summary: string, description?: string) =>
     request<CommitSelectedResponse>("/git/commit-selected", {
       method: "POST",
-      body: JSON.stringify({ path, files, summary, description }),
+      body: JSON.stringify({ path, files, patches, summary, description }),
     }),
 
-  amend: (path: string, files: string[], summary: string, description?: string) =>
+  amend: (path: string, files: string[], patches: { filePath: string; patch: string }[], summary: string, description?: string) =>
     request<CommitSelectedResponse>("/git/amend", {
       method: "POST",
-      body: JSON.stringify({ path, files, summary, description }),
+      body: JSON.stringify({ path, files, patches, summary, description }),
     }),
 
   undo: (path: string) =>
@@ -421,6 +426,12 @@ export const gitApi = {
     request<{ ok: boolean }>("/git/add-patch", {
       method: "POST",
       body: JSON.stringify({ path, filePath, patch }),
+    }),
+
+  resolveConflict: (path: string, filePath: string, content: string) =>
+    request<{ ok: boolean; conflicts: string[]; status: GitStructuredStatus }>("/git/conflict-resolve", {
+      method: "POST",
+      body: JSON.stringify({ path, filePath, mode: "manual", hash: "", manualContent: content }),
     }),
 
   connectWs: (path: string, onEvent: (event: GitWSEvent) => void): (() => void) => {
