@@ -231,6 +231,7 @@ func main() {
 
 		upgradeHandler, upgradeErr := transport.NewHTTPSUpgradeHandler(transport.HTTPSUpgradeHandlerConfig{
 			DistFS:          distFS,
+			Fallback:        r,
 			UpgradePagePath: "http-upgrade.html",
 		})
 		if upgradeErr != nil {
