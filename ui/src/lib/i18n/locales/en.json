@@ -529,6 +529,13 @@
       "createForward": "Create Forward",
       "httpHint": "Full URL, e.g. http://localhost:8080",
       "tcpHint": "host:port, e.g. localhost:8080"
+    },
+    "keyboardTest": {
+      "name": "Keyboard Test",
+      "title": "Keyboard Test",
+      "clear": "Clear",
+      "placeholder": "Click keyboard to type here...",
+      "eventLog": "Event Log"
     }
   },
   "newPage": {

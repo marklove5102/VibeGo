@@ -1,9 +1,11 @@
 import { Keyboard as KeyboardIcon } from "lucide-react";
 import React, { useState, useRef, useCallback } from "react";
-import { Keyboard } from "@/components/keyboard";
 import type { KeyEvent } from "@/components/keyboard";
+import { useKeyboardStore } from "@/stores/keyboard-store";
 import { registerPage } from "@/pages/registry";
 import type { PageViewProps } from "@/pages/types";
+import { useTranslation } from "@/lib/i18n";
+import { useAppStore } from "@/stores/app-store";
 
 interface EventLogEntry {
   id: number;
@@ -26,6 +28,8 @@ function formatEvent(e: KeyEvent): string {
 }
 
 const KeyboardTestView: React.FC<PageViewProps> = () => {
+  const locale = useAppStore((s) => s.locale);
+  const t = useTranslation(locale);
   const [text, setText] = useState<string>("");
   const [eventLog, setEventLog] = useState<EventLogEntry[]>([]);
   const nextId = useRef(0);
@@ -90,7 +94,7 @@ const KeyboardTestView: React.FC<PageViewProps> = () => {
           } else {
             const dir = textarea.selectionDirection || "none";
             const activeCursor = (dir === "backward") ? start : end;
-            const newCursor = deltaFn(start !== end ? (dir === "backward" ? start : end) : start);
+            const newCursor = deltaFn(start !== end ? activeCursor : start);
             textarea.setSelectionRange(newCursor, newCursor);
           }
         }
@@ -272,6 +276,16 @@ const KeyboardTestView: React.FC<PageViewProps> = () => {
     [scrollBottom]
   );
 
+  const registerHandler = useKeyboardStore((s) => s.registerHandler);
+
+  React.useEffect(() => {
+    return registerHandler((e) => {
+      if (document.activeElement !== textareaRef.current) return false;
+      handleKeyEvent(e);
+      return true;
+    });
+  }, [registerHandler, handleKeyEvent]);
+
   const handleClear = useCallback(() => {
     setText("");
     setEventLog([]);
@@ -307,7 +321,7 @@ const KeyboardTestView: React.FC<PageViewProps> = () => {
               color: "var(--ide-text)",
             }}
           >
-            Keyboard Test
+            {t("plugin.keyboardTest.title")}
           </span>
         </div>
         <button
@@ -323,7 +337,7 @@ const KeyboardTestView: React.FC<PageViewProps> = () => {
             cursor: "pointer",
           }}
         >
-          Clear
+          {t("plugin.keyboardTest.clear")}
         </button>
       </div>
 
@@ -349,7 +363,7 @@ const KeyboardTestView: React.FC<PageViewProps> = () => {
             setUseNativeKb(false);
           }}
           inputMode={useNativeKb ? "text" : "none"}
-          placeholder="Click keyboard to type here..."
+          placeholder={t("plugin.keyboardTest.placeholder")}
           style={{
             flex: 1,
             padding: "16px",
@@ -393,7 +407,7 @@ const KeyboardTestView: React.FC<PageViewProps> = () => {
               opacity: 0.6,
             }}
           >
-            Event Log
+            {t("plugin.keyboardTest.eventLog")}
           </div>
           {eventLog.map((entry) => (
             <div
@@ -412,9 +426,8 @@ const KeyboardTestView: React.FC<PageViewProps> = () => {
                 style={{
                   color: "var(--ide-text)",
                   fontWeight: entry.event.type === "char" ? 400 : 600,
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  whiteSpace: "nowrap",
+                  wordBreak: "break-all",
+                  whiteSpace: "pre-wrap",
                   textAlign: "center",
                   width: "100%",
                 }}
@@ -426,18 +439,6 @@ const KeyboardTestView: React.FC<PageViewProps> = () => {
         </div>
       </div>
 
-      <div
-        style={{
-          position: "absolute",
-          bottom: 0,
-          left: 0,
-          right: 0,
-          zIndex: 50,
-          boxShadow: "0 -4px 12px rgba(0,0,0,0.08)",
-        }}
-      >
-        <Keyboard onKeyEvent={handleKeyEvent} />
-      </div>
     </div>
   );
 };
@@ -445,6 +446,7 @@ const KeyboardTestView: React.FC<PageViewProps> = () => {
 registerPage({
   id: "keyboard-test",
   name: "Keyboard Test",
+  nameKey: "plugin.keyboardTest.name",
   icon: KeyboardIcon,
   order: 20,
   category: "tool",

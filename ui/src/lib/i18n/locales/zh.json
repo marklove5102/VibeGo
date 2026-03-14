@@ -544,6 +544,13 @@
       "createForward": "创建转发",
       "httpHint": "完整 URL，例如 http://localhost:8080",
       "tcpHint": "host:port，例如 localhost:8080"
+    },
+    "keyboardTest": {
+      "name": "键盘测试",
+      "title": "键盘测试",
+      "clear": "清除",
+      "placeholder": "点击键盘在此处输入...",
+      "eventLog": "事件日志"
     }
   },
   "newPage": {
