@@ -26,7 +26,13 @@ Therefore, the application is designed entirely around three core pillars: File 
 In active development. Experience the beta version directly via npx without manual installation:
 
 ```bash
-npx vibego@latest
+npx -y vibego@latest
+```
+
+Or using pnpm:
+
+```bash
+pnpm dlx vibego@latest
 ```
 
 By default, VibeGo starts at `http://localhost:1984`.
@@ -44,10 +50,12 @@ By default, VibeGo starts at `http://localhost:1984`.
 Install and update VibeGo globally via npm:
 
 ```bash
-# Using npm
 npm i -g vibego@latest
+```
 
-# Using pnpm
+Or using pnpm:
+
+```bash
 pnpm i -g vibego@latest
 ```
 

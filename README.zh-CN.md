@@ -26,7 +26,13 @@
 当前激情开发功能中，使用 `npx` 可直接体验预览版，无需手动安装：
 
 ```bash
-npx vibego@latest
+npx -y vibego@latest
+```
+
+或者使用 pnpm：
+
+```bash
+pnpm dlx vibego@latest
 ```
 
 默认情况下，VibeGo 启动后可通过 `http://localhost:1984` 访问。
@@ -44,10 +50,12 @@ npx vibego@latest
 通过 npm 安装或更新 VibeGo：
 
 ```bash
-# 使用 npm
 npm i -g vibego@latest
+```
 
-# 使用 pnpm
+或者使用 pnpm：
+
+```bash
 pnpm i -g vibego@latest
 ```
 
