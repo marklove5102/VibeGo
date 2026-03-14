@@ -10,6 +10,9 @@ export interface TerminalInfo {
   cols: number;
   rows: number;
   status: TerminalStatus;
+  workspace_session_id: string;
+  group_id: string;
+  parent_id: string;
   exit_code: number;
   history_size: number;
   created_at: number;
@@ -17,9 +20,27 @@ export interface TerminalInfo {
 }
 
 export const terminalApi = {
-  list: () => request<{ terminals: TerminalInfo[] }>("/terminal"),
+  list: (opts?: { workspace_session_id?: string; group_id?: string }) => {
+    const params = new URLSearchParams();
+    if (opts?.workspace_session_id) {
+      params.set("workspace_session_id", opts.workspace_session_id);
+    }
+    if (opts?.group_id) {
+      params.set("group_id", opts.group_id);
+    }
+    const qs = params.toString();
+    return request<{ terminals: TerminalInfo[] }>(`/terminal${qs ? `?${qs}` : ""}`);
+  },
 
-  create: (opts?: { name?: string; cwd?: string; cols?: number; rows?: number }) =>
+  create: (opts?: {
+    name?: string;
+    cwd?: string;
+    cols?: number;
+    rows?: number;
+    workspace_session_id?: string;
+    group_id?: string;
+    parent_id?: string;
+  }) =>
     request<{ ok: boolean; id: string; name: string }>("/terminal", {
       method: "POST",
       body: JSON.stringify(opts || {}),

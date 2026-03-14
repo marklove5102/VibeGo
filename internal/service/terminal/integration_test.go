@@ -248,7 +248,7 @@ func TestManager_List(t *testing.T) {
 	defer manager.Close(info1.ID)
 	defer manager.Close(info2.ID)
 
-	list, err := manager.List()
+	list, err := manager.List("", "")
 	if err != nil {
 		t.Fatalf("failed to list: %v", err)
 	}

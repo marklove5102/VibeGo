@@ -5,6 +5,7 @@ import { useDialog } from "@/components/common";
 import { usePageTopBar } from "@/hooks/use-page-top-bar";
 import { useTerminalClose, useTerminalCreate, useTerminalDelete, useTerminalRename } from "@/hooks/use-terminal";
 import { useTranslation } from "@/lib/i18n";
+import { useSessionStore } from "@/stores/session-store";
 import { useAppStore } from "@/stores";
 import { useFrameStore } from "@/stores/frame-store";
 import { type SplitDirection, type TerminalSession, useTerminalStore } from "@/stores/terminal-store";
@@ -24,6 +25,7 @@ const TerminalPage: React.FC<TerminalPageProps> = ({ groupId, cwd }) => {
   const dialog = useDialog();
   const locale = useAppStore((s) => s.locale);
   const t = useTranslation(locale);
+  const currentSessionId = useSessionStore((s) => s.currentSessionId);
   const terminals = useTerminalStore((s) => s.terminalsByGroup[groupId] || EMPTY_TERMINALS);
   const activeTerminalId = useTerminalStore((s) => s.activeIdByGroup[groupId] ?? null);
   const listManagerOpen = useTerminalStore((s) => s.listManagerOpenByGroup[groupId] ?? true);
@@ -136,13 +138,29 @@ const TerminalPage: React.FC<TerminalPageProps> = ({ groupId, cwd }) => {
       const rootId = useTerminalStore.getState().getRootIdForTerminal(groupId, targetId) || targetId;
       const name = getNextTerminalName();
       try {
-        const result = await terminalApi.create({ cwd, name });
+        const result = await terminalApi.create({
+          cwd,
+          name,
+          workspace_session_id: currentSessionId || undefined,
+          group_id: groupId,
+          parent_id: rootId,
+        });
         addTerminal(groupId, { id: result.id, name: result.name, parentId: rootId });
         splitTerminalInStore(rootId, targetId, result.id, direction);
         setFocusedId(groupId, result.id);
       } catch {}
     },
-    [focusedId, activeTerminalId, groupId, cwd, addTerminal, splitTerminalInStore, setFocusedId, getNextTerminalName],
+    [
+      focusedId,
+      activeTerminalId,
+      groupId,
+      cwd,
+      currentSessionId,
+      addTerminal,
+      splitTerminalInStore,
+      setFocusedId,
+      getNextTerminalName,
+    ],
   );
 
   const handleCloseSplit = useCallback(() => {

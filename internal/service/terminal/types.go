@@ -8,23 +8,29 @@ import (
 )
 
 type TerminalInfo struct {
-	ID        string `json:"id"`
-	Name      string `json:"name"`
-	Shell     string `json:"shell"`
-	Cwd       string `json:"cwd"`
-	Cols      int    `json:"cols"`
-	Rows      int    `json:"rows"`
-	Status    string `json:"status"`
-	CreatedAt int64  `json:"created_at"`
-	UpdatedAt int64  `json:"updated_at"`
+	ID                 string `json:"id"`
+	Name               string `json:"name"`
+	Shell              string `json:"shell"`
+	Cwd                string `json:"cwd"`
+	Cols               int    `json:"cols"`
+	Rows               int    `json:"rows"`
+	Status             string `json:"status"`
+	WorkspaceSessionID string `json:"workspace_session_id"`
+	GroupID            string `json:"group_id"`
+	ParentID           string `json:"parent_id"`
+	CreatedAt          int64  `json:"created_at"`
+	UpdatedAt          int64  `json:"updated_at"`
 }
 
 type CreateOptions struct {
-	Name   string
-	Cwd    string
-	Cols   int
-	Rows   int
-	UserID string
+	Name               string
+	Cwd                string
+	Cols               int
+	Rows               int
+	UserID             string
+	WorkspaceSessionID string
+	GroupID            string
+	ParentID           string
 }
 
 type Connection struct {
@@ -83,14 +89,17 @@ func (c *ManagerConfig) applyDefaults() {
 
 func sessionToInfo(s *model.TerminalSession) *TerminalInfo {
 	return &TerminalInfo{
-		ID:        s.ID,
-		Name:      s.Name,
-		Shell:     s.Shell,
-		Cwd:       s.Cwd,
-		Cols:      s.Cols,
-		Rows:      s.Rows,
-		Status:    s.Status,
-		CreatedAt: s.CreatedAt,
-		UpdatedAt: s.UpdatedAt,
+		ID:                 s.ID,
+		Name:               s.Name,
+		Shell:              s.Shell,
+		Cwd:                s.Cwd,
+		Cols:               s.Cols,
+		Rows:               s.Rows,
+		Status:             s.Status,
+		WorkspaceSessionID: s.WorkspaceSessionID,
+		GroupID:            s.GroupID,
+		ParentID:           s.ParentID,
+		CreatedAt:          s.CreatedAt,
+		UpdatedAt:          s.UpdatedAt,
 	}
 }

@@ -113,16 +113,19 @@ func (m *Manager) Create(opts CreateOptions) (*TerminalInfo, error) {
 
 	now := time.Now().Unix()
 	session := &model.TerminalSession{
-		ID:        uuid.New().String(),
-		UserID:    opts.UserID,
-		Name:      name,
-		Shell:     m.shell,
-		Cwd:       cwd,
-		Cols:      cols,
-		Rows:      rows,
-		Status:    model.StatusRunning,
-		CreatedAt: now,
-		UpdatedAt: now,
+		ID:                 uuid.New().String(),
+		UserID:             opts.UserID,
+		WorkspaceSessionID: opts.WorkspaceSessionID,
+		GroupID:            opts.GroupID,
+		ParentID:           opts.ParentID,
+		Name:               name,
+		Shell:              m.shell,
+		Cwd:                cwd,
+		Cols:               cols,
+		Rows:               rows,
+		Status:             model.StatusRunning,
+		CreatedAt:          now,
+		UpdatedAt:          now,
 	}
 
 	if err := m.db.Create(session).Error; err != nil {
@@ -172,15 +175,18 @@ func (m *Manager) Get(id string) (*TerminalInfo, bool) {
 		return nil, false
 	}
 	return &TerminalInfo{
-		ID:        at.Session.ID,
-		Name:      at.Session.Name,
-		Shell:     at.Session.Shell,
-		Cwd:       at.Session.Cwd,
-		Cols:      at.Session.Cols,
-		Rows:      at.Session.Rows,
-		Status:    at.status.Load().(string),
-		CreatedAt: at.Session.CreatedAt,
-		UpdatedAt: at.Session.UpdatedAt,
+		ID:                 at.Session.ID,
+		Name:               at.Session.Name,
+		Shell:              at.Session.Shell,
+		Cwd:                at.Session.Cwd,
+		Cols:               at.Session.Cols,
+		Rows:               at.Session.Rows,
+		Status:             at.status.Load().(string),
+		WorkspaceSessionID: at.Session.WorkspaceSessionID,
+		GroupID:            at.Session.GroupID,
+		ParentID:           at.Session.ParentID,
+		CreatedAt:          at.Session.CreatedAt,
+		UpdatedAt:          at.Session.UpdatedAt,
 	}, true
 }
 
@@ -332,9 +338,16 @@ func (m *Manager) monitorPTY(at *activeTerminal, pty *localCommand) {
 	at.historyMu.Unlock()
 }
 
-func (m *Manager) List() ([]TerminalInfo, error) {
+func (m *Manager) List(workspaceSessionID string, groupID string) ([]TerminalInfo, error) {
 	var sessions []model.TerminalSession
-	if err := m.db.Order("updated_at DESC").Find(&sessions).Error; err != nil {
+	query := m.db.Order("updated_at DESC")
+	if workspaceSessionID != "" {
+		query = query.Where("workspace_session_id = ?", workspaceSessionID)
+	}
+	if groupID != "" {
+		query = query.Where("group_id = ?", groupID)
+	}
+	if err := query.Find(&sessions).Error; err != nil {
 		return nil, err
 	}
 	result := make([]TerminalInfo, len(sessions))

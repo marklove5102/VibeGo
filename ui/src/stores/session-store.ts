@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { fileApi } from "../api/file";
 import { settingsApi } from "../api/settings";
-import { type SessionInfo, sessionApi } from "../api/session";
+import { type SessionInfo, type WorkspaceState, sessionApi } from "../api/session";
 import { terminalApi } from "../api/terminal";
 import { cleanupAllTerminals } from "../services/terminal-cleanup-service";
 import {
@@ -13,42 +13,14 @@ import {
 } from "./file-manager-store";
 import { type GenericGroup, type GroupPage, type ToolGroup, useFrameStore } from "./frame-store";
 import * as gitStoreModule from "./git-store";
-import { type LayoutNode, type TerminalSession, useTerminalStore } from "./terminal-store";
+import { type TerminalSession, useTerminalStore } from "./terminal-store";
 
 const CURRENT_SESSION_SETTING_KEY = "workspaceCurrentSessionId";
 
 let autoSaveUnsub: (() => void) | null = null;
 let autoSaveTimer: ReturnType<typeof setTimeout> | null = null;
 
-export interface SessionState {
-  openGroups: Array<{
-    id: string;
-    name: string;
-    pages: GroupPage[];
-    activePageId: string | null;
-  }>;
-  openTools: Array<{
-    id: string;
-    pageId: string;
-    name: string;
-  }>;
-  terminalsByGroup: Record<string, TerminalSession[]>;
-  activeTerminalByGroup: Record<string, string | null>;
-  listManagerOpenByGroup: Record<string, boolean>;
-  terminalLayouts: Record<string, LayoutNode>;
-  focusedIdByGroup: Record<string, string | null>;
-  settingsOpen: boolean;
-  activeGroupId: string | null;
-  fileManagerByGroup: Record<
-    string,
-    {
-      currentPath: string;
-      rootPath: string;
-      pathHistory: string[];
-      historyIndex: number;
-    }
-  >;
-}
+export type SessionState = WorkspaceState;
 
 interface SessionStoreState {
   currentSessionId: string | null;
@@ -274,36 +246,6 @@ function buildSessionState(): SessionState {
   };
 }
 
-function parseSessionState(rawState: string): SessionState {
-  if (!rawState || rawState === "{}") {
-    return createEmptySessionState();
-  }
-
-  const parsed = JSON.parse(rawState) as Partial<SessionState>;
-  return {
-    openGroups: Array.isArray(parsed.openGroups) ? parsed.openGroups : [],
-    openTools: Array.isArray(parsed.openTools) ? parsed.openTools : [],
-    terminalsByGroup:
-      parsed.terminalsByGroup && typeof parsed.terminalsByGroup === "object" ? parsed.terminalsByGroup : {},
-    activeTerminalByGroup:
-      parsed.activeTerminalByGroup && typeof parsed.activeTerminalByGroup === "object"
-        ? parsed.activeTerminalByGroup
-        : {},
-    listManagerOpenByGroup:
-      parsed.listManagerOpenByGroup && typeof parsed.listManagerOpenByGroup === "object"
-        ? parsed.listManagerOpenByGroup
-        : {},
-    terminalLayouts:
-      parsed.terminalLayouts && typeof parsed.terminalLayouts === "object" ? parsed.terminalLayouts : {},
-    focusedIdByGroup:
-      parsed.focusedIdByGroup && typeof parsed.focusedIdByGroup === "object" ? parsed.focusedIdByGroup : {},
-    settingsOpen: !!parsed.settingsOpen,
-    activeGroupId: typeof parsed.activeGroupId === "string" ? parsed.activeGroupId : null,
-    fileManagerByGroup:
-      parsed.fileManagerByGroup && typeof parsed.fileManagerByGroup === "object" ? parsed.fileManagerByGroup : {},
-  };
-}
-
 function restoreSessionState(state: SessionState): void {
   const frameStore = useFrameStore.getState();
   frameStore.initDefaultGroups();
@@ -457,7 +399,7 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
 
       await sessionApi.update(sessionId, {
         name: sessionName,
-        state: JSON.stringify(state),
+        workspace_state: state,
       });
 
       set((store) => ({
@@ -520,7 +462,7 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
 
       await sessionApi.update(currentSessionId, {
         name: sessionName,
-        state: JSON.stringify(state),
+        workspace_state: state,
       });
 
       set((store) => ({
@@ -545,13 +487,8 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
       let remoteState: SessionState | null = null;
       try {
         const detail = await sessionApi.get(id);
-        if (detail.state && detail.state !== "{}") {
-          try {
-            const parsed = parseSessionState(detail.state);
-            if (hasRestorableSessionContent(parsed)) {
-              remoteState = parsed;
-            }
-          } catch {}
+        if (detail.workspace_state && hasRestorableSessionContent(detail.workspace_state)) {
+          remoteState = detail.workspace_state;
         }
       } catch {
         set({ currentSessionId: null, loading: false });
@@ -588,7 +525,7 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
       }
 
       try {
-        const terminalList = await terminalApi.list();
+        const terminalList = await terminalApi.list({ workspace_session_id: id });
         const remoteStatus = new Map(terminalList.terminals.map((terminal) => [terminal.id, terminal.status]));
         const terminalStore = useTerminalStore.getState();
         const normalized: Record<string, TerminalSession[]> = {};
@@ -629,7 +566,7 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
     try {
       await sessionApi.update(currentSessionId, {
         name: sessionName,
-        state: JSON.stringify(state),
+        workspace_state: state,
       });
 
       if (sessionName) {

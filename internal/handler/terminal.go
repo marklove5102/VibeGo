@@ -43,17 +43,20 @@ func (h *TerminalHandler) Register(r *gin.RouterGroup) {
 }
 
 type TerminalInfo struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	Shell       string `json:"shell"`
-	Cwd         string `json:"cwd"`
-	Cols        int    `json:"cols"`
-	Rows        int    `json:"rows"`
-	Status      string `json:"status"`
-	ExitCode    int    `json:"exit_code"`
-	HistorySize int64  `json:"history_size"`
-	CreatedAt   int64  `json:"created_at"`
-	UpdatedAt   int64  `json:"updated_at"`
+	ID                 string `json:"id"`
+	Name               string `json:"name"`
+	Shell              string `json:"shell"`
+	Cwd                string `json:"cwd"`
+	Cols               int    `json:"cols"`
+	Rows               int    `json:"rows"`
+	Status             string `json:"status"`
+	WorkspaceSessionID string `json:"workspace_session_id"`
+	GroupID            string `json:"group_id"`
+	ParentID           string `json:"parent_id"`
+	ExitCode           int    `json:"exit_code"`
+	HistorySize        int64  `json:"history_size"`
+	CreatedAt          int64  `json:"created_at"`
+	UpdatedAt          int64  `json:"updated_at"`
 }
 
 // List godoc
@@ -64,7 +67,9 @@ type TerminalInfo struct {
 // @Failure 500 {object} map[string]string
 // @Router /api/terminal/list [get]
 func (h *TerminalHandler) List(c *gin.Context) {
-	sessions, err := h.manager.List()
+	workspaceSessionID := c.Query("workspace_session_id")
+	groupID := c.Query("group_id")
+	sessions, err := h.manager.List(workspaceSessionID, groupID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -72,26 +77,32 @@ func (h *TerminalHandler) List(c *gin.Context) {
 	list := make([]TerminalInfo, len(sessions))
 	for i, s := range sessions {
 		list[i] = TerminalInfo{
-			ID:        s.ID,
-			Name:      s.Name,
-			Shell:     s.Shell,
-			Cwd:       s.Cwd,
-			Cols:      s.Cols,
-			Rows:      s.Rows,
-			Status:    s.Status,
-			CreatedAt: s.CreatedAt,
-			UpdatedAt: s.UpdatedAt,
+			ID:                 s.ID,
+			Name:               s.Name,
+			Shell:              s.Shell,
+			Cwd:                s.Cwd,
+			Cols:               s.Cols,
+			Rows:               s.Rows,
+			Status:             s.Status,
+			WorkspaceSessionID: s.WorkspaceSessionID,
+			GroupID:            s.GroupID,
+			ParentID:           s.ParentID,
+			CreatedAt:          s.CreatedAt,
+			UpdatedAt:          s.UpdatedAt,
 		}
 	}
 	c.JSON(http.StatusOK, gin.H{"terminals": list})
 }
 
 type NewTerminalRequest struct {
-	Name   string `json:"name"`
-	Cwd    string `json:"cwd"`
-	Cols   int    `json:"cols"`
-	Rows   int    `json:"rows"`
-	UserID string `json:"user_id"`
+	Name               string `json:"name"`
+	Cwd                string `json:"cwd"`
+	Cols               int    `json:"cols"`
+	Rows               int    `json:"rows"`
+	UserID             string `json:"user_id"`
+	WorkspaceSessionID string `json:"workspace_session_id"`
+	GroupID            string `json:"group_id"`
+	ParentID           string `json:"parent_id"`
 }
 
 // New godoc
@@ -108,11 +119,14 @@ func (h *TerminalHandler) New(c *gin.Context) {
 	c.ShouldBindJSON(&req)
 
 	info, err := h.manager.Create(terminal.CreateOptions{
-		Name:   req.Name,
-		Cwd:    req.Cwd,
-		Cols:   req.Cols,
-		Rows:   req.Rows,
-		UserID: req.UserID,
+		Name:               req.Name,
+		Cwd:                req.Cwd,
+		Cols:               req.Cols,
+		Rows:               req.Rows,
+		UserID:             req.UserID,
+		WorkspaceSessionID: req.WorkspaceSessionID,
+		GroupID:            req.GroupID,
+		ParentID:           req.ParentID,
 	})
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
