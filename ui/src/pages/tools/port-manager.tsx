@@ -13,7 +13,7 @@ import {
   Timer,
   Trash2,
 } from "lucide-react";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import type { ForwardRule, PortInfo } from "@/api/port";
 import {
   AlertDialog,

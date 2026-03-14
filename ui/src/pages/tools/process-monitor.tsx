@@ -36,8 +36,8 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useFrameController } from "@/framework/frame/controller";
 import { useCombinedStats, useProcessKill } from "@/hooks/use-process";
+import { usePageTopBar } from "@/hooks/use-page-top-bar";
 import { getIntlLocale, useTranslation } from "@/lib/i18n";
 import { useAppStore } from "@/stores/app-store";
 import { registerPage } from "@/pages/registry";
@@ -332,9 +332,7 @@ function flattenTree(nodes: TreeNode[], expandedPids: Set<number>, level = 0): {
   return result;
 }
 
-const ProcessMonitorView: React.FC<PageViewProps> = ({ context }) => {
-  const isActive = context.isActive;
-  const { setPageMenuItems } = useFrameController();
+const ProcessMonitorView: React.FC<PageViewProps> = () => {
   const locale = useAppStore((s) => s.locale);
   const t = useTranslation(locale);
   const intlLocale = getIntlLocale(locale);
@@ -375,18 +373,20 @@ const ProcessMonitorView: React.FC<PageViewProps> = ({ context }) => {
     refetch();
   }, [refetch]);
 
-  useEffect(() => {
-    if (!isActive) return;
-    setPageMenuItems([
-      {
-        id: "refresh-processes",
-        icon: <RefreshCw size={18} />,
-        label: t("plugin.processMonitor.refresh"),
-        onClick: handleRefresh,
-      },
-    ]);
-    return () => setPageMenuItems([]);
-  }, [isActive, setPageMenuItems, handleRefresh, t]);
+  usePageTopBar(
+    {
+      show: true,
+      centerContent: t("plugin.processMonitor.title"),
+      rightButtons: [
+        {
+          icon: isLoading ? <RefreshCw size={18} className="animate-spin" /> : <RefreshCw size={18} />,
+          title: t("plugin.processMonitor.refresh"),
+          onClick: handleRefresh,
+        },
+      ],
+    },
+    [t, isLoading, handleRefresh]
+  );
 
   const handleSort = useCallback((field: SortField) => {
     setSortField((prev) => {
@@ -486,66 +486,51 @@ const ProcessMonitorView: React.FC<PageViewProps> = ({ context }) => {
 
   return (
     <div className="h-full flex flex-col bg-ide-bg overflow-hidden">
-      <div className="flex-shrink-0 px-3 sm:px-4 py-2 sm:py-3 border-b border-ide-border">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4">
-          <div className="flex items-center gap-2">
-            <Activity size={18} className="text-ide-accent sm:w-5 sm:h-5" />
-            <span className="font-medium text-ide-text text-sm sm:text-base">{t("plugin.processMonitor.title")}</span>
+      <div className="shrink-0 px-3 sm:px-4 py-2 border-b border-ide-border">
+        <div className="flex items-center gap-2 sm:gap-3">
+          <div className="relative flex-1 sm:flex-none">
+            <Search
+              size={14}
+              className="absolute left-2 top-1/2 -translate-y-1/2 text-ide-mute sm:w-4 sm:h-4 sm:left-2.5"
+            />
+            <Input
+              placeholder={t("plugin.processMonitor.search")}
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full sm:w-40 md:w-48 pl-7 sm:pl-8 h-7 sm:h-8 text-xs sm:text-sm bg-ide-panel border-ide-border"
+            />
           </div>
-          <div className="flex items-center gap-2 sm:gap-3">
-            <div className="relative flex-1 sm:flex-none">
-              <Search
-                size={14}
-                className="absolute left-2 top-1/2 -translate-y-1/2 text-ide-mute sm:w-4 sm:h-4 sm:left-2.5"
-              />
-              <Input
-                placeholder={t("plugin.processMonitor.search")}
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full sm:w-40 md:w-48 pl-7 sm:pl-8 h-7 sm:h-8 text-xs sm:text-sm bg-ide-panel border-ide-border"
-              />
-            </div>
-            <div className="flex border border-ide-border rounded-md overflow-hidden">
-              <Button
-                variant={viewMode === "list" ? "secondary" : "ghost"}
-                size="sm"
-                className="h-7 px-2 rounded-none"
-                onClick={() => setViewMode("list")}
-              >
-                <List size={14} />
-              </Button>
-              <Button
-                variant={viewMode === "tree" ? "secondary" : "ghost"}
-                size="sm"
-                className="h-7 px-2 rounded-none"
-                onClick={() => setViewMode("tree")}
-              >
-                <Network size={14} />
-              </Button>
-            </div>
-            <Select value={refreshInterval.toString()} onValueChange={(v) => setRefreshInterval(Number(v))}>
-              <SelectTrigger className="w-16 sm:w-20 h-7 sm:h-8 text-xs sm:text-sm bg-ide-panel border-ide-border">
-                <Timer size={12} className="mr-0.5 sm:mr-1 sm:w-3.5 sm:h-3.5" />
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {refreshOptions.map((opt) => (
-                  <SelectItem key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          <div className="flex border border-ide-border rounded-md overflow-hidden">
             <Button
-              variant="ghost"
+              variant={viewMode === "list" ? "secondary" : "ghost"}
               size="sm"
-              onClick={handleRefresh}
-              disabled={isLoading}
-              className="h-7 w-7 sm:h-8 sm:w-8 p-0"
+              className="h-7 px-2 rounded-none"
+              onClick={() => setViewMode("list")}
             >
-              <RefreshCw size={14} className={`sm:w-4 sm:h-4 ${isLoading ? "animate-spin" : ""}`} />
+              <List size={14} />
+            </Button>
+            <Button
+              variant={viewMode === "tree" ? "secondary" : "ghost"}
+              size="sm"
+              className="h-7 px-2 rounded-none"
+              onClick={() => setViewMode("tree")}
+            >
+              <Network size={14} />
             </Button>
           </div>
+          <Select value={refreshInterval.toString()} onValueChange={(v) => setRefreshInterval(Number(v))}>
+            <SelectTrigger className="w-16 sm:w-20 h-7 sm:h-8 text-xs sm:text-sm bg-ide-panel border-ide-border">
+              <Timer size={12} className="mr-0.5 sm:mr-1 sm:w-3.5 sm:h-3.5" />
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {refreshOptions.map((opt) => (
+                <SelectItem key={opt.value} value={opt.value}>
+                  {opt.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
       </div>
 

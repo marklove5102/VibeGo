@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { remoteApi } from "@/api/remote";
+import { usePageTopBar } from "@/hooks/use-page-top-bar";
 import { useTranslation } from "@/lib/i18n";
 import { useAppStore } from "@/stores/app-store";
 import { registerPage } from "@/pages/registry";
@@ -72,15 +73,17 @@ const RemoteControlView: React.FC<PageViewProps> = () => {
     [doAction],
   );
 
+  usePageTopBar(
+    {
+      show: true,
+      centerContent: t("plugin.remoteControl.title"),
+    },
+    [t]
+  );
+
   return (
     <div className="h-full flex flex-col bg-ide-bg overflow-auto">
       <div className="flex-1 flex flex-col items-center justify-start px-4 py-5 gap-5 max-w-lg mx-auto w-full">
-        <div className="flex items-center gap-2 self-start">
-          <Radius size={20} className="text-ide-accent" />
-          <span className="font-medium text-ide-text text-base">
-            {t("plugin.remoteControl.title")}
-          </span>
-        </div>
 
         <div className="w-full bg-ide-panel rounded-xl border border-ide-border p-4 space-y-3">
           <div className="flex items-center justify-between">
