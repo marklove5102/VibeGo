@@ -188,6 +188,8 @@
     "selected": "selected",
     "deleteHistoryTitle": "Delete Terminal History",
     "deleteHistoryConfirm": "Are you sure you want to delete {count} terminal history records? This action cannot be undone.",
+    "closeFailed": "Failed to close terminal",
+    "deleteFailed": "Failed to delete terminal",
     "renameFailed": "Failed to rename terminal",
     "readOnly": "Read Only",
     "new": "New Terminal",

@@ -197,6 +197,8 @@
     "selected": "已选择",
     "deleteHistoryTitle": "删除终端历史",
     "deleteHistoryConfirm": "确定要删除 {count} 条终端历史记录吗？此操作无法撤销。",
+    "closeFailed": "关闭终端失败",
+    "deleteFailed": "删除终端失败",
     "renameFailed": "重命名终端失败",
     "readOnly": "只读",
     "new": "新建终端",

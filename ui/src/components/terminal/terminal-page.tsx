@@ -1,18 +1,19 @@
+import { useQueryClient } from "@tanstack/react-query";
 import { Columns, Edit2, Plus, Rows, Terminal, X, XCircle } from "lucide-react";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { terminalApi } from "@/api/terminal";
 import { useDialog } from "@/components/common";
-import { usePageTopBar } from "@/hooks/use-page-top-bar";
-import { useTerminalClose, useTerminalCreate, useTerminalDelete, useTerminalRename } from "@/hooks/use-terminal";
-import { useTranslation } from "@/lib/i18n";
-import { syncTerminalWorkspaceState, useSessionStore } from "@/stores/session-store";
-import { useAppStore } from "@/stores";
-import { useFrameStore } from "@/stores/frame-store";
-import { type SplitDirection, type TerminalSession, useTerminalStore } from "@/stores/terminal-store";
 import TerminalHistoryPage from "@/components/terminal/terminal-history-page";
 import TerminalInstance from "@/components/terminal/terminal-instance";
 import TerminalListManager from "@/components/terminal/terminal-list-manager";
 import TerminalSplitView from "@/components/terminal/terminal-split-view";
+import { usePageTopBar } from "@/hooks/use-page-top-bar";
+import { terminalKeys, useTerminalCreate, useTerminalRename } from "@/hooks/use-terminal";
+import { useTranslation } from "@/lib/i18n";
+import { useAppStore } from "@/stores";
+import { useFrameStore } from "@/stores/frame-store";
+import { syncTerminalWorkspaceState, useSessionStore } from "@/stores/session-store";
+import { type SplitDirection, type TerminalSession, useTerminalStore } from "@/stores/terminal-store";
 
 interface TerminalPageProps {
   groupId: string;
@@ -23,6 +24,7 @@ const EMPTY_TERMINALS: TerminalSession[] = [];
 
 const TerminalPage: React.FC<TerminalPageProps> = ({ groupId, cwd }) => {
   const dialog = useDialog();
+  const queryClient = useQueryClient();
   const locale = useAppStore((s) => s.locale);
   const t = useTranslation(locale);
   const currentSessionId = useSessionStore((s) => s.currentSessionId);
@@ -45,31 +47,65 @@ const TerminalPage: React.FC<TerminalPageProps> = ({ groupId, cwd }) => {
   const setListManagerOpen = useTerminalStore((s) => s.setListManagerOpen);
   const setTerminalStatus = useTerminalStore((s) => s.setTerminalStatus);
   const removeTerminal = useTerminalStore((s) => s.removeTerminal);
+  const removeTerminalPage = useTerminalStore((s) => s.removeTerminalPage);
   const setFocusedId = useTerminalStore((s) => s.setFocusedId);
+  const getTerminalPageIds = useTerminalStore((s) => s.getTerminalPageIds);
   const splitTerminalInStore = useTerminalStore((s) => s.splitTerminal);
   const addTerminal = useTerminalStore((s) => s.addTerminal);
   const updateSplitRatio = useTerminalStore((s) => s.updateSplitRatio);
 
-  const closeTerminalMutation = useTerminalClose(groupId);
-  const deleteTerminalMutation = useTerminalDelete(groupId);
   const createTerminalMutation = useTerminalCreate(groupId);
   const renameTerminalMutation = useTerminalRename(groupId);
 
   const rootTerminals = useMemo(() => terminals.filter((t) => !t.parentId), [terminals]);
   const displayTerminals = useMemo(() => [...rootTerminals].reverse(), [rootTerminals]);
+  const terminalStatusMap = useMemo(
+    () => new Map(terminals.map((terminal) => [terminal.id, terminal.status])),
+    [terminals]
+  );
 
   const handleTerminalExited = useCallback(
     (terminalId: string) => {
       setTerminalStatus(groupId, terminalId, "exited");
     },
-    [groupId, setTerminalStatus],
+    [groupId, setTerminalStatus]
   );
 
-  const handleClearAll = useCallback(() => {
-    terminals.forEach((t) => {
-      closeTerminalMutation.mutate(t.id);
-    });
-  }, [terminals, closeTerminalMutation]);
+  const closeTerminalIds = useCallback(
+    async (terminalIds: string[]) => {
+      const runningIds = Array.from(new Set(terminalIds)).filter(
+        (terminalId) => terminalStatusMap.get(terminalId) === "running"
+      );
+      if (runningIds.length === 0) return;
+      const results = await Promise.allSettled(runningIds.map((terminalId) => terminalApi.close(terminalId)));
+      const failed = results.find((result): result is PromiseRejectedResult => result.status === "rejected");
+      if (failed) {
+        throw failed.reason;
+      }
+      await queryClient.invalidateQueries({ queryKey: terminalKeys.list() });
+    },
+    [queryClient, terminalStatusMap]
+  );
+
+  const handleCloseTerminalPages = useCallback(
+    async (terminalIds: string[]) => {
+      const pageTerminalIds = Array.from(
+        new Set(terminalIds.flatMap((terminalId) => getTerminalPageIds(groupId, terminalId)))
+      );
+      if (pageTerminalIds.length === 0) return;
+      try {
+        await closeTerminalIds(pageTerminalIds);
+        terminalIds.forEach((terminalId) => removeTerminalPage(groupId, terminalId));
+      } catch (e) {
+        await dialog.alert(e instanceof Error ? e.message : t("terminal.closeFailed"));
+      }
+    },
+    [closeTerminalIds, dialog, getTerminalPageIds, groupId, removeTerminalPage, t]
+  );
+
+  const handleClearAll = useCallback(async () => {
+    await handleCloseTerminalPages(rootTerminals.map((terminal) => terminal.id));
+  }, [handleCloseTerminalPages, rootTerminals]);
 
   const handleCreateTerminal = useCallback(() => {
     createTerminalMutation.mutate({ cwd });
@@ -96,12 +132,12 @@ const TerminalPage: React.FC<TerminalPageProps> = ({ groupId, cwd }) => {
     (terminalId: string) => {
       setActiveId(groupId, terminalId);
     },
-    [groupId, setActiveId],
+    [groupId, setActiveId]
   );
 
   const focusedTerminal = useMemo(
     () => terminals.find((terminal) => terminal.id === focusedId) ?? null,
-    [focusedId, terminals],
+    [focusedId, terminals]
   );
 
   const persistTerminalRename = useCallback(
@@ -113,7 +149,7 @@ const TerminalPage: React.FC<TerminalPageProps> = ({ groupId, cwd }) => {
         throw e;
       }
     },
-    [dialog, renameTerminalMutation, t],
+    [dialog, renameTerminalMutation, t]
   );
 
   const handleRenameTerminal = useCallback(
@@ -123,7 +159,7 @@ const TerminalPage: React.FC<TerminalPageProps> = ({ groupId, cwd }) => {
       if (!trimmedName || trimmedName === currentName) return;
       await persistTerminalRename(terminalId, trimmedName);
     },
-    [dialog, persistTerminalRename, t],
+    [dialog, persistTerminalRename, t]
   );
 
   const getNextTerminalName = useCallback(() => {
@@ -166,31 +202,48 @@ const TerminalPage: React.FC<TerminalPageProps> = ({ groupId, cwd }) => {
       splitTerminalInStore,
       setFocusedId,
       getNextTerminalName,
-    ],
+    ]
   );
 
   const handleCloseSplit = useCallback(() => {
     const targetId = focusedId;
     if (!targetId || !hasSplit) return;
-    const terminal = terminals.find((t) => t.id === targetId);
-    if (terminal && terminal.status === "running") {
-      closeTerminalMutation.mutate(targetId);
-    }
-    removeTerminal(groupId, targetId);
-  }, [focusedId, hasSplit, terminals, closeTerminalMutation, removeTerminal, groupId]);
+    const closeSplit = async () => {
+      try {
+        await closeTerminalIds([targetId]);
+        removeTerminal(groupId, targetId);
+      } catch (e) {
+        await dialog.alert(e instanceof Error ? e.message : t("terminal.closeFailed"));
+      }
+    };
+    void closeSplit();
+  }, [closeTerminalIds, dialog, focusedId, groupId, hasSplit, removeTerminal, t]);
+
+  const handleDeleteTerminalPage = useCallback(
+    async (terminalId: string) => {
+      try {
+        await terminalApi.delete(terminalId);
+        await queryClient.invalidateQueries({ queryKey: terminalKeys.list() });
+        removeTerminalPage(groupId, terminalId);
+      } catch (e) {
+        await dialog.alert(e instanceof Error ? e.message : t("terminal.deleteFailed"));
+      }
+    },
+    [dialog, groupId, queryClient, removeTerminalPage, t]
+  );
 
   const handleRatioChange = useCallback(
     (path: number[], ratio: number) => {
       updateSplitRatio(groupId, path, ratio);
     },
-    [groupId, updateSplitRatio],
+    [groupId, updateSplitRatio]
   );
 
   const handleFocusPane = useCallback(
     (terminalId: string) => {
       setFocusedId(groupId, terminalId);
     },
-    [groupId, setFocusedId],
+    [groupId, setFocusedId]
   );
 
   useEffect(() => {
@@ -217,14 +270,7 @@ const TerminalPage: React.FC<TerminalPageProps> = ({ groupId, cwd }) => {
         syncTimerRef.current = null;
       }
     };
-  }, [
-    currentSessionId,
-    terminalsByGroup,
-    activeIdByGroup,
-    listManagerOpenByGroup,
-    terminalLayouts,
-    focusedIdByGroup,
-  ]);
+  }, [currentSessionId, terminalsByGroup, activeIdByGroup, listManagerOpenByGroup, terminalLayouts, focusedIdByGroup]);
 
   useEffect(() => {
     if (showHistory || listManagerOpen || !focusedTerminal) {
@@ -236,19 +282,25 @@ const TerminalPage: React.FC<TerminalPageProps> = ({ groupId, cwd }) => {
         id: "rename-terminal",
         icon: <Edit2 size={18} />,
         label: t("common.rename"),
-        onClick: () => { handleRenameTerminal(focusedTerminal.id, focusedTerminal.name); },
+        onClick: () => {
+          handleRenameTerminal(focusedTerminal.id, focusedTerminal.name);
+        },
       },
       {
         id: "split-down",
         icon: <Rows size={18} />,
         label: t("terminal.splitDown"),
-        onClick: () => { handleSplit("vertical"); },
+        onClick: () => {
+          handleSplit("vertical");
+        },
       },
       {
         id: "split-right",
         icon: <Columns size={18} />,
         label: t("terminal.splitRight"),
-        onClick: () => { handleSplit("horizontal"); },
+        onClick: () => {
+          handleSplit("horizontal");
+        },
       },
     ];
     if (hasSplit) {
@@ -256,12 +308,24 @@ const TerminalPage: React.FC<TerminalPageProps> = ({ groupId, cwd }) => {
         id: "close-split",
         icon: <XCircle size={18} />,
         label: t("terminal.closeSplit"),
-        onClick: handleCloseSplit,
+        onClick: () => {
+          void handleCloseSplit();
+        },
       });
     }
     setPageMenuItems(items);
     return () => setPageMenuItems([]);
-  }, [focusedTerminal, handleRenameTerminal, handleSplit, handleCloseSplit, hasSplit, listManagerOpen, setPageMenuItems, showHistory, t]);
+  }, [
+    focusedTerminal,
+    handleRenameTerminal,
+    handleSplit,
+    handleCloseSplit,
+    hasSplit,
+    listManagerOpen,
+    setPageMenuItems,
+    showHistory,
+    t,
+  ]);
 
   const topBarConfig = useMemo(() => {
     return {
@@ -292,11 +356,7 @@ const TerminalPage: React.FC<TerminalPageProps> = ({ groupId, cwd }) => {
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      if (isClosed) {
-                        removeTerminal(groupId, terminal.id);
-                      } else {
-                        closeTerminalMutation.mutate(terminal.id);
-                      }
+                      void handleCloseTerminalPages([terminal.id]);
                     }}
                     className="hover:text-red-500 rounded-full p-0.5 hover:bg-ide-bg"
                   >
@@ -317,9 +377,7 @@ const TerminalPage: React.FC<TerminalPageProps> = ({ groupId, cwd }) => {
     rootTerminals,
     displayTerminals,
     activeTerminalId,
-    closeTerminalMutation,
-    removeTerminal,
-    groupId,
+    handleCloseTerminalPages,
   ]);
 
   const activeTopBarConfig = showHistory ? undefined : topBarConfig;
@@ -341,9 +399,15 @@ const TerminalPage: React.FC<TerminalPageProps> = ({ groupId, cwd }) => {
               setListManagerOpen(groupId, false);
             }}
             onRename={persistTerminalRename}
-            onClose={(id) => closeTerminalMutation.mutate(id)}
-            onDelete={(id) => deleteTerminalMutation.mutate(id)}
-            onClearAll={handleClearAll}
+            onClose={(id) => {
+              void handleCloseTerminalPages([id]);
+            }}
+            onDelete={(id) => {
+              void handleDeleteTerminalPage(id);
+            }}
+            onClearAll={() => {
+              void handleClearAll();
+            }}
             onBack={() => {}}
             onManageHistory={() => setShowHistory(true)}
             embedded={true}

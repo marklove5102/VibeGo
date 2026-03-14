@@ -272,11 +272,44 @@ func (m *Manager) Close(id string) error {
 	return nil
 }
 
+func (m *Manager) collectDeleteIDs(id string) ([]string, error) {
+	if id == "" {
+		return nil, nil
+	}
+
+	var childIDs []string
+	if err := m.db.Model(&model.TerminalSession{}).Where("parent_id = ?", id).Pluck("id", &childIDs).Error; err != nil {
+		return nil, err
+	}
+
+	ids := make([]string, 0, len(childIDs)+1)
+	ids = append(ids, id)
+	ids = append(ids, childIDs...)
+	return ids, nil
+}
+
 func (m *Manager) Delete(id string) error {
-	m.Close(id)
-	m.db.Where("session_id = ?", id).Delete(&model.TerminalHistory{})
-	m.db.Where("id = ?", id).Delete(&model.TerminalSession{})
-	return nil
+	ids, err := m.collectDeleteIDs(id)
+	if err != nil {
+		return err
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+
+	for _, terminalID := range ids {
+		m.Close(terminalID)
+	}
+
+	return m.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("session_id IN ?", ids).Delete(&model.TerminalHistory{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("id IN ?", ids).Delete(&model.TerminalSession{}).Error; err != nil {
+			return err
+		}
+		return nil
+	})
 }
 
 func (m *Manager) ptyReadLoop(at *activeTerminal) {
@@ -395,7 +428,6 @@ func (m *Manager) SyncWorkspaceMetadata(workspaceSessionID string, assignments [
 		if err := clearQuery.Updates(map[string]any{
 			"workspace_session_id": "",
 			"group_id":             "",
-			"parent_id":            "",
 		}).Error; err != nil {
 			return err
 		}
@@ -415,7 +447,6 @@ func (m *Manager) SyncWorkspaceMetadata(workspaceSessionID string, assignments [
 			if !found {
 				at.Session.WorkspaceSessionID = ""
 				at.Session.GroupID = ""
-				at.Session.ParentID = ""
 			}
 			return true
 		})

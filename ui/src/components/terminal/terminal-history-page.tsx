@@ -1,6 +1,7 @@
 import { ArrowLeft, CheckSquare, RefreshCw, Square, Terminal, Trash2, X } from "lucide-react";
 import React, { useCallback, useMemo, useState } from "react";
 import type { TerminalInfo } from "@/api/terminal";
+import TerminalInstance from "@/components/terminal/terminal-instance";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -15,7 +16,6 @@ import { usePageTopBar } from "@/hooks/use-page-top-bar";
 import { useTerminalDeleteBatch, useTerminalList } from "@/hooks/use-terminal";
 import { getIntlLocale, useTranslation } from "@/lib/i18n";
 import { useAppStore } from "@/stores";
-import TerminalInstance from "@/components/terminal/terminal-instance";
 
 interface TerminalHistoryPageProps {
   onBack: () => void;
@@ -33,7 +33,7 @@ const TerminalHistoryPage: React.FC<TerminalHistoryPageProps> = ({ onBack }) => 
   const [viewingTerminal, setViewingTerminal] = useState<TerminalInfo | null>(null);
 
   const terminals = data?.terminals || [];
-  const closedTerminals = terminals.filter((t) => t.status !== "running");
+  const closedTerminals = terminals.filter((t) => t.status !== "running" && !t.parent_id);
 
   const toggleSelect = useCallback((id: string) => {
     setSelectedIds((prev) => {

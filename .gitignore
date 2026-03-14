@@ -7,3 +7,4 @@ ui/CLAUDE.md
 /dist
 /artifacts
 /testdata
+/scripts/__pycache__

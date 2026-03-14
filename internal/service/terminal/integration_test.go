@@ -315,6 +315,20 @@ func TestManager_SyncWorkspaceMetadata(t *testing.T) {
 	if len(group1List) != 0 {
 		t.Fatalf("expected 0 terminals in old group, got %d", len(group1List))
 	}
+
+	var child model.TerminalSession
+	if err := db.Where("id = ?", info2.ID).First(&child).Error; err != nil {
+		t.Fatalf("failed to load child terminal: %v", err)
+	}
+	if child.WorkspaceSessionID != "" {
+		t.Fatalf("expected child workspace_session_id to be cleared, got %s", child.WorkspaceSessionID)
+	}
+	if child.GroupID != "" {
+		t.Fatalf("expected child group_id to be cleared, got %s", child.GroupID)
+	}
+	if child.ParentID != info1.ID {
+		t.Fatalf("expected child parent_id to remain %s, got %s", info1.ID, child.ParentID)
+	}
 }
 
 func TestManager_Delete(t *testing.T) {
@@ -331,6 +345,47 @@ func TestManager_Delete(t *testing.T) {
 	_, ok := manager.Get(info.ID)
 	if ok {
 		t.Error("expected terminal to be deleted")
+	}
+}
+
+func TestManager_DeleteRemovesSplitTree(t *testing.T) {
+	db := setupTestDB(t)
+	manager := NewManager(db, &ManagerConfig{Shell: "/bin/sh"})
+
+	root, err := manager.Create(CreateOptions{Name: "root", Cwd: os.TempDir(), Cols: 80, Rows: 24})
+	if err != nil {
+		t.Fatalf("failed to create root terminal: %v", err)
+	}
+	child, err := manager.Create(CreateOptions{Name: "child", Cwd: os.TempDir(), Cols: 80, Rows: 24, ParentID: root.ID})
+	if err != nil {
+		t.Fatalf("failed to create child terminal: %v", err)
+	}
+
+	if err := db.Create(&model.TerminalHistory{SessionID: root.ID, Data: []byte("root"), CreatedAt: time.Now().Unix()}).Error; err != nil {
+		t.Fatalf("failed to seed root history: %v", err)
+	}
+	if err := db.Create(&model.TerminalHistory{SessionID: child.ID, Data: []byte("child"), CreatedAt: time.Now().Unix()}).Error; err != nil {
+		t.Fatalf("failed to seed child history: %v", err)
+	}
+
+	if err := manager.Delete(root.ID); err != nil {
+		t.Fatalf("failed to delete split tree: %v", err)
+	}
+
+	var remainingSessions int64
+	if err := db.Model(&model.TerminalSession{}).Where("id IN ?", []string{root.ID, child.ID}).Count(&remainingSessions).Error; err != nil {
+		t.Fatalf("failed to count sessions: %v", err)
+	}
+	if remainingSessions != 0 {
+		t.Fatalf("expected split tree sessions to be deleted, got %d", remainingSessions)
+	}
+
+	var remainingHistory int64
+	if err := db.Model(&model.TerminalHistory{}).Where("session_id IN ?", []string{root.ID, child.ID}).Count(&remainingHistory).Error; err != nil {
+		t.Fatalf("failed to count history: %v", err)
+	}
+	if remainingHistory != 0 {
+		t.Fatalf("expected split tree history to be deleted, got %d", remainingHistory)
 	}
 }
 
