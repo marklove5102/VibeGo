@@ -24,6 +24,7 @@ type Config struct {
 	Key string
 
 	AllowWAN         bool
+	NeedKey          bool
 	DisableLogToFile bool
 
 	OS           string
@@ -59,6 +60,7 @@ func GetConfig() *Config {
 	flag.BoolVar(&cfg.AllowWAN, "a", utils.GetBoolEnv("VG_ALLOW_WAN", true), "Allow WAN access(shorthand)")
 	flag.StringVar(&cfg.CORSOrigins, "cors-origins", utils.GetEnv("VG_CORS_ORIGINS", "*"), "CORS origins")
 	flag.BoolVar(&cfg.DisableLogToFile, "disable-log-to-file", utils.GetBoolEnv("VG_DISABLE_LOG_TO_FILE", false), "Disable log to file")
+	flag.BoolVar(&cfg.NeedKey, "need-key", utils.GetBoolEnv("VG_NEED_KEY", false), "Require key authentication (auto-enabled when allow-wan and key are both set)")
 
 	defaultShell := ""
 	switch runtime.GOOS {
@@ -94,6 +96,9 @@ func GetConfig() *Config {
 	// Post process
 	if cfg.Key == "" {
 		cfg.AllowWAN = false
+	}
+	if cfg.AllowWAN && cfg.Key != "" {
+		cfg.NeedKey = true
 	}
 
 	GlobalConfig = cfg

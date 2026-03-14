@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import { Lock, Terminal } from "lucide-react";
 import { authApi } from "@/api/auth";
 
 const AUTH_KEY_STORAGE = "vibego_auth_key";
@@ -33,7 +34,6 @@ const t = (locale: string, key: string): string => {
       retryIn: "Retry in",
       seconds: "s",
       remaining: "attempts remaining",
-      banned: "Temporarily banned",
     },
     zh: {
       title: "VibeGo",
@@ -46,7 +46,6 @@ const t = (locale: string, key: string): string => {
       retryIn: "重试等待",
       seconds: "秒",
       remaining: "次剩余尝试",
-      banned: "暂时被封禁",
     },
   };
   return translations[locale]?.[key] || translations.en[key] || key;
@@ -121,181 +120,89 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, locale }) 
   );
 
   const isBanned = retryAfter > 0;
+  const isDisabled = loading || !key.trim() || isBanned;
 
   return (
-    <div
-      style={{
-        position: "fixed",
-        inset: 0,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        background: "var(--ide-bg)",
-        zIndex: 99999,
-      }}
-    >
-      <div
-        style={{
-          position: "absolute",
-          inset: 0,
-          background: `
-            radial-gradient(ellipse at 20% 50%, color-mix(in srgb, var(--ide-accent) 8%, transparent) 0%, transparent 50%),
-            radial-gradient(ellipse at 80% 20%, color-mix(in srgb, var(--ide-accent) 5%, transparent) 0%, transparent 50%),
-            radial-gradient(ellipse at 50% 80%, color-mix(in srgb, var(--ide-accent) 3%, transparent) 0%, transparent 50%)
-          `,
-          pointerEvents: "none",
-        }}
-      />
+    <div className="fixed inset-0 flex items-center justify-center bg-ide-bg z-[99999]">
+      <div className="w-full max-w-sm mx-auto px-4">
+        <div
+          className={shake ? "animate-[login-shake_0.5s_ease-in-out]" : ""}
+        >
+          <div className="text-center py-6">
+            <div className="inline-flex items-center justify-center w-14 h-14 bg-ide-panel border border-ide-border rounded-2xl mb-3">
+              <Terminal size={28} className="text-ide-accent" />
+            </div>
+            <h1 className="text-xl font-bold text-ide-text">{t(locale, "title")}</h1>
+          </div>
 
-      <form
-        onSubmit={handleSubmit}
-        style={{
-          position: "relative",
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          gap: "24px",
-          padding: "48px 40px",
-          width: "min(360px, 90vw)",
-          background: "var(--ide-panel)",
-          border: "1px solid var(--ide-border)",
-          borderRadius: "16px",
-          boxShadow: `
-            0 4px 6px -1px rgba(0,0,0,0.1),
-            0 2px 4px -2px rgba(0,0,0,0.1),
-            0 0 0 1px color-mix(in srgb, var(--ide-accent) 5%, transparent)
-          `,
-          animation: shake ? "login-shake 0.5s ease-in-out" : undefined,
-        }}
-      >
-        <div style={{ textAlign: "center" }}>
-          <h1
-            style={{
-              fontSize: "28px",
-              fontWeight: 700,
-              color: "var(--ide-text)",
-              letterSpacing: "-0.02em",
-              marginBottom: "8px",
-            }}
-          >
-            {t(locale, "title")}
-          </h1>
-          <p
-            style={{
-              fontSize: "14px",
-              color: "var(--ide-mute)",
-            }}
-          >
-            {t(locale, "subtitle")}
-          </p>
-        </div>
+          <div className="bg-ide-panel border border-ide-border rounded-xl p-4">
+            <div className="flex items-center gap-1.5 text-xs text-ide-mute mb-3">
+              <Lock size={12} />
+              <span>{t(locale, "subtitle")}</span>
+            </div>
+            <form onSubmit={handleSubmit} className="space-y-3">
+              <input
+                ref={inputRef}
+                type="password"
+                value={key}
+                onChange={(e) => setKey(e.target.value)}
+                placeholder={t(locale, "placeholder")}
+                disabled={loading || isBanned}
+                autoComplete="current-password"
+                className={`w-full px-3 py-2.5 bg-ide-bg border rounded-lg text-ide-text placeholder-ide-mute text-sm focus:outline-none transition-colors ${
+                  error
+                    ? "border-red-500 focus:border-red-500"
+                    : "border-ide-border focus:border-ide-accent"
+                } ${isBanned ? "opacity-50 cursor-not-allowed" : ""}`}
+              />
 
-        <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: "12px" }}>
-          <input
-            ref={inputRef}
-            type="password"
-            value={key}
-            onChange={(e) => setKey(e.target.value)}
-            placeholder={t(locale, "placeholder")}
-            disabled={loading || isBanned}
-            autoComplete="current-password"
-            style={{
-              width: "100%",
-              padding: "12px 16px",
-              fontSize: "15px",
-              color: "var(--ide-text)",
-              background: isBanned
-                ? "color-mix(in srgb, var(--ide-border) 30%, var(--ide-bg))"
-                : "var(--ide-bg)",
-              border: `1px solid ${error ? "var(--destructive, #ef4444)" : "var(--ide-border)"}`,
-              borderRadius: "10px",
-              outline: "none",
-              transition: "border-color 0.2s, box-shadow 0.2s, background 0.2s",
-              boxSizing: "border-box",
-              opacity: isBanned ? 0.5 : 1,
-            }}
-            onFocus={(e) => {
-              if (!error) {
-                e.currentTarget.style.borderColor = "var(--ide-accent)";
-                e.currentTarget.style.boxShadow = "0 0 0 3px color-mix(in srgb, var(--ide-accent) 15%, transparent)";
-              }
-            }}
-            onBlur={(e) => {
-              if (!error) {
-                e.currentTarget.style.borderColor = "var(--ide-border)";
-                e.currentTarget.style.boxShadow = "none";
-              }
-            }}
-          />
+              <button
+                type="submit"
+                disabled={isDisabled}
+                className={`w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg font-medium text-sm transition-opacity ${
+                  isDisabled
+                    ? "bg-ide-accent/50 text-ide-bg cursor-not-allowed"
+                    : "bg-ide-accent text-ide-bg hover:opacity-90 active:opacity-80"
+                }`}
+              >
+                {loading ? t(locale, "logging") : t(locale, "login")}
+              </button>
+            </form>
 
-          <button
-            type="submit"
-            disabled={loading || !key.trim() || isBanned}
-            style={{
-              width: "100%",
-              padding: "12px",
-              fontSize: "15px",
-              fontWeight: 600,
-              color: "var(--ide-on-accent)",
-              background: loading || !key.trim() || isBanned
-                ? "color-mix(in srgb, var(--ide-accent) 50%, var(--ide-bg))"
-                : "var(--ide-accent)",
-              border: "none",
-              borderRadius: "10px",
-              cursor: loading || !key.trim() || isBanned ? "not-allowed" : "pointer",
-              transition: "background 0.2s, transform 0.1s, opacity 0.2s",
-              opacity: loading || !key.trim() || isBanned ? 0.6 : 1,
-            }}
-            onMouseDown={(e) => {
-              if (!loading && key.trim() && !isBanned) {
-                e.currentTarget.style.transform = "scale(0.98)";
-              }
-            }}
-            onMouseUp={(e) => {
-              e.currentTarget.style.transform = "scale(1)";
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.transform = "scale(1)";
-            }}
-          >
-            {loading ? t(locale, "logging") : t(locale, "login")}
-          </button>
-        </div>
-
-        {(error || remaining !== null) && (
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              gap: "4px",
-              fontSize: "13px",
-            }}
-          >
-            {error && (
-              <span style={{ color: "var(--destructive, #ef4444)" }}>
-                {error}
-                {isBanned && (
-                  <span style={{ marginLeft: "6px", fontVariantNumeric: "tabular-nums" }}>
-                    ({t(locale, "retryIn")} {retryAfter}{t(locale, "seconds")})
-                  </span>
+            {(error || (remaining !== null && remaining > 0 && !isBanned)) && (
+              <div className="mt-3 text-center text-sm">
+                {error && (
+                  <div className="text-red-500">
+                    {error}
+                    {isBanned && (
+                      <span className="ml-1 font-mono text-xs">
+                        ({t(locale, "retryIn")} {retryAfter}{t(locale, "seconds")})
+                      </span>
+                    )}
+                  </div>
                 )}
-              </span>
-            )}
-            {remaining !== null && remaining > 0 && !isBanned && (
-              <span style={{ color: "var(--ide-mute)" }}>
-                {remaining} {t(locale, "remaining")}
-              </span>
+                {remaining !== null && remaining > 0 && !isBanned && (
+                  <div className="text-ide-mute text-xs mt-1">
+                    {remaining} {t(locale, "remaining")}
+                  </div>
+                )}
+              </div>
             )}
           </div>
-        )}
-      </form>
+        </div>
+      </div>
 
       <style>{`
         @keyframes login-shake {
           0%, 100% { transform: translateX(0); }
           10%, 30%, 50%, 70%, 90% { transform: translateX(-4px); }
           20%, 40%, 60%, 80% { transform: translateX(4px); }
+        }
+        input[type="password"]::-ms-reveal,
+        input[type="password"]::-ms-clear,
+        input[type="password"]::-webkit-credentials-auto-fill-button,
+        input[type="password"]::-webkit-textfield-decoration-container {
+          display: none !important;
         }
       `}</style>
     </div>

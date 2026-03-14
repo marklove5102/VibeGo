@@ -179,19 +179,19 @@ const TerminalPage: React.FC<TerminalPageProps> = ({ groupId, cwd }) => {
         id: "rename-terminal",
         icon: <Edit2 size={18} />,
         label: t("common.rename"),
-        onClick: () => void handleRenameTerminal(focusedTerminal.id, focusedTerminal.name),
+        onClick: () => { handleRenameTerminal(focusedTerminal.id, focusedTerminal.name); },
       },
       {
         id: "split-down",
         icon: <Rows size={18} />,
         label: t("terminal.splitDown"),
-        onClick: () => void handleSplit("vertical"),
+        onClick: () => { handleSplit("vertical"); },
       },
       {
         id: "split-right",
         icon: <Columns size={18} />,
         label: t("terminal.splitRight"),
-        onClick: () => void handleSplit("horizontal"),
+        onClick: () => { handleSplit("horizontal"); },
       },
     ];
     if (hasSplit) {

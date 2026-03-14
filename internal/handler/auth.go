@@ -105,13 +105,14 @@ func (f *fail2ban) recordSuccess(ip string) {
 }
 
 type AuthHandler struct {
-	db  *gorm.DB
-	key string
-	ban *fail2ban
+	db      *gorm.DB
+	key     string
+	needKey bool
+	ban     *fail2ban
 }
 
-func NewAuthHandler(db *gorm.DB, key string) *AuthHandler {
-	return &AuthHandler{db: db, key: key, ban: newFail2Ban()}
+func NewAuthHandler(db *gorm.DB, key string, needKey bool) *AuthHandler {
+	return &AuthHandler{db: db, key: key, needKey: needKey, ban: newFail2Ban()}
 }
 
 func (h *AuthHandler) Register(r *gin.RouterGroup) {
@@ -139,7 +140,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	var req LoginRequest
 	c.ShouldBindJSON(&req)
 
-	if h.key == "" {
+	if !h.needKey {
 		user := h.getOrCreateAnonymousUser()
 		if user == nil {
 			c.JSON(http.StatusForbidden, LoginResponse{
@@ -217,7 +218,7 @@ type StatusResponse struct {
 }
 
 func (h *AuthHandler) Status(c *gin.Context) {
-	if h.key == "" {
+	if !h.needKey {
 		user := h.getOrCreateAnonymousUser()
 		if user == nil {
 			c.JSON(http.StatusForbidden, gin.H{"error": "account disabled"})

@@ -83,10 +83,12 @@ func main() {
 
 	api := r.Group("/api")
 
-	authHandler := handler.NewAuthHandler(db, cfg.Key)
+	authHandler := handler.NewAuthHandler(db, cfg.Key, cfg.NeedKey)
 	authHandler.Register(api)
 
-	r.Use(middleware.Auth(cfg.Key))
+	if cfg.NeedKey {
+		r.Use(middleware.Auth(cfg.Key))
+	}
 
 	handler.NewSettingsHandler(db).Register(api)
 	handler.NewSessionHandler(db).Register(api)
