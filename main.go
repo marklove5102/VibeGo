@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io/fs"
+	"net"
 	"net/http"
 	"os/signal"
 	"strings"
@@ -25,6 +26,45 @@ import (
 	"github.com/xxnuo/vibego/ui"
 )
 
+func printAccessibleAddresses(host, port string) {
+	if host == "0.0.0.0" || host == "::" || host == "" {
+		fmt.Printf("VibeGo server listening on:\n")
+		fmt.Printf("  -> http://localhost:%s\n", port)
+		ifaces, err := net.Interfaces()
+		if err == nil {
+			for _, iface := range ifaces {
+				if iface.Flags&net.FlagUp == 0 || iface.Flags&net.FlagLoopback != 0 {
+					continue
+				}
+				addrs, err := iface.Addrs()
+				if err != nil {
+					continue
+				}
+				for _, addr := range addrs {
+					var ip net.IP
+					switch v := addr.(type) {
+					case *net.IPNet:
+						ip = v.IP
+					case *net.IPAddr:
+						ip = v.IP
+					}
+					if ip == nil || ip.IsLoopback() {
+						continue
+					}
+					if ip.To4() != nil {
+						fmt.Printf("  -> http://%s:%s\n", ip.String(), port)
+					} else {
+						fmt.Printf("  -> http://[%s]:%s\n", ip.String(), port)
+					}
+				}
+			}
+		}
+	} else {
+		fmt.Printf("VibeGo server listening on:\n")
+		fmt.Printf("  -> http://%s:%s\n", host, port)
+	}
+}
+
 // @title VibeGo API
 // @version 0.0.1
 // @description VibeGo 后端服务 API
@@ -36,7 +76,7 @@ func main() {
 	logger.Setup(cfg.LogLevel)
 	logger.SetLogFile(cfg.LogDir, cfg.DisableLogToFile)
 
-	fmt.Printf("Starting VibeGo server at: http://%s:%s\n", cfg.Host, cfg.Port)
+	printAccessibleAddresses(cfg.Host, cfg.Port)
 
 	log.Info().
 		Str("host", cfg.Host).
