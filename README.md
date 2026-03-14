@@ -13,10 +13,9 @@ A Web IDE built for professionals, designed for Vibe Coding anytime, anywhere. F
 </p>
 
 <p align="center">
-  <img src="assets/previews/menu.png" width="25%" alt="Menu" />
-  <img src="assets/previews/setting.png" width="25%" alt="Settings" />
-  <img src="assets/previews/theme1_file.png" width="25%" alt="Theme 1" />
-  <img src="assets/previews/theme2_file.png" width="25%" alt="Theme 2" />
+  <img src="assets/previews/menu.png" width="30%" alt="Menu" />
+  <img src="assets/previews/setting.png" width="30%" alt="Settings" />
+  <img src="assets/previews/theme1_file.png" width="30%" alt="Theme 1" />
 </p>
 
 ## What is VibeGo? | 什么是 VibeGo？
