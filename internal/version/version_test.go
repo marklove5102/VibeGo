@@ -9,7 +9,7 @@ func TestVersion(t *testing.T) {
 	}{
 		{
 			name: "version",
-			want: "v0.0.1-dev",
+			want: "v0.0.0-dev",
 		},
 	}
 	for _, tt := range tests {

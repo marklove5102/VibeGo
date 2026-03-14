@@ -1,6 +1,6 @@
 .PHONY: generate-docs clean-code format dev-server dev-ui build build-frontend build-backend package-backend build-release prepare-test test
 
-VERSION ?= v0.0.1-dev
+VERSION ?= $(shell git describe --tags --match 'v*' 2>/dev/null || echo v0.0.0-dev)
 DIST_DIR ?= dist
 ARTIFACTS_DIR ?= artifacts
 BINARY_NAME ?= vibego
