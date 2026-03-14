@@ -1,18 +1,4 @@
-import {
-  AlignLeft,
-  Bell,
-  Clock,
-  Eye,
-  EyeOff,
-  Grid,
-  List,
-  Mail,
-  RefreshCw,
-  Settings,
-  User,
-  WrapText,
-  X,
-} from "lucide-react";
+import { AlignLeft, Bell, Clock, Eye, EyeOff, Grid, List, Mail, RefreshCw, Settings, User, WrapText, X } from "lucide-react";
 import React, { useEffect, useState } from "react";
 import { useFrameController } from "@/framework/frame/controller";
 import { type Locale, useTranslation } from "@/lib/i18n";
@@ -161,6 +147,7 @@ const SettingsPage: React.FC = () => {
   const t = useTranslation(locale);
   const { setTopBarConfig } = useFrameController();
   const removeGroup = useFrameStore((s) => s.removeGroup);
+
   const hiddenKeys = new Set(["theme", "locale"]);
   const [activeTab, setActiveTab] = useState(SETTING_CATEGORIES[0].key);
 
@@ -178,10 +165,7 @@ const SettingsPage: React.FC = () => {
   useEffect(() => {
     setTopBarConfig({
       show: true,
-      leftButtons: [
-        { icon: <X size={18} />, title: t("common.closePage"), onClick: () => removeGroup("settings") },
-        { icon: <Settings size={18} />, active: true },
-      ],
+      leftButtons: [{ icon: <X size={18} />, onClick: () => removeGroup("settings") }],
       centerContent: (
         <div className="flex items-center gap-2 overflow-x-auto custom-scrollbar touch-pan-x h-full">
           {SETTING_CATEGORIES.map((cat) => (
@@ -202,13 +186,12 @@ const SettingsPage: React.FC = () => {
       rightButtons: [
         {
           icon: <RefreshCw size={18} />,
-          title: t("common.refresh"),
           onClick: () => init(),
         },
       ],
     });
     return () => setTopBarConfig({ show: false });
-  }, [t, setTopBarConfig, removeGroup, activeTab]);
+  }, [t, setTopBarConfig, init, removeGroup, activeTab]);
 
   if (loading) {
     return (

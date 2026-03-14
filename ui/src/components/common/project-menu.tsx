@@ -222,7 +222,7 @@ const ProjectMenu: React.FC<ProjectMenuProps> = ({
       label: t("common.closeFolder"),
       onClick: handleCloseFolder,
     });
-  } else if (activeGroup && activeGroup.type !== "home" && activeGroup.type !== "settings") {
+  } else if (activeGroup && activeGroup.type !== "home") {
     contextItems.push({
       id: "close-page",
       icon: <XCircle size={20} />,
