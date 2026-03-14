@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import type { LayoutNode } from "@/stores/terminal-store";
 import TerminalInstance from "@/components/terminal/terminal-instance";
+import type { LayoutNode } from "@/stores/terminal-store";
 
 interface TerminalSplitViewProps {
   layout: LayoutNode;
@@ -39,6 +39,7 @@ const TerminalSplitView: React.FC<TerminalSplitViewProps> = ({
           terminalId={layout.terminalId}
           terminalName={terminal?.name || "Terminal"}
           isActive={true}
+          isFocused={isFocused}
           isExited={terminal?.status !== "running"}
           onExited={() => onExited(layout.terminalId)}
         />
@@ -119,7 +120,7 @@ const SplitContainer: React.FC<SplitContainerProps> = ({ direction, ratio, onRat
       document.addEventListener("mousemove", onMouseMove);
       document.addEventListener("mouseup", onMouseUp);
     },
-    [isVertical, onRatioChange],
+    [isVertical, onRatioChange]
   );
 
   const handleTouchStart = useCallback(
@@ -152,7 +153,7 @@ const SplitContainer: React.FC<SplitContainerProps> = ({ direction, ratio, onRat
       document.addEventListener("touchmove", onTouchMove, { passive: false });
       document.addEventListener("touchend", onTouchEnd);
     },
-    [isVertical, onRatioChange],
+    [isVertical, onRatioChange]
   );
 
   useEffect(() => {

@@ -25,12 +25,14 @@ interface TerminalInstanceProps {
   terminalId: string;
   terminalName: string;
   isActive: boolean;
+  isFocused?: boolean;
   isExited?: boolean;
   onExited?: () => void;
 }
 
 interface CallbackRefs {
   isActive: boolean;
+  isFocused: boolean;
   isExited: boolean;
   onExited?: () => void;
   terminalName: string;
@@ -380,6 +382,7 @@ const TerminalInstance: React.FC<TerminalInstanceProps> = ({
   terminalId,
   terminalName,
   isActive,
+  isFocused = isActive,
   isExited = false,
   onExited,
 }) => {
@@ -403,6 +406,7 @@ const TerminalInstance: React.FC<TerminalInstanceProps> = ({
   const inputReadyRef = useRef(false);
   const callbacksRef = useRef<CallbackRefs>({
     isActive,
+    isFocused,
     isExited,
     onExited,
     terminalName,
@@ -449,7 +453,7 @@ const TerminalInstance: React.FC<TerminalInstanceProps> = ({
 
       notifyTerminal({
         body: notification.body,
-        isActive: currentCallbacks.isActive,
+        isActive: currentCallbacks.isFocused,
         terminalId,
         title: notification.title,
       });
@@ -511,10 +515,13 @@ const TerminalInstance: React.FC<TerminalInstanceProps> = ({
         if (!replayServerDoneRef.current) return;
         if (pendingReplayWritesRef.current > 0) return;
         if (callbacksRef.current.isExited) return;
+        if (inputReadyRef.current) return;
         inputReadyRef.current = true;
         terminal.options.cursorBlink = true;
         terminal.options.disableStdin = false;
-        terminal.focus();
+        if (callbacksRef.current.isFocused) {
+          terminal.focus();
+        }
       };
 
       ws.onopen = () => {
@@ -672,13 +679,13 @@ const TerminalInstance: React.FC<TerminalInstanceProps> = ({
   }, [searchTerm, searchCaseSensitive, searchRegex]);
 
   const syncBrowserShortcutFocus = useCallback(() => {
-    const isFocused =
-      isActive &&
+    const hasFocusedTerminalInput =
+      isFocused &&
       !!wrapperRef.current &&
       document.activeElement instanceof Node &&
       wrapperRef.current.contains(document.activeElement);
-    setTerminalBrowserShortcutFocus(terminalId, isFocused);
-  }, [isActive, terminalId]);
+    setTerminalBrowserShortcutFocus(terminalId, hasFocusedTerminalInput);
+  }, [isFocused, terminalId]);
 
   const sendTerminalInput = useCallback((data: string) => {
     if (callbacksRef.current.isExited) return;
@@ -694,7 +701,7 @@ const TerminalInstance: React.FC<TerminalInstanceProps> = ({
 
   const isFocusInsideInstance = useCallback(
     (target: EventTarget | null) => {
-      if (!isActive || !wrapperRef.current) {
+      if (!isFocused || !wrapperRef.current) {
         return false;
       }
       if (target instanceof Node && wrapperRef.current.contains(target)) {
@@ -703,7 +710,7 @@ const TerminalInstance: React.FC<TerminalInstanceProps> = ({
       const activeElement = document.activeElement;
       return activeElement instanceof Node && wrapperRef.current.contains(activeElement);
     },
-    [isActive]
+    [isFocused]
   );
 
   useEffect(() => {
@@ -734,7 +741,7 @@ const TerminalInstance: React.FC<TerminalInstanceProps> = ({
   }, [syncBrowserShortcutFocus, terminalId]);
 
   useEffect(() => {
-    callbacksRef.current = { isActive, isExited, onExited, terminalName, t };
+    callbacksRef.current = { isActive, isFocused, isExited, onExited, terminalName, t };
     if (isExited && terminalRef.current) {
       terminalRef.current.options.cursorBlink = false;
       terminalRef.current.options.disableStdin = true;
@@ -754,7 +761,7 @@ const TerminalInstance: React.FC<TerminalInstanceProps> = ({
         } catch {}
       }
     }
-  }, [isActive, isExited, onExited, t, terminalName]);
+  }, [isActive, isFocused, isExited, onExited, t, terminalName]);
 
   useEffect(() => {
     if (terminalRef.current) {
@@ -938,7 +945,6 @@ const TerminalInstance: React.FC<TerminalInstanceProps> = ({
     if (isActive && fitAddonRef.current && terminalRef.current) {
       setTimeout(() => {
         fitAddonRef.current?.fit();
-        terminalRef.current?.focus();
 
         if (wsRef.current?.readyState === WebSocket.OPEN && terminalRef.current) {
           const { cols, rows } = terminalRef.current;
@@ -947,6 +953,16 @@ const TerminalInstance: React.FC<TerminalInstanceProps> = ({
       }, 50);
     }
   }, [isActive]);
+
+  useEffect(() => {
+    if (!isActive || !isFocused || !terminalRef.current) {
+      return;
+    }
+    const timer = setTimeout(() => {
+      terminalRef.current?.focus();
+    }, 50);
+    return () => clearTimeout(timer);
+  }, [isActive, isFocused]);
 
   useEffect(() => {
     const container = containerRef.current;
