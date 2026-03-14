@@ -191,7 +191,6 @@ func TestTerminalHandlerRename(t *testing.T) {
 
 func TestTerminalHandlerWebSocket(t *testing.T) {
 	handler, cleanup := setupTestHandler(t)
-	defer cleanup()
 
 	info, _ := handler.manager.Create(terminal.CreateOptions{Name: "test", Cols: 80, Rows: 24})
 
@@ -200,7 +199,6 @@ func TestTerminalHandlerWebSocket(t *testing.T) {
 	handler.Register(router.Group("/api"))
 
 	server := httptest.NewServer(router)
-	defer server.Close()
 
 	wsURL := "ws" + server.URL[4:] + "/api/terminal/ws/" + info.ID
 
@@ -208,7 +206,6 @@ func TestTerminalHandlerWebSocket(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to connect websocket: %v", err)
 	}
-	defer conn.Close()
 
 	time.Sleep(100 * time.Millisecond)
 
@@ -216,6 +213,11 @@ func TestTerminalHandlerWebSocket(t *testing.T) {
 	if !ok {
 		t.Fatal("session not found")
 	}
+
+	conn.Close()
+	cleanup()
+	server.Close()
+	time.Sleep(200 * time.Millisecond)
 }
 
 func TestTerminalHistoryPersistence(t *testing.T) {
