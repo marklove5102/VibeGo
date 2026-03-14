@@ -1,14 +1,12 @@
 import {
-  Gamepad2,
   Minus,
   Monitor,
   MonitorOff,
-  Moon,
   Play,
   Plus,
+  Radius,
   SkipBack,
   SkipForward,
-  Sun,
   Volume1,
   Volume2,
   VolumeX,
@@ -28,12 +26,9 @@ const RemoteControlView: React.FC<PageViewProps> = () => {
 
   const [volume, setVolume] = useState(50);
   const [muted, setMuted] = useState(false);
-  const [brightness, setBrightness] = useState(50);
   const [loading, setLoading] = useState<string | null>(null);
-  const [brightnessSupported, setBrightnessSupported] = useState(true);
 
   const volumeSliderRef = useRef<HTMLInputElement>(null);
-  const brightnessSliderRef = useRef<HTMLInputElement>(null);
   const pollRef = useRef<ReturnType<typeof setInterval>>();
 
   const fetchState = useCallback(async () => {
@@ -42,13 +37,6 @@ const RemoteControlView: React.FC<PageViewProps> = () => {
       setVolume(v.level);
       setMuted(v.muted);
     } catch {}
-    try {
-      const b = await remoteApi.getBrightness();
-      setBrightness(b.level);
-      setBrightnessSupported(true);
-    } catch {
-      setBrightnessSupported(false);
-    }
   }, []);
 
   useEffect(() => {
@@ -84,26 +72,11 @@ const RemoteControlView: React.FC<PageViewProps> = () => {
     [doAction],
   );
 
-  const handleBrightnessChange = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      const val = Number(e.target.value);
-      setBrightness(val);
-    },
-    [],
-  );
-
-  const handleBrightnessCommit = useCallback(
-    (val: number) => {
-      doAction("brightness-set", () => remoteApi.setBrightness(val));
-    },
-    [doAction],
-  );
-
   return (
     <div className="h-full flex flex-col bg-ide-bg overflow-auto">
       <div className="flex-1 flex flex-col items-center justify-start px-4 py-5 gap-5 max-w-lg mx-auto w-full">
         <div className="flex items-center gap-2 self-start">
-          <Gamepad2 size={20} className="text-ide-accent" />
+          <Radius size={20} className="text-ide-accent" />
           <span className="font-medium text-ide-text text-base">
             {t("plugin.remoteControl.title")}
           </span>
@@ -215,56 +188,6 @@ const RemoteControlView: React.FC<PageViewProps> = () => {
           </div>
         </div>
 
-        {brightnessSupported && (
-          <div className="w-full bg-ide-panel rounded-xl border border-ide-border p-4 space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Sun size={16} className="text-yellow-500" />
-                <span className="text-sm font-medium text-ide-text">
-                  {t("plugin.remoteControl.brightness")}
-                </span>
-              </div>
-              <span className="text-xs text-ide-mute font-mono tabular-nums">
-                {brightness}%
-              </span>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                className="p-2 rounded-lg bg-ide-bg border border-ide-border hover:bg-ide-border/50 active:scale-95 transition-all"
-                onClick={() =>
-                  doAction("br-down", () => remoteApi.brightnessDown())
-                }
-                disabled={loading === "br-down"}
-              >
-                <Moon size={16} className="text-ide-text" />
-              </button>
-              <input
-                ref={brightnessSliderRef}
-                type="range"
-                min={0}
-                max={100}
-                value={brightness}
-                onChange={handleBrightnessChange}
-                onMouseUp={() => handleBrightnessCommit(brightness)}
-                onTouchEnd={() => handleBrightnessCommit(brightness)}
-                className="flex-1 h-2 rounded-full appearance-none cursor-pointer accent-yellow-500 slider-brightness"
-              />
-              <button
-                type="button"
-                className="p-2 rounded-lg bg-ide-bg border border-ide-border hover:bg-ide-border/50 active:scale-95 transition-all"
-                onClick={() =>
-                  doAction("br-up", () => remoteApi.brightnessUp())
-                }
-                disabled={loading === "br-up"}
-              >
-                <Sun size={16} className="text-ide-text" />
-              </button>
-            </div>
-          </div>
-        )}
-
         <div className="w-full bg-ide-panel rounded-xl border border-ide-border p-4 space-y-4">
           <div className="flex items-center gap-2">
             <Monitor size={16} className="text-purple-500" />
@@ -321,24 +244,7 @@ const RemoteControlView: React.FC<PageViewProps> = () => {
           margin-top: -6px;
           cursor: pointer;
         }
-        .slider-brightness::-webkit-slider-runnable-track {
-          background: linear-gradient(to right, #eab308 0%, #eab308 ${brightness}%, var(--ide-border) ${brightness}%, var(--ide-border) 100%);
-          border-radius: 999px;
-          height: 8px;
-        }
-        .slider-brightness::-webkit-slider-thumb {
-          -webkit-appearance: none;
-          width: 20px;
-          height: 20px;
-          border-radius: 50%;
-          background: #eab308;
-          border: 2px solid white;
-          box-shadow: 0 1px 4px rgba(0,0,0,0.3);
-          margin-top: -6px;
-          cursor: pointer;
-        }
-        .slider-volume::-moz-range-track,
-        .slider-brightness::-moz-range-track {
+        .slider-volume::-moz-range-track {
           height: 8px;
           border-radius: 999px;
           background: var(--ide-border);
@@ -348,22 +254,15 @@ const RemoteControlView: React.FC<PageViewProps> = () => {
           border-radius: 999px;
           height: 8px;
         }
-        .slider-brightness::-moz-range-progress {
-          background: #eab308;
-          border-radius: 999px;
-          height: 8px;
-        }
-        .slider-volume::-moz-range-thumb,
-        .slider-brightness::-moz-range-thumb {
+        .slider-volume::-moz-range-thumb {
           width: 20px;
           height: 20px;
           border-radius: 50%;
+          background: #3b82f6;
           border: 2px solid white;
           box-shadow: 0 1px 4px rgba(0,0,0,0.3);
           cursor: pointer;
         }
-        .slider-volume::-moz-range-thumb { background: #3b82f6; }
-        .slider-brightness::-moz-range-thumb { background: #eab308; }
       `}</style>
     </div>
   );
@@ -373,7 +272,7 @@ registerPage({
   id: "remote-control",
   name: "Remote Control",
   nameKey: "plugin.remoteControl.name",
-  icon: Gamepad2,
+  icon: Radius,
   order: 15,
   category: "tool",
   View: RemoteControlView,
