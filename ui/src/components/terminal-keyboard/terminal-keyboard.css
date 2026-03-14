@@ -63,7 +63,6 @@
   outline: none;
   -webkit-tap-highlight-color: transparent;
   transition: background 0.08s;
-  overflow: hidden;
   min-width: 0;
 }
 
@@ -134,17 +133,48 @@
 
 .tk-swipe-preview {
   position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 22px;
-  font-weight: 500;
-  color: var(--tk-text);
-  background: var(--tk-swipe-preview-bg);
-  border-radius: var(--tk-key-radius);
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 100%;
+  height: 230%;
   pointer-events: none;
-  z-index: 10;
+  z-index: 50;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 8px;
+  font-size: 32px;
+  color: var(--tk-text);
+  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.2));
+}
+
+.tk-swipe-preview::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 160%;
+  height: 60%;
+  background: var(--tk-key-bg);
+  border-radius: 10px;
+  z-index: -1;
+}
+
+.tk-swipe-preview::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 50%;
+  background: var(--tk-key-bg);
+  border-top-left-radius: 6px;
+  border-top-right-radius: 6px;
+  border-bottom-left-radius: var(--tk-key-radius);
+  border-bottom-right-radius: var(--tk-key-radius);
+  z-index: -1;
 }
 
 .tk-key--space .tk-label {

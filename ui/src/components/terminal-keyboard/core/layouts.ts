@@ -66,8 +66,7 @@ export const TERMINAL_QWERTY: LayoutDef = {
       keys: [
         { id: 'ctrl', label: 'Ctrl', value: 'Ctrl', type: 'modifier', width: 1.5 },
         { id: 'alt', label: 'Alt', value: 'Alt', type: 'modifier', width: 1.2 },
-        { id: 'tab', label: 'Tab', value: 'Tab', type: 'action', width: 1.3, sub: { ne: 'Escape' } },
-        { id: 'space', label: ' ', value: ' ', type: 'char', width: 3, slider: 'horizontal' },
+        { id: 'space', label: ' ', value: ' ', type: 'char', width: 4.3, slider: 'horizontal' },
         {
           id: 'nav', label: '◆', value: 'ArrowDown', type: 'action', width: 1.5,
           sub: {

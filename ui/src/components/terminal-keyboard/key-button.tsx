@@ -1,4 +1,16 @@
 import React, { useRef, useCallback, useState } from 'react'
+import {
+  ArrowUp,
+  ArrowDown,
+  ArrowLeft,
+  ArrowRight,
+  ChevronsUp,
+  ChevronsDown,
+  ArrowLeftToLine,
+  ArrowRightToLine,
+  Delete,
+  CornerDownLeft
+} from 'lucide-react'
 import type { KeyDef, SwipeDir } from './core/types'
 import { getSwipeDirection, SWIPE_DIRS, isSpecialKey, MODIFIER_KEYS } from './core/types'
 
@@ -6,6 +18,22 @@ const SWIPE_THRESHOLD = 18
 const SLIDE_STEP = 18
 const LONG_PRESS_DELAY = 400
 const REPEAT_INTERVAL = 60
+
+const DISPLAY_LABELS: Record<string, React.ReactNode> = {
+  ArrowUp: <ArrowUp size={12} strokeWidth={2.5} />,
+  ArrowDown: <ArrowDown size={12} strokeWidth={2.5} />,
+  ArrowLeft: <ArrowLeft size={12} strokeWidth={2.5} />,
+  ArrowRight: <ArrowRight size={12} strokeWidth={2.5} />,
+  PageUp: <ChevronsUp size={12} strokeWidth={2.5} />,
+  PageDown: <ChevronsDown size={12} strokeWidth={2.5} />,
+  Home: <ArrowLeftToLine size={12} strokeWidth={2.5} />,
+  End: <ArrowRightToLine size={12} strokeWidth={2.5} />,
+  Escape: 'Esc',
+  Backspace: <Delete size={12} strokeWidth={2.5} />,
+  Enter: <CornerDownLeft size={12} strokeWidth={2.5} />,
+  Insert: 'Ins',
+  Delete: 'Del',
+}
 
 interface KeyButtonProps {
   keyDef: KeyDef
@@ -208,13 +236,13 @@ const KeyButton: React.FC<KeyButtonProps> = ({ keyDef, modState, shiftActive, on
             key={dir}
             className={`tk-sub tk-sub--${dir}${highlight ? ' tk-sub--highlight' : ''}`}
           >
-            {sub}
+            {DISPLAY_LABELS[sub] || sub}
           </span>
         )
       })}
       <span className={`tk-label${labelSmall ? ' tk-label--small' : ''}`}>{displayLabel}</span>
       {swipeSubVal && pressed && (
-        <div className="tk-swipe-preview">{swipeSubVal}</div>
+        <div className="tk-swipe-preview">{DISPLAY_LABELS[swipeSubVal] || swipeSubVal}</div>
       )}
       {sliding && (
         <div className="tk-swipe-preview">⇔</div>
