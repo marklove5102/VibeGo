@@ -2,7 +2,7 @@ import React, { useState, useCallback, useMemo } from 'react'
 import type { TerminalKeyEvent, ModifiersState, LayoutDef } from './core/types'
 import { MODIFIER_KEYS } from './core/types'
 import { TERMINAL_QWERTY } from './core/layouts'
-import KeyButton from './KeyButton'
+import KeyButton from './key-button'
 import './terminal-keyboard.css'
 
 interface TerminalKeyboardProps {
