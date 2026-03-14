@@ -16,6 +16,7 @@ import { gitApi } from "@/api/git";
 import { useDialog } from "@/components/common";
 import { usePageTopBar } from "@/hooks/use-page-top-bar";
 import { getTranslation, type Locale } from "@/lib/i18n";
+import { useSessionStore } from "@/stores/session-store";
 import { type GitSyncOptions, useGitStore } from "@/stores";
 import BranchSelector from "./branch-selector";
 import GitChangesView from "./git-changes-view";
@@ -50,13 +51,15 @@ const hasAutoSyncWork = (options: GitAutoSyncOptions) =>
     options.remotes ||
     options.branchStatus ||
     options.stashes ||
-    options.conflicts
+    options.conflicts ||
+    options.draft
   );
 
 const GitView: React.FC<GitViewProps> = ({ groupId, path, locale, onFileDiff, onConflict, isActive = true }) => {
   const t = (key: string) => getTranslation(locale, key);
   const dialog = useDialog();
   const [showBranchSelector, setShowBranchSelector] = useState(false);
+  const currentSessionId = useSessionStore((s) => s.currentSessionId);
   const {
     currentPath: currentRepoPath,
     isRepo,
@@ -77,6 +80,7 @@ const GitView: React.FC<GitViewProps> = ({ groupId, path, locale, onFileDiff, on
     conflicts,
     error,
     setCurrentPath,
+    setScope,
     setActiveTab,
     reset,
     checkRepo,
@@ -135,6 +139,7 @@ const GitView: React.FC<GitViewProps> = ({ groupId, path, locale, onFileDiff, on
         branchStatus: pendingAutoSyncRef.current.branchStatus || options.branchStatus,
         stashes: pendingAutoSyncRef.current.stashes || options.stashes,
         conflicts: pendingAutoSyncRef.current.conflicts || options.conflicts,
+        draft: pendingAutoSyncRef.current.draft || options.draft,
       };
       if (autoSyncTimerRef.current) {
         return;
@@ -196,8 +201,14 @@ const GitView: React.FC<GitViewProps> = ({ groupId, path, locale, onFileDiff, on
   }, []);
 
   useEffect(() => {
+    setScope(currentSessionId);
+  }, [currentSessionId, setScope]);
+
+  useEffect(() => {
     if (!path || !isActive || isRepo !== true) return;
-    wsCleanupRef.current = gitApi.connectWs(path, (event) => {
+    wsCleanupRef.current = gitApi.connectWs(
+      path,
+      (event) => {
       if (event.type === "file_changed" && event.data.files) {
         applyStatusUpdate(event.data.files as any);
       }
@@ -206,19 +217,23 @@ const GitView: React.FC<GitViewProps> = ({ groupId, path, locale, onFileDiff, on
       }
       if (event.type === "repo_sync_needed") {
         scheduleAutoSync({
+          status: event.data.status === true,
           history: event.data.history === true,
           branches: event.data.branches === true,
           remotes: event.data.remotes === true,
           stashes: event.data.stashes === true,
           conflicts: event.data.conflicts === true,
+          draft: event.data.draft === true,
         });
       }
-    });
+      },
+      { workspace_session_id: currentSessionId || undefined, group_id: groupId }
+    );
     return () => {
       wsCleanupRef.current?.();
       wsCleanupRef.current = null;
     };
-  }, [path, isActive, isRepo, applyStatusUpdate, applyBranchStatus, scheduleAutoSync]);
+  }, [path, isActive, isRepo, currentSessionId, groupId, applyStatusUpdate, applyBranchStatus, scheduleAutoSync]);
 
   useEffect(() => {
     if (!isActive || isRepo !== true) {
@@ -233,6 +248,7 @@ const GitView: React.FC<GitViewProps> = ({ groupId, path, locale, onFileDiff, on
         branchStatus: true,
         stashes: true,
         conflicts: true,
+        draft: true,
       });
     };
     const handleVisibilityChange = () => {

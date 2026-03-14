@@ -33,6 +33,12 @@ type CreateOptions struct {
 	ParentID           string
 }
 
+type WorkspaceTerminalAssignment struct {
+	ID       string
+	GroupID  string
+	ParentID string
+}
+
 type Connection struct {
 	Done <-chan struct{}
 }

@@ -25,6 +25,7 @@ func (h *SessionHandler) Register(r *gin.RouterGroup) {
 	g.POST("", h.Create)
 	g.GET("/:id", h.Get)
 	g.PUT("/:id", h.Update)
+	g.PATCH("/:id/workspace", h.PatchWorkspace)
 	g.DELETE("/:id", h.Delete)
 }
 
@@ -167,9 +168,7 @@ func (h *SessionHandler) Get(c *gin.Context) {
 }
 
 type UpdateSessionRequest struct {
-	Name           *string         `json:"name,omitempty"`
-	State          *string         `json:"state,omitempty"`
-	WorkspaceState *WorkspaceState `json:"workspace_state,omitempty"`
+	Name *string `json:"name,omitempty"`
 }
 
 func (h *SessionHandler) Update(c *gin.Context) {
@@ -194,25 +193,30 @@ func (h *SessionHandler) Update(c *gin.Context) {
 	if req.Name != nil {
 		updates["name"] = *req.Name
 	}
-	if req.WorkspaceState != nil {
-		rawState, err := marshalWorkspaceState(*req.WorkspaceState)
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-			return
-		}
-		updates["state"] = rawState
-	}
-	if req.State != nil {
-		rawState, err := marshalWorkspaceStateFromString(*req.State)
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-			return
-		}
-		updates["state"] = rawState
-	}
 
 	if err := h.db.Model(&session).Updates(updates).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"ok": true})
+}
+
+func (h *SessionHandler) PatchWorkspace(c *gin.Context) {
+	id := c.Param("id")
+
+	var req WorkspaceStatePatch
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if _, err := updateSessionWorkspaceState(h.db, id, req); err != nil {
+		if err == gorm.ErrRecordNotFound {
+			c.JSON(http.StatusNotFound, gin.H{"error": "session not found"})
+			return
+		}
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 

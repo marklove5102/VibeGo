@@ -1,5 +1,6 @@
 import { request } from "./request";
 import type { GroupPage } from "@/stores/frame-store";
+import type { SortField, SortOrder, ViewMode } from "@/stores/file-manager-store";
 import type { LayoutNode, TerminalSession } from "@/stores/terminal-store";
 
 export interface SessionInfo {
@@ -36,6 +37,12 @@ export interface WorkspaceState {
       rootPath: string;
       pathHistory: string[];
       historyIndex: number;
+      searchQuery: string;
+      searchActive: boolean;
+      sortField: SortField;
+      sortOrder: SortOrder;
+      showHidden: boolean;
+      viewMode: ViewMode;
     }
   >;
 }
@@ -67,9 +74,32 @@ export const sessionApi = {
 
   get: (id: string) => request<SessionDetail>(`/session/${id}`),
 
-  update: (id: string, data: { name?: string; state?: string; workspace_state?: WorkspaceState }) =>
+  update: (id: string, data: { name?: string }) =>
     request<{ ok: boolean }>(`/session/${id}`, {
       method: "PUT",
+      body: JSON.stringify(data),
+    }),
+
+  patchWorkspace: (
+    id: string,
+    data: Partial<
+      Pick<
+        WorkspaceState,
+        | "openGroups"
+        | "openTools"
+        | "terminalsByGroup"
+        | "activeTerminalByGroup"
+        | "listManagerOpenByGroup"
+        | "terminalLayouts"
+        | "focusedIdByGroup"
+        | "settingsOpen"
+        | "activeGroupId"
+        | "fileManagerByGroup"
+      >
+    >
+  ) =>
+    request<{ ok: boolean }>(`/session/${id}/workspace`, {
+      method: "PATCH",
       body: JSON.stringify(data),
     }),
 

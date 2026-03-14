@@ -81,6 +81,10 @@ func NewManager(db *gorm.DB, cfg *ManagerConfig) *Manager {
 	}
 }
 
+func (m *Manager) DB() *gorm.DB {
+	return m.db
+}
+
 func (m *Manager) Create(opts CreateOptions) (*TerminalInfo, error) {
 	cwd := opts.Cwd
 	if cwd == "" {
@@ -355,6 +359,69 @@ func (m *Manager) List(workspaceSessionID string, groupID string) ([]TerminalInf
 		result[i] = *sessionToInfo(&s)
 	}
 	return result, nil
+}
+
+func (m *Manager) SyncWorkspaceMetadata(workspaceSessionID string, assignments []WorkspaceTerminalAssignment) error {
+	if workspaceSessionID == "" {
+		return nil
+	}
+
+	return m.db.Transaction(func(tx *gorm.DB) error {
+		assignedIDs := make([]string, 0, len(assignments))
+		for _, assignment := range assignments {
+			if assignment.ID == "" {
+				continue
+			}
+			assignedIDs = append(assignedIDs, assignment.ID)
+			updates := map[string]any{
+				"workspace_session_id": workspaceSessionID,
+				"group_id":             assignment.GroupID,
+				"parent_id":            assignment.ParentID,
+			}
+			if err := tx.Model(&model.TerminalSession{}).Where("id = ?", assignment.ID).Updates(updates).Error; err != nil {
+				return err
+			}
+			if at, ok := m.getActive(assignment.ID); ok {
+				at.Session.WorkspaceSessionID = workspaceSessionID
+				at.Session.GroupID = assignment.GroupID
+				at.Session.ParentID = assignment.ParentID
+			}
+		}
+
+		clearQuery := tx.Model(&model.TerminalSession{}).Where("workspace_session_id = ?", workspaceSessionID)
+		if len(assignedIDs) > 0 {
+			clearQuery = clearQuery.Where("id NOT IN ?", assignedIDs)
+		}
+		if err := clearQuery.Updates(map[string]any{
+			"workspace_session_id": "",
+			"group_id":             "",
+			"parent_id":            "",
+		}).Error; err != nil {
+			return err
+		}
+
+		m.terminals.Range(func(_, value any) bool {
+			at := value.(*activeTerminal)
+			if at.Session.WorkspaceSessionID != workspaceSessionID {
+				return true
+			}
+			found := false
+			for _, assignment := range assignments {
+				if assignment.ID == at.Session.ID {
+					found = true
+					break
+				}
+			}
+			if !found {
+				at.Session.WorkspaceSessionID = ""
+				at.Session.GroupID = ""
+				at.Session.ParentID = ""
+			}
+			return true
+		})
+
+		return nil
+	})
 }
 
 func (m *Manager) Attach(id string, conn *websocket.Conn) (*Connection, error) {

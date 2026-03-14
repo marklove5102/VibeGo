@@ -3,6 +3,10 @@ package handler
 import (
 	"encoding/json"
 	"fmt"
+	"time"
+
+	"github.com/xxnuo/vibego/internal/model"
+	"gorm.io/gorm"
 )
 
 type WorkspaceState struct {
@@ -71,6 +75,44 @@ type WorkspaceFileManagerState struct {
 	RootPath     string   `json:"rootPath"`
 	PathHistory  []string `json:"pathHistory"`
 	HistoryIndex int      `json:"historyIndex"`
+	SearchQuery  string   `json:"searchQuery"`
+	SearchActive bool     `json:"searchActive"`
+	SortField    string   `json:"sortField"`
+	SortOrder    string   `json:"sortOrder"`
+	ShowHidden   bool     `json:"showHidden"`
+	ViewMode     string   `json:"viewMode"`
+}
+
+type WorkspaceStatePatch struct {
+	OpenGroups             *[]WorkspaceGroup                      `json:"openGroups,omitempty"`
+	OpenTools              *[]WorkspaceTool                       `json:"openTools,omitempty"`
+	TerminalsByGroup       *map[string][]WorkspaceTerminalSession `json:"terminalsByGroup,omitempty"`
+	ActiveTerminalByGroup  *map[string]*string                    `json:"activeTerminalByGroup,omitempty"`
+	ListManagerOpenByGroup *map[string]bool                       `json:"listManagerOpenByGroup,omitempty"`
+	TerminalLayouts        *map[string]WorkspaceLayoutNode        `json:"terminalLayouts,omitempty"`
+	FocusedIDByGroup       *map[string]*string                    `json:"focusedIdByGroup,omitempty"`
+	SettingsOpen           *bool                                  `json:"settingsOpen,omitempty"`
+	ActiveGroupID          optionalStringPatch                    `json:"activeGroupId,omitempty"`
+	FileManagerByGroup     *map[string]WorkspaceFileManagerState  `json:"fileManagerByGroup,omitempty"`
+}
+
+type optionalStringPatch struct {
+	Set   bool
+	Value *string
+}
+
+func (p *optionalStringPatch) UnmarshalJSON(data []byte) error {
+	p.Set = true
+	if string(data) == "null" {
+		p.Value = nil
+		return nil
+	}
+	var value string
+	if err := json.Unmarshal(data, &value); err != nil {
+		return err
+	}
+	p.Value = &value
+	return nil
 }
 
 func emptyWorkspaceState() WorkspaceState {
@@ -193,6 +235,15 @@ func normalizeWorkspaceState(state *WorkspaceState) {
 		if value.HistoryIndex >= len(value.PathHistory) {
 			value.HistoryIndex = len(value.PathHistory) - 1
 		}
+		if value.SortField == "" {
+			value.SortField = "name"
+		}
+		if value.SortOrder == "" {
+			value.SortOrder = "asc"
+		}
+		if value.ViewMode == "" {
+			value.ViewMode = "list"
+		}
 		state.FileManagerByGroup[key] = value
 	}
 }
@@ -284,4 +335,66 @@ func validateWorkspaceLayoutNode(node WorkspaceLayoutNode) error {
 	}
 
 	return nil
+}
+
+func applyWorkspaceStatePatch(state *WorkspaceState, patch WorkspaceStatePatch) {
+	if patch.OpenGroups != nil {
+		state.OpenGroups = *patch.OpenGroups
+	}
+	if patch.OpenTools != nil {
+		state.OpenTools = *patch.OpenTools
+	}
+	if patch.TerminalsByGroup != nil {
+		state.TerminalsByGroup = *patch.TerminalsByGroup
+	}
+	if patch.ActiveTerminalByGroup != nil {
+		state.ActiveTerminalByGroup = *patch.ActiveTerminalByGroup
+	}
+	if patch.ListManagerOpenByGroup != nil {
+		state.ListManagerOpenByGroup = *patch.ListManagerOpenByGroup
+	}
+	if patch.TerminalLayouts != nil {
+		state.TerminalLayouts = *patch.TerminalLayouts
+	}
+	if patch.FocusedIDByGroup != nil {
+		state.FocusedIDByGroup = *patch.FocusedIDByGroup
+	}
+	if patch.SettingsOpen != nil {
+		state.SettingsOpen = *patch.SettingsOpen
+	}
+	if patch.ActiveGroupID.Set {
+		state.ActiveGroupID = patch.ActiveGroupID.Value
+	}
+	if patch.FileManagerByGroup != nil {
+		state.FileManagerByGroup = *patch.FileManagerByGroup
+	}
+}
+
+func updateSessionWorkspaceState(db *gorm.DB, sessionID string, patch WorkspaceStatePatch) (WorkspaceState, error) {
+	var session model.UserSession
+	if err := db.First(&session, "id = ?", sessionID).Error; err != nil {
+		return WorkspaceState{}, err
+	}
+
+	state, err := parseWorkspaceState(session.State)
+	if err != nil {
+		return WorkspaceState{}, err
+	}
+
+	applyWorkspaceStatePatch(&state, patch)
+	rawState, err := marshalWorkspaceState(state)
+	if err != nil {
+		return WorkspaceState{}, err
+	}
+
+	now := time.Now().Unix()
+	if err := db.Model(&session).Updates(map[string]any{
+		"state":          rawState,
+		"updated_at":     now,
+		"last_active_at": now,
+	}).Error; err != nil {
+		return WorkspaceState{}, err
+	}
+
+	return state, nil
 }

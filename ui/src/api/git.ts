@@ -90,6 +90,11 @@ export interface GitApplySelectionResponse {
   diff?: GitInteractiveDiff;
 }
 
+export interface GitApplySelectionBatchResponse {
+  ok: boolean;
+  status: GitStructuredStatus;
+}
+
 export interface GitStashFile {
   path: string;
   status: "modified" | "added" | "deleted" | "renamed" | "copied";
@@ -181,6 +186,12 @@ export interface GitWSEvent {
   data: Record<string, unknown>;
 }
 
+export interface GitDraft {
+  summary: string;
+  description: string;
+  isAmend: boolean;
+}
+
 export const gitApi = {
   check: (path: string) =>
     request<{ isRepo: boolean }>("/git/check", {
@@ -200,10 +211,10 @@ export const gitApi = {
       body: JSON.stringify({ url, path }),
     }),
 
-  status: (path: string) =>
+  status: (path: string, scope?: { workspace_session_id?: string; group_id?: string }) =>
     request<GitStructuredStatus>("/git/status", {
       method: "POST",
-      body: JSON.stringify({ path }),
+      body: JSON.stringify({ path, ...scope }),
     }),
 
   log: (path: string, limit = 20, skip = 0) =>
@@ -218,10 +229,15 @@ export const gitApi = {
       body: JSON.stringify({ path, filePath }),
     }),
 
-  fileDiff: (path: string, filePath: string, mode: "working" | "staged" = "working") =>
+  fileDiff: (
+    path: string,
+    filePath: string,
+    mode: "working" | "staged" = "working",
+    scope?: { workspace_session_id?: string; group_id?: string }
+  ) =>
     request<GitInteractiveDiff>("/git/file-diff", {
       method: "POST",
-      body: JSON.stringify({ path, filePath, mode }),
+      body: JSON.stringify({ path, filePath, mode, ...scope }),
     }),
 
   applySelection: (
@@ -232,11 +248,41 @@ export const gitApi = {
     action: "include" | "exclude" | "discard",
     patchHash: string,
     lineIds: string[],
-    hunkIds: string[]
+    hunkIds: string[],
+    scope?: { workspace_session_id?: string; group_id?: string }
   ) =>
     request<GitApplySelectionResponse>("/git/apply-selection", {
       method: "POST",
-      body: JSON.stringify({ path, filePath, mode, target, action, patchHash, lineIds, hunkIds }),
+      body: JSON.stringify({ path, filePath, mode, target, action, patchHash, lineIds, hunkIds, ...scope }),
+    }),
+
+  applySelectionBatch: (
+    path: string,
+    mode: "working" | "staged",
+    action: "include" | "exclude",
+    filePaths: string[],
+    scope?: { workspace_session_id?: string; group_id?: string }
+  ) =>
+    request<GitApplySelectionBatchResponse>("/git/apply-selection-batch", {
+      method: "POST",
+      body: JSON.stringify({ path, mode, action, filePaths, ...scope }),
+    }),
+
+  getDraft: (path: string, scope?: { workspace_session_id?: string; group_id?: string }) => {
+    const params = new URLSearchParams({ path });
+    if (scope?.workspace_session_id) params.set("workspace_session_id", scope.workspace_session_id);
+    if (scope?.group_id) params.set("group_id", scope.group_id);
+    return request<GitDraft>(`/git/draft?${params.toString()}`);
+  },
+
+  setDraft: (
+    path: string,
+    draft: Partial<GitDraft>,
+    scope?: { workspace_session_id?: string; group_id?: string }
+  ) =>
+    request<GitDraft>("/git/draft", {
+      method: "POST",
+      body: JSON.stringify({ path, ...draft, ...scope }),
     }),
 
   show: (path: string, filePath: string, ref = "HEAD") =>
@@ -274,11 +320,12 @@ export const gitApi = {
     files: string[],
     patches: { filePath: string; patch: string }[],
     summary: string,
-    description?: string
+    description?: string,
+    scope?: { workspace_session_id?: string; group_id?: string }
   ) =>
     request<CommitSelectedResponse>("/git/commit-selected", {
       method: "POST",
-      body: JSON.stringify({ path, files, patches, summary, description }),
+      body: JSON.stringify({ path, files, patches, summary, description, ...scope }),
     }),
 
   amend: (
@@ -286,11 +333,12 @@ export const gitApi = {
     files: string[],
     patches: { filePath: string; patch: string }[],
     summary: string,
-    description?: string
+    description?: string,
+    scope?: { workspace_session_id?: string; group_id?: string }
   ) =>
     request<CommitSelectedResponse>("/git/amend", {
       method: "POST",
-      body: JSON.stringify({ path, files, patches, summary, description }),
+      body: JSON.stringify({ path, files, patches, summary, description, ...scope }),
     }),
 
   undo: (path: string) =>
@@ -448,12 +496,18 @@ export const gitApi = {
       body: JSON.stringify({ path, filePath, mode: "manual", hash: "", manualContent: content }),
     }),
 
-  connectWs: (path: string, onEvent: (event: GitWSEvent) => void): (() => void) => {
+  connectWs: (
+    path: string,
+    onEvent: (event: GitWSEvent) => void,
+    scope?: { workspace_session_id?: string; group_id?: string }
+  ): (() => void) => {
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     const host = window.location.host;
     const key = localStorage.getItem("vibego_auth_key");
     const params = new URLSearchParams({ path });
     if (key) params.set("key", key);
+    if (scope?.workspace_session_id) params.set("workspace_session_id", scope.workspace_session_id);
+    if (scope?.group_id) params.set("group_id", scope.group_id);
     const url = `${protocol}//${host}${API_BASE}/git/ws?${params.toString()}`;
     let ws: WebSocket | null = null;
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;

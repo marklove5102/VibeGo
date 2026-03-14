@@ -46,6 +46,7 @@ const App: React.FC = () => {
 
   const openFolder = useSessionStore((s) => s.openFolder);
   const saveCurrentSession = useSessionStore((s) => s.saveCurrentSession);
+  const refreshCurrentSession = useSessionStore((s) => s.refreshCurrentSession);
 
   const [isNewGroupMenuOpen, setNewGroupMenuOpen] = useState(false);
   const [isNewPageMenuOpen, setNewPageMenuOpen] = useState(false);
@@ -105,6 +106,26 @@ const App: React.FC = () => {
     window.addEventListener("beforeunload", handleBeforeUnload);
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
   }, [saveCurrentSession]);
+
+  useEffect(() => {
+    if (!authChecked || needLogin) return;
+
+    const handleFocus = () => {
+      void refreshCurrentSession();
+    };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        void refreshCurrentSession();
+      }
+    };
+
+    window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [authChecked, needLogin, refreshCurrentSession]);
 
   useEffect(() => {
     if (themeSetting) setTheme(themeSetting as Theme);

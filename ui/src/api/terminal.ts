@@ -46,6 +46,26 @@ export const terminalApi = {
       body: JSON.stringify(opts || {}),
     }),
 
+  syncWorkspace: (
+    workspaceSessionId: string,
+    terminals: Array<{ id: string; group_id: string; parent_id?: string }>,
+    workspaceState?: {
+      terminalsByGroup: Record<string, Array<{ id: string; name: string; pinned?: boolean; status?: TerminalStatus; parentId?: string }>>;
+      activeTerminalByGroup: Record<string, string | null>;
+      listManagerOpenByGroup: Record<string, boolean>;
+      terminalLayouts: Record<string, unknown>;
+      focusedIdByGroup: Record<string, string | null>;
+    }
+  ) =>
+    request<{ ok: boolean }>("/terminal/sync-workspace", {
+      method: "POST",
+      body: JSON.stringify({
+        workspace_session_id: workspaceSessionId,
+        terminals,
+        workspace_state: workspaceState,
+      }),
+    }),
+
   rename: (id: string, name: string) =>
     request<{ ok: boolean }>("/terminal/rename", {
       method: "POST",

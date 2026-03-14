@@ -171,7 +171,7 @@ func TestSessionSaveState(t *testing.T) {
 
 	h.db.Create(&model.UserSession{ID: "save1", Name: "Original", State: "{}", CreatedAt: 100, UpdatedAt: 100})
 
-	body := `{"state":"{\"openGroups\":[{\"id\":\"group-1\",\"name\":\"Project\",\"pages\":[{\"id\":\"group-1-files\",\"type\":\"files\",\"label\":\"Files\",\"tabs\":[],\"activeTabId\":null}],\"activePageId\":\"group-1-files\"}],\"openTools\":[],\"terminalsByGroup\":{},\"activeTerminalByGroup\":{},\"listManagerOpenByGroup\":{},\"terminalLayouts\":{},\"focusedIdByGroup\":{},\"settingsOpen\":false,\"activeGroupId\":\"group-1\",\"fileManagerByGroup\":{}}"}`
+	body := `{"name":"Renamed Session"}`
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("PUT", "/api/session/save1", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -181,7 +181,7 @@ func TestSessionSaveState(t *testing.T) {
 
 	var session model.UserSession
 	h.db.First(&session, "id = ?", "save1")
-	assert.Contains(t, session.State, `"group-1"`)
+	assert.Equal(t, "Renamed Session", session.Name)
 	assert.Greater(t, session.UpdatedAt, int64(100))
 }
 
@@ -190,9 +190,9 @@ func TestSessionSaveWorkspaceState(t *testing.T) {
 
 	h.db.Create(&model.UserSession{ID: "save-workspace", Name: "Original", State: "{}", CreatedAt: 100, UpdatedAt: 100})
 
-	body := `{"workspace_state":{"openGroups":[{"id":"group-1","name":"Project","pages":[{"id":"group-1-files","type":"files","label":"Files","tabs":[],"activeTabId":null}],"activePageId":"group-1-files"}],"openTools":[],"terminalsByGroup":{},"activeTerminalByGroup":{},"listManagerOpenByGroup":{},"terminalLayouts":{},"focusedIdByGroup":{},"settingsOpen":false,"activeGroupId":"group-1","fileManagerByGroup":{}}}`
+	body := `{"openGroups":[{"id":"group-1","name":"Project","pages":[{"id":"group-1-files","type":"files","label":"Files","tabs":[],"activeTabId":null}],"activePageId":"group-1-files"}],"openTools":[],"settingsOpen":false,"activeGroupId":"group-1","fileManagerByGroup":{}}`
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("PUT", "/api/session/save-workspace", bytes.NewBufferString(body))
+	req, _ := http.NewRequest("PATCH", "/api/session/save-workspace/workspace", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	r.ServeHTTP(w, req)
 
@@ -209,19 +209,66 @@ func TestSessionRejectInvalidWorkspaceState(t *testing.T) {
 
 	h.db.Create(&model.UserSession{ID: "invalid-workspace", Name: "Original", State: "{}", CreatedAt: 100, UpdatedAt: 100})
 
-	body := `{"workspace_state":{"openGroups":[],"openTools":[],"terminalsByGroup":{},"activeTerminalByGroup":{},"listManagerOpenByGroup":{},"terminalLayouts":{"root":{"type":"split","direction":"diagonal","ratio":0.5,"first":{"type":"terminal","terminalId":"t1"},"second":{"type":"terminal","terminalId":"t2"}}},"focusedIdByGroup":{},"settingsOpen":false,"activeGroupId":null,"fileManagerByGroup":{}}}`
+	body := `{"terminalLayouts":{"root":{"type":"split","direction":"diagonal","ratio":0.5,"first":{"type":"terminal","terminalId":"t1"},"second":{"type":"terminal","terminalId":"t2"}}}}`
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("PUT", "/api/session/invalid-workspace", bytes.NewBufferString(body))
+	req, _ := http.NewRequest("PATCH", "/api/session/invalid-workspace/workspace", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	r.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 }
 
+func TestSessionPatchWorkspace(t *testing.T) {
+	h, r := setupTestSessionHandler(t)
+
+	h.db.Create(&model.UserSession{
+		ID:    "patch-workspace",
+		Name:  "Original",
+		State: `{"openGroups":[],"openTools":[],"terminalsByGroup":{},"activeTerminalByGroup":{},"listManagerOpenByGroup":{},"terminalLayouts":{},"focusedIdByGroup":{},"settingsOpen":false,"activeGroupId":null,"fileManagerByGroup":{}}`,
+	})
+
+	body := `{"fileManagerByGroup":{"group-1":{"currentPath":"/tmp/project","rootPath":"/tmp/project","pathHistory":["/tmp/project"],"historyIndex":0,"searchQuery":"main","searchActive":true,"sortField":"modTime","sortOrder":"desc","showHidden":true,"viewMode":"grid"}}}`
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("PATCH", "/api/session/patch-workspace/workspace", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var session model.UserSession
+	h.db.First(&session, "id = ?", "patch-workspace")
+	assert.Contains(t, session.State, `"group-1"`)
+	assert.Contains(t, session.State, `"searchQuery":"main"`)
+	assert.Contains(t, session.State, `"viewMode":"grid"`)
+}
+
+func TestSessionPatchWorkspacePreservesUntouchedFields(t *testing.T) {
+	h, r := setupTestSessionHandler(t)
+
+	h.db.Create(&model.UserSession{
+		ID:    "patch-preserve",
+		Name:  "Original",
+		State: `{"openGroups":[],"openTools":[],"terminalsByGroup":{},"activeTerminalByGroup":{},"listManagerOpenByGroup":{},"terminalLayouts":{},"focusedIdByGroup":{},"settingsOpen":false,"activeGroupId":null,"fileManagerByGroup":{"group-1":{"currentPath":"/tmp/project","rootPath":"/tmp/project","pathHistory":["/tmp/project"],"historyIndex":0,"searchQuery":"main","searchActive":true,"sortField":"modTime","sortOrder":"desc","showHidden":true,"viewMode":"grid"}}}`,
+	})
+
+	body := `{"openGroups":[{"id":"group-2","name":"Project","pages":[{"id":"group-2-files","type":"files","label":"Files","tabs":[],"activeTabId":null}],"activePageId":"group-2-files"}],"settingsOpen":true,"activeGroupId":"group-2"}`
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("PATCH", "/api/session/patch-preserve/workspace", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var session model.UserSession
+	h.db.First(&session, "id = ?", "patch-preserve")
+	assert.Contains(t, session.State, `"group-2"`)
+	assert.Contains(t, session.State, `"viewMode":"grid"`)
+}
+
 func TestSessionSaveStateNotFound(t *testing.T) {
 	_, r := setupTestSessionHandler(t)
 
-	body := `{"state":"{}"}`
+	body := `{"name":"x"}`
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("PUT", "/api/session/notexist", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -278,9 +325,9 @@ func TestSessionIntegration(t *testing.T) {
 	sessions := listResult["sessions"].([]any)
 	assert.Len(t, sessions, 1)
 
-	saveBody := `{"workspace_state":{"openGroups":[{"id":"group-1","name":"Integration","pages":[{"id":"group-1-files","type":"files","label":"Files","tabs":[],"activeTabId":null}],"activePageId":"group-1-files"}],"openTools":[],"terminalsByGroup":{},"activeTerminalByGroup":{},"listManagerOpenByGroup":{},"terminalLayouts":{},"focusedIdByGroup":{},"settingsOpen":false,"activeGroupId":"group-1","fileManagerByGroup":{}}}`
+	saveBody := `{"openGroups":[{"id":"group-1","name":"Integration","pages":[{"id":"group-1-files","type":"files","label":"Files","tabs":[],"activeTabId":null}],"activePageId":"group-1-files"}],"openTools":[],"settingsOpen":false,"activeGroupId":"group-1","fileManagerByGroup":{}}`
 	w = httptest.NewRecorder()
-	req, _ = http.NewRequest("PUT", "/api/session/"+sessionID, bytes.NewBufferString(saveBody))
+	req, _ = http.NewRequest("PATCH", "/api/session/"+sessionID+"/workspace", bytes.NewBufferString(saveBody))
 	req.Header.Set("Content-Type", "application/json")
 	r.ServeHTTP(w, req)
 	assert.Equal(t, http.StatusOK, w.Code)

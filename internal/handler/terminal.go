@@ -35,6 +35,7 @@ func (h *TerminalHandler) Register(r *gin.RouterGroup) {
 	g := r.Group("/terminal")
 	g.GET("", h.List)
 	g.POST("", h.New)
+	g.POST("/sync-workspace", h.SyncWorkspace)
 	g.POST("/rename", h.Rename)
 	g.POST("/close", h.Close)
 	g.POST("/delete", h.Delete)
@@ -137,6 +138,64 @@ func (h *TerminalHandler) New(c *gin.Context) {
 
 type CloseTerminalRequest struct {
 	ID string `json:"id" binding:"required"`
+}
+
+type SyncWorkspaceTerminalRequest struct {
+	ID       string `json:"id" binding:"required"`
+	GroupID  string `json:"group_id"`
+	ParentID string `json:"parent_id"`
+}
+
+type SyncWorkspaceStateRequest struct {
+	TerminalsByGroup       map[string][]WorkspaceTerminalSession `json:"terminalsByGroup"`
+	ActiveTerminalByGroup  map[string]*string                    `json:"activeTerminalByGroup"`
+	ListManagerOpenByGroup map[string]bool                       `json:"listManagerOpenByGroup"`
+	TerminalLayouts        map[string]WorkspaceLayoutNode        `json:"terminalLayouts"`
+	FocusedIDByGroup       map[string]*string                    `json:"focusedIdByGroup"`
+}
+
+type SyncWorkspaceRequest struct {
+	WorkspaceSessionID string                         `json:"workspace_session_id" binding:"required"`
+	Terminals          []SyncWorkspaceTerminalRequest `json:"terminals"`
+	WorkspaceState     *SyncWorkspaceStateRequest     `json:"workspace_state,omitempty"`
+}
+
+func (h *TerminalHandler) SyncWorkspace(c *gin.Context) {
+	var req SyncWorkspaceRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	assignments := make([]terminal.WorkspaceTerminalAssignment, 0, len(req.Terminals))
+	for _, item := range req.Terminals {
+		assignments = append(assignments, terminal.WorkspaceTerminalAssignment{
+			ID:       item.ID,
+			GroupID:  item.GroupID,
+			ParentID: item.ParentID,
+		})
+	}
+
+	if err := h.manager.SyncWorkspaceMetadata(req.WorkspaceSessionID, assignments); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	if req.WorkspaceState != nil {
+		_, err := updateSessionWorkspaceState(h.manager.DB(), req.WorkspaceSessionID, WorkspaceStatePatch{
+			TerminalsByGroup:       &req.WorkspaceState.TerminalsByGroup,
+			ActiveTerminalByGroup:  &req.WorkspaceState.ActiveTerminalByGroup,
+			ListManagerOpenByGroup: &req.WorkspaceState.ListManagerOpenByGroup,
+			TerminalLayouts:        &req.WorkspaceState.TerminalLayouts,
+			FocusedIDByGroup:       &req.WorkspaceState.FocusedIDByGroup,
+		})
+		if err != nil && err != gorm.ErrRecordNotFound {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 
 type RenameTerminalRequest struct {

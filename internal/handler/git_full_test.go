@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -502,6 +504,216 @@ func TestGitFullServerSidePartialSelectionCommit(t *testing.T) {
 	workingTreeContent, err := os.ReadFile(filepath.Join(dir, "hello.txt"))
 	require.NoError(t, err)
 	assert.Equal(t, "ONE\ntwo\nTHREE\n", string(workingTreeContent))
+}
+
+func TestGitFullDraftScopeIsolation(t *testing.T) {
+	dir := setupFullRepo(t)
+	defer os.RemoveAll(dir)
+	r, _ := setupRouter()
+
+	w := postJSON(r, "/git/draft", map[string]interface{}{
+		"path":                 dir,
+		"workspace_session_id": "session-a",
+		"group_id":             "group-a",
+		"summary":              "feat: scoped draft",
+		"description":          "scope a",
+		"isAmend":              true,
+	})
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+	req, _ := http.NewRequest(
+		"GET",
+		"/git/draft?path="+url.QueryEscape(dir)+"&workspace_session_id=session-a&group_id=group-a",
+		nil,
+	)
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+	var draftResp GitDraftResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &draftResp))
+	assert.Equal(t, "feat: scoped draft", draftResp.Summary)
+	assert.Equal(t, "scope a", draftResp.Description)
+	assert.True(t, draftResp.IsAmend)
+
+	req, _ = http.NewRequest(
+		"GET",
+		"/git/draft?path="+url.QueryEscape(dir)+"&workspace_session_id=session-b&group_id=group-b",
+		nil,
+	)
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &draftResp))
+	assert.Empty(t, draftResp.Summary)
+	assert.Empty(t, draftResp.Description)
+	assert.False(t, draftResp.IsAmend)
+}
+
+func TestGitFullSelectionScopeIsolation(t *testing.T) {
+	dir := setupFullRepo(t)
+	defer os.RemoveAll(dir)
+	r, _ := setupRouter()
+
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "hello.txt"), []byte("one\ntwo\nthree\n"), 0644))
+	cmd := exec.Command("git", "add", "hello.txt")
+	cmd.Dir = dir
+	require.NoError(t, cmd.Run())
+	cmd = exec.Command("git", "-c", "user.name=Test", "-c", "user.email=test@test.com", "commit", "-m", "seed scope isolation")
+	cmd.Dir = dir
+	require.NoError(t, cmd.Run())
+
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "hello.txt"), []byte("ONE\ntwo\nTHREE\n"), 0644))
+
+	w := postJSON(r, "/git/file-diff", map[string]interface{}{
+		"path":                 dir,
+		"filePath":             "hello.txt",
+		"mode":                 "working",
+		"workspace_session_id": "session-a",
+		"group_id":             "group-a",
+	})
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+	var diffResp InteractiveDiff
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &diffResp))
+
+	lineIDs := make([]string, 0)
+	for _, hunk := range diffResp.Hunks {
+		for _, line := range hunk.Lines {
+			if (line.Content == "three" || line.Content == "THREE") && line.Selectable {
+				lineIDs = append(lineIDs, line.ID)
+			}
+		}
+	}
+	require.Len(t, lineIDs, 2)
+
+	w = postJSON(r, "/git/apply-selection", map[string]interface{}{
+		"path":                 dir,
+		"filePath":             "hello.txt",
+		"mode":                 "working",
+		"target":               "line",
+		"action":               "exclude",
+		"patchHash":            diffResp.PatchHash,
+		"lineIds":              lineIDs,
+		"hunkIds":              []string{},
+		"workspace_session_id": "session-a",
+		"group_id":             "group-a",
+	})
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+	w = postJSON(r, "/git/status", map[string]interface{}{
+		"path":                 dir,
+		"workspace_session_id": "session-a",
+		"group_id":             "group-a",
+	})
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var statusResp struct {
+		Files []StructuredFile `json:"files"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &statusResp))
+	require.NotEmpty(t, statusResp.Files)
+
+	foundPartial := false
+	for _, file := range statusResp.Files {
+		if file.Path == "hello.txt" {
+			foundPartial = file.IncludedState == "partial"
+		}
+	}
+	assert.True(t, foundPartial)
+
+	w = postJSON(r, "/git/status", map[string]interface{}{
+		"path":                 dir,
+		"workspace_session_id": "session-b",
+		"group_id":             "group-b",
+	})
+	require.Equal(t, http.StatusOK, w.Code)
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &statusResp))
+
+	foundAll := false
+	for _, file := range statusResp.Files {
+		if file.Path == "hello.txt" {
+			foundAll = file.IncludedState == "all"
+		}
+	}
+	assert.True(t, foundAll)
+}
+
+func TestGitFullApplySelectionBatch(t *testing.T) {
+	dir := setupFullRepo(t)
+	defer os.RemoveAll(dir)
+	r, _ := setupRouter()
+
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "hello.txt"), []byte("batch one\n"), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "main.go"), []byte("package main\n\nfunc main() { println(\"batch\") }\n"), 0644))
+
+	w := postJSON(r, "/git/apply-selection-batch", map[string]interface{}{
+		"path":                 dir,
+		"mode":                 "working",
+		"action":               "exclude",
+		"filePaths":            []string{"hello.txt", "main.go"},
+		"workspace_session_id": "session-a",
+		"group_id":             "group-a",
+	})
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+	var resp struct {
+		Status struct {
+			Files []StructuredFile `json:"files"`
+		} `json:"status"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+
+	excluded := 0
+	for _, file := range resp.Status.Files {
+		if (file.Path == "hello.txt" || file.Path == "main.go") && file.IncludedState == "none" {
+			excluded++
+		}
+	}
+	assert.Equal(t, 2, excluded)
+}
+
+func TestGitFullCommitClearsDraft(t *testing.T) {
+	dir := setupFullRepo(t)
+	defer os.RemoveAll(dir)
+	r, _ := setupRouter()
+
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "hello.txt"), []byte("draft clear\n"), 0644))
+
+	w := postJSON(r, "/git/draft", map[string]interface{}{
+		"path":                 dir,
+		"workspace_session_id": "session-a",
+		"group_id":             "group-a",
+		"summary":              "feat: clear draft",
+		"description":          "before commit",
+		"isAmend":              true,
+	})
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+	w = postJSON(r, "/git/commit-selected", map[string]interface{}{
+		"path":                 dir,
+		"summary":              "feat: clear draft",
+		"description":          "before commit",
+		"workspace_session_id": "session-a",
+		"group_id":             "group-a",
+	})
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+	req, _ := http.NewRequest(
+		"GET",
+		"/git/draft?path="+url.QueryEscape(dir)+"&workspace_session_id=session-a&group_id=group-a",
+		nil,
+	)
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+	var draftResp GitDraftResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &draftResp))
+	assert.Empty(t, draftResp.Summary)
+	assert.Empty(t, draftResp.Description)
+	assert.False(t, draftResp.IsAmend)
 }
 
 func TestGitFullStashViaAPI(t *testing.T) {

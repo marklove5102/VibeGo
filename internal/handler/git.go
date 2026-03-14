@@ -17,6 +17,7 @@ import (
 	"github.com/go-git/go-git/v6/plumbing"
 	"github.com/go-git/go-git/v6/plumbing/object"
 	"github.com/go-git/go-git/v6/utils/merkletrie"
+	"github.com/xxnuo/vibego/internal/service/kv"
 	"github.com/xxnuo/vibego/internal/service/settings"
 	"gorm.io/gorm"
 )
@@ -29,10 +30,11 @@ type GitHandler struct {
 
 func NewGitHandler(db *gorm.DB) *GitHandler {
 	h := &GitHandler{
-		selectionStore: newGitSelectionStore(),
+		selectionStore: newGitSelectionStore(nil),
 	}
 	if db != nil {
 		h.settings = settings.New(db)
+		h.selectionStore = newGitSelectionStore(kv.New(db))
 	}
 	return h
 }
@@ -71,6 +73,10 @@ func buildCommitMessageArgs(summary, description string) []string {
 		args = append(args, "-m", description)
 	}
 	return args
+}
+
+func buildGitScopeKey(workspaceSessionID, groupID, repoRoot string) string {
+	return buildGitDraftScopeKey(workspaceSessionID, groupID, repoRoot)
 }
 
 func (h *GitHandler) commitOnlySelectedFiles(repoRoot string, files []string, summary, description, author, email string, amend bool) (string, error) {
@@ -123,6 +129,9 @@ func (h *GitHandler) Register(r *gin.RouterGroup) {
 	g.POST("/add", h.Add)
 	g.POST("/reset", h.Reset)
 	g.POST("/apply-selection", h.ApplySelection)
+	g.POST("/apply-selection-batch", h.ApplySelectionBatch)
+	g.GET("/draft", h.GetDraft)
+	g.POST("/draft", h.UpdateDraft)
 	g.POST("/checkout", h.Checkout)
 	g.POST("/commit", h.Commit)
 	g.POST("/undo", h.UndoCommit)
@@ -168,6 +177,11 @@ func (h *GitHandler) Check(c *gin.Context) {
 
 type GitInitRequest struct {
 	Path string `json:"path" binding:"required"`
+}
+
+type GitScopeRequest struct {
+	WorkspaceSessionID string `json:"workspace_session_id"`
+	GroupID            string `json:"group_id"`
 }
 
 // Init godoc
@@ -234,6 +248,7 @@ func (h *GitHandler) Clone(c *gin.Context) {
 
 type GitPathRequest struct {
 	Path string `json:"path" binding:"required"`
+	GitScopeRequest
 }
 
 type FileStatus struct {
@@ -272,7 +287,9 @@ func (h *GitHandler) Status(c *gin.Context) {
 		return
 	}
 
-	files, summary := h.collectStructuredStatus(w.Filesystem.Root())
+	repoRoot := w.Filesystem.Root()
+	scopeKey := buildGitScopeKey(req.WorkspaceSessionID, req.GroupID, repoRoot)
+	files, summary := h.collectStructuredStatusWithScope(repoRoot, scopeKey)
 	c.JSON(http.StatusOK, gin.H{"files": files, "summary": summary})
 }
 
@@ -817,10 +834,71 @@ type CommitSelectedRequest struct {
 	Description string            `json:"description"`
 	Author      string            `json:"author"`
 	Email       string            `json:"email"`
+	GitScopeRequest
 }
 
-func (h *GitHandler) buildSelectedCommitPayload(repoRoot string) ([]string, []GitPatchPayload, error) {
-	files, _ := h.collectStructuredStatus(repoRoot)
+type GitDraftRequest struct {
+	Path        string  `json:"path" binding:"required"`
+	Summary     *string `json:"summary,omitempty"`
+	Description *string `json:"description,omitempty"`
+	IsAmend     *bool   `json:"isAmend,omitempty"`
+	GitScopeRequest
+}
+
+type GitDraftResponse struct {
+	Summary     string `json:"summary"`
+	Description string `json:"description"`
+	IsAmend     bool   `json:"isAmend"`
+}
+
+func (h *GitHandler) GetDraft(c *gin.Context) {
+	path := c.Query("path")
+	if path == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "path is required"})
+		return
+	}
+
+	repoRoot, err := h.getRepoRoot(path)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	scopeKey := buildGitScopeKey(c.Query("workspace_session_id"), c.Query("group_id"), repoRoot)
+	draft, _ := h.selectionStore.getDraftFields(scopeKey)
+	c.JSON(http.StatusOK, GitDraftResponse{
+		Summary:     draft.Summary,
+		Description: draft.Description,
+		IsAmend:     draft.IsAmend,
+	})
+}
+
+func (h *GitHandler) UpdateDraft(c *gin.Context) {
+	var req GitDraftRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	repoRoot, err := h.getRepoRoot(req.Path)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	scopeKey := buildGitScopeKey(req.WorkspaceSessionID, req.GroupID, repoRoot)
+	h.selectionStore.setDraftFields(scopeKey, req.Summary, req.Description, req.IsAmend)
+	draft, _ := h.selectionStore.getDraftFields(scopeKey)
+	h.broadcastRepoSyncNeededScoped(req.Path, req.WorkspaceSessionID, req.GroupID, gin.H{"draft": true})
+	c.JSON(http.StatusOK, GitDraftResponse{
+		Summary:     draft.Summary,
+		Description: draft.Description,
+		IsAmend:     draft.IsAmend,
+	})
+}
+
+func (h *GitHandler) buildSelectedCommitPayload(repoRoot string, scopeKey string) ([]string, []GitPatchPayload, error) {
+	files, _ := h.collectStructuredStatusWithScope(repoRoot, scopeKey)
 	selectedFiles := make([]string, 0)
 	selectedPatches := make([]GitPatchPayload, 0)
 
@@ -834,7 +912,7 @@ func (h *GitHandler) buildSelectedCommitPayload(repoRoot string) ([]string, []Gi
 				return nil, nil, err
 			}
 
-			selectionState := resolveSelectionState(h.selectionStore, repoRoot, file.Path, diff)
+			selectionState := resolveSelectionState(h.selectionStore, scopeKey, file.Path, diff)
 			patch := buildSelectionPatch(diff, getSelectedLineIDsForState(selectionState, diff))
 			if patch == "" {
 				continue
@@ -874,6 +952,7 @@ func (h *GitHandler) CommitSelected(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	scopeKey := buildGitScopeKey(req.WorkspaceSessionID, req.GroupID, repoRoot)
 
 	author, email := h.getGitAuthor()
 	if req.Author != "" {
@@ -886,7 +965,7 @@ func (h *GitHandler) CommitSelected(c *gin.Context) {
 	filesToCommit := append([]string(nil), req.Files...)
 	patchesToCommit := append([]GitPatchPayload(nil), req.Patches...)
 	if len(filesToCommit) == 0 && len(patchesToCommit) == 0 {
-		filesToCommit, patchesToCommit, err = h.buildSelectedCommitPayload(repoRoot)
+		filesToCommit, patchesToCommit, err = h.buildSelectedCommitPayload(repoRoot, scopeKey)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
@@ -904,11 +983,12 @@ func (h *GitHandler) CommitSelected(c *gin.Context) {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
-		h.selectionStore.resetRepo(repoRoot)
+		h.selectionStore.resetRepo(scopeKey)
 		bs := collectBranchStatus(repoRoot)
 		h.broadcastStatus(req.Path)
 		h.broadcastBranchStatus(req.Path)
 		h.broadcastRepoSyncNeeded(req.Path, gin.H{"history": true})
+		h.broadcastRepoSyncNeededScoped(req.Path, req.WorkspaceSessionID, req.GroupID, gin.H{"draft": true})
 		c.JSON(http.StatusOK, gin.H{"ok": true, "hash": hash, "branchStatus": bs})
 		return
 	}
@@ -945,8 +1025,8 @@ func (h *GitHandler) CommitSelected(c *gin.Context) {
 		return
 	}
 
-	h.selectionStore.resetRepo(repoRoot)
-	files, summary := h.collectStructuredStatus(repoRoot)
+	h.selectionStore.resetRepo(scopeKey)
+	files, summary := h.collectStructuredStatusWithScope(repoRoot, scopeKey)
 	repo, _ = h.openRepo(req.Path)
 	commits := collectCommitLog(repo, 20)
 	repoRoot, _ = h.getRepoRoot(req.Path)
@@ -954,6 +1034,7 @@ func (h *GitHandler) CommitSelected(c *gin.Context) {
 	h.broadcastStatus(req.Path)
 	h.broadcastBranchStatus(req.Path)
 	h.broadcastRepoSyncNeeded(req.Path, gin.H{"history": true})
+	h.broadcastRepoSyncNeededScoped(req.Path, req.WorkspaceSessionID, req.GroupID, gin.H{"draft": true})
 
 	c.JSON(http.StatusOK, gin.H{
 		"ok": true, "hash": hash.String(),
@@ -985,6 +1066,7 @@ func (h *GitHandler) Amend(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	scopeKey := buildGitScopeKey(req.WorkspaceSessionID, req.GroupID, repoRoot)
 
 	author, email := h.getGitAuthor()
 	if req.Author != "" {
@@ -997,7 +1079,7 @@ func (h *GitHandler) Amend(c *gin.Context) {
 	filesToCommit := append([]string(nil), req.Files...)
 	patchesToCommit := append([]GitPatchPayload(nil), req.Patches...)
 	if len(filesToCommit) == 0 && len(patchesToCommit) == 0 {
-		filesToCommit, patchesToCommit, err = h.buildSelectedCommitPayload(repoRoot)
+		filesToCommit, patchesToCommit, err = h.buildSelectedCommitPayload(repoRoot, scopeKey)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
@@ -1015,11 +1097,12 @@ func (h *GitHandler) Amend(c *gin.Context) {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
-		h.selectionStore.resetRepo(repoRoot)
+		h.selectionStore.resetRepo(scopeKey)
 		bs := collectBranchStatus(repoRoot)
 		h.broadcastStatus(req.Path)
 		h.broadcastBranchStatus(req.Path)
 		h.broadcastRepoSyncNeeded(req.Path, gin.H{"history": true})
+		h.broadcastRepoSyncNeededScoped(req.Path, req.WorkspaceSessionID, req.GroupID, gin.H{"draft": true})
 		c.JSON(http.StatusOK, gin.H{"ok": true, "hash": hash, "branchStatus": bs})
 		return
 	}
@@ -1057,15 +1140,16 @@ func (h *GitHandler) Amend(c *gin.Context) {
 		return
 	}
 
-	h.selectionStore.resetRepo(repoRoot)
+	h.selectionStore.resetRepo(scopeKey)
 	repoRoot, _ = h.getRepoRoot(req.Path)
 	repo, _ = h.openRepo(req.Path)
-	files, summary := h.collectStructuredStatus(repoRoot)
+	files, summary := h.collectStructuredStatusWithScope(repoRoot, scopeKey)
 	commits := collectCommitLog(repo, 20)
 	bs := collectBranchStatus(repoRoot)
 	h.broadcastStatus(req.Path)
 	h.broadcastBranchStatus(req.Path)
 	h.broadcastRepoSyncNeeded(req.Path, gin.H{"history": true})
+	h.broadcastRepoSyncNeededScoped(req.Path, req.WorkspaceSessionID, req.GroupID, gin.H{"draft": true})
 
 	c.JSON(http.StatusOK, gin.H{
 		"ok": true, "status": gin.H{"files": files, "summary": summary}, "commits": commits, "branchStatus": bs,

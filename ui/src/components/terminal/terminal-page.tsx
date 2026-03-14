@@ -1,11 +1,11 @@
 import { Columns, Edit2, Plus, Rows, Terminal, X, XCircle } from "lucide-react";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { terminalApi } from "@/api/terminal";
 import { useDialog } from "@/components/common";
 import { usePageTopBar } from "@/hooks/use-page-top-bar";
 import { useTerminalClose, useTerminalCreate, useTerminalDelete, useTerminalRename } from "@/hooks/use-terminal";
 import { useTranslation } from "@/lib/i18n";
-import { useSessionStore } from "@/stores/session-store";
+import { syncTerminalWorkspaceState, useSessionStore } from "@/stores/session-store";
 import { useAppStore } from "@/stores";
 import { useFrameStore } from "@/stores/frame-store";
 import { type SplitDirection, type TerminalSession, useTerminalStore } from "@/stores/terminal-store";
@@ -27,12 +27,18 @@ const TerminalPage: React.FC<TerminalPageProps> = ({ groupId, cwd }) => {
   const t = useTranslation(locale);
   const currentSessionId = useSessionStore((s) => s.currentSessionId);
   const terminals = useTerminalStore((s) => s.terminalsByGroup[groupId] || EMPTY_TERMINALS);
+  const terminalsByGroup = useTerminalStore((s) => s.terminalsByGroup);
+  const activeIdByGroup = useTerminalStore((s) => s.activeIdByGroup);
+  const listManagerOpenByGroup = useTerminalStore((s) => s.listManagerOpenByGroup);
+  const terminalLayouts = useTerminalStore((s) => s.terminalLayouts);
+  const focusedIdByGroup = useTerminalStore((s) => s.focusedIdByGroup);
   const activeTerminalId = useTerminalStore((s) => s.activeIdByGroup[groupId] ?? null);
   const listManagerOpen = useTerminalStore((s) => s.listManagerOpenByGroup[groupId] ?? true);
   const activeLayout = useTerminalStore((s) => s.getActiveLayout(groupId));
   const focusedId = useTerminalStore((s) => s.focusedIdByGroup[groupId] ?? null);
   const hasSplit = useTerminalStore((s) => s.isSplit(groupId));
   const [showHistory, setShowHistory] = useState(false);
+  const syncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const setPageMenuItems = useFrameStore((s) => s.setPageMenuItems);
   const setActiveId = useTerminalStore((s) => s.setActiveId);
@@ -186,6 +192,39 @@ const TerminalPage: React.FC<TerminalPageProps> = ({ groupId, cwd }) => {
     },
     [groupId, setFocusedId],
   );
+
+  useEffect(() => {
+    if (!currentSessionId) {
+      return;
+    }
+    if (syncTimerRef.current) {
+      clearTimeout(syncTimerRef.current);
+    }
+    syncTimerRef.current = setTimeout(() => {
+      syncTimerRef.current = null;
+      void syncTerminalWorkspaceState(currentSessionId, {
+        terminalsByGroup,
+        activeTerminalByGroup: activeIdByGroup,
+        listManagerOpenByGroup,
+        terminalLayouts,
+        focusedIdByGroup,
+      });
+    }, 300);
+
+    return () => {
+      if (syncTimerRef.current) {
+        clearTimeout(syncTimerRef.current);
+        syncTimerRef.current = null;
+      }
+    };
+  }, [
+    currentSessionId,
+    terminalsByGroup,
+    activeIdByGroup,
+    listManagerOpenByGroup,
+    terminalLayouts,
+    focusedIdByGroup,
+  ]);
 
   useEffect(() => {
     if (showHistory || listManagerOpen || !focusedTerminal) {

@@ -257,6 +257,66 @@ func TestManager_List(t *testing.T) {
 	}
 }
 
+func TestManager_SyncWorkspaceMetadata(t *testing.T) {
+	db := setupTestDB(t)
+	manager := NewManager(db, &ManagerConfig{Shell: "/bin/sh"})
+
+	info1, err := manager.Create(CreateOptions{Name: "test1", Cwd: os.TempDir(), Cols: 80, Rows: 24})
+	if err != nil {
+		t.Fatalf("failed to create terminal: %v", err)
+	}
+	info2, err := manager.Create(CreateOptions{Name: "test2", Cwd: os.TempDir(), Cols: 80, Rows: 24})
+	if err != nil {
+		t.Fatalf("failed to create terminal: %v", err)
+	}
+	defer manager.Close(info1.ID)
+	defer manager.Close(info2.ID)
+
+	err = manager.SyncWorkspaceMetadata("session-1", []WorkspaceTerminalAssignment{
+		{ID: info1.ID, GroupID: "group-1", ParentID: ""},
+		{ID: info2.ID, GroupID: "group-1", ParentID: info1.ID},
+	})
+	if err != nil {
+		t.Fatalf("failed to sync workspace metadata: %v", err)
+	}
+
+	list, err := manager.List("session-1", "group-1")
+	if err != nil {
+		t.Fatalf("failed to list synced terminals: %v", err)
+	}
+	if len(list) != 2 {
+		t.Fatalf("expected 2 terminals, got %d", len(list))
+	}
+
+	var childFound bool
+	for _, item := range list {
+		if item.ID == info2.ID {
+			childFound = true
+			if item.ParentID != info1.ID {
+				t.Fatalf("expected parent %s, got %s", info1.ID, item.ParentID)
+			}
+		}
+	}
+	if !childFound {
+		t.Fatal("expected child terminal in synced list")
+	}
+
+	err = manager.SyncWorkspaceMetadata("session-1", []WorkspaceTerminalAssignment{
+		{ID: info1.ID, GroupID: "group-2", ParentID: ""},
+	})
+	if err != nil {
+		t.Fatalf("failed to resync workspace metadata: %v", err)
+	}
+
+	group1List, err := manager.List("session-1", "group-1")
+	if err != nil {
+		t.Fatalf("failed to list group-1 terminals: %v", err)
+	}
+	if len(group1List) != 0 {
+		t.Fatalf("expected 0 terminals in old group, got %d", len(group1List))
+	}
+}
+
 func TestManager_Delete(t *testing.T) {
 	db := setupTestDB(t)
 	manager := NewManager(db, &ManagerConfig{Shell: "/bin/sh"})

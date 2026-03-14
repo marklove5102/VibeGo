@@ -4,6 +4,7 @@ import {
   type BranchStatusInfo,
   type CommitFileInfo,
   type GitCommit,
+  type GitDraft,
   type GitDiff,
   type GitInteractiveDiff,
   type GitStructuredFile,
@@ -27,14 +28,16 @@ export interface GitSyncOptions {
   branchStatus?: boolean;
   stashes?: boolean;
   conflicts?: boolean;
+  draft?: boolean;
   silent?: boolean;
 }
 
 export interface GitState {
   currentPath: string | null;
+  workspaceSessionId: string | null;
+  scopeGroupId: string | null;
   isRepo: boolean | null;
   allFiles: GitFileNode[];
-  checkedFiles: Set<string>;
   workingDiffs: Record<string, GitDiff>;
   interactiveDiffs: Record<string, GitInteractiveDiff>;
   summary: string;
@@ -58,6 +61,7 @@ export interface GitState {
   error: string | null;
 
   setCurrentPath: (path: string | null) => void;
+  setScope: (workspaceSessionId: string | null) => void;
   setSummary: (s: string) => void;
   setDescription: (d: string) => void;
   setIsAmend: (v: boolean) => void;
@@ -77,6 +81,7 @@ export interface GitState {
   fetchBranchStatus: () => Promise<void>;
   fetchStashes: () => Promise<void>;
   fetchConflicts: () => Promise<void>;
+  fetchDraft: () => Promise<void>;
   syncRepo: (options?: GitSyncOptions) => Promise<void>;
 
   commitSelected: () => Promise<boolean>;
@@ -156,9 +161,6 @@ const statusFilesToNodes = (files?: GitStructuredFile[] | null): GitFileNode[] =
   return Array.from(map.values()).sort((a, b) => a.path.localeCompare(b.path));
 };
 
-const getCheckedFilesForNodes = (nodes: GitFileNode[]) =>
-  new Set(nodes.filter((node) => node.includedState !== "none").map((node) => node.path));
-
 const getDefaultCommitSummary = () => useSettingsStore.getState().get("gitDefaultCommitMessage");
 
 const getValidPathSet = (nodes: GitFileNode[]) => new Set(nodes.map((node) => node.path));
@@ -175,9 +177,10 @@ const pickInteractiveDiffs = (nodes: GitFileNode[], interactiveDiffs: Record<str
 
 const createInitialGitSnapshot = () => ({
   currentPath: null as string | null,
+  workspaceSessionId: null as string | null,
+  scopeGroupId: null as string | null,
   isRepo: null as boolean | null,
   allFiles: [] as GitFileNode[],
-  checkedFiles: new Set<string>(),
   workingDiffs: {} as Record<string, GitDiff>,
   interactiveDiffs: {} as Record<string, GitInteractiveDiff>,
   summary: getDefaultCommitSummary(),
@@ -201,17 +204,62 @@ const createInitialGitSnapshot = () => ({
   error: null as string | null,
 });
 
-const createGitState: StateCreator<GitState> = (set, get) => ({
+const createGitState =
+  (groupId?: string): StateCreator<GitState> =>
+  (set, get) => {
+    let draftSaveTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const getScopePayload = () => ({
+      workspace_session_id: get().workspaceSessionId || undefined,
+      group_id: get().scopeGroupId || undefined,
+    });
+
+    const scheduleDraftPersist = () => {
+      if (draftSaveTimer) {
+        clearTimeout(draftSaveTimer);
+      }
+      draftSaveTimer = setTimeout(() => {
+        draftSaveTimer = null;
+        const { currentPath, summary, description, isAmend } = get();
+        if (!currentPath) {
+          return;
+        }
+        void gitApi.setDraft(
+          currentPath,
+          {
+            summary,
+            description,
+            isAmend,
+          },
+          getScopePayload()
+        );
+      }, 250);
+    };
+
+    return ({
   ...createInitialGitSnapshot(),
+  scopeGroupId: groupId || null,
 
   setCurrentPath: (path) =>
-    set((state) => ({
+    set(() => ({
       currentPath: path,
-      summary: state.summary || getDefaultCommitSummary(),
+      summary: getDefaultCommitSummary(),
+      description: "",
+      isAmend: false,
     })),
-  setSummary: (summary) => set({ summary }),
-  setDescription: (description) => set({ description }),
-  setIsAmend: (isAmend) => set({ isAmend }),
+  setScope: (workspaceSessionId) => set({ workspaceSessionId }),
+  setSummary: (summary) => {
+    set({ summary });
+    scheduleDraftPersist();
+  },
+  setDescription: (description) => {
+    set({ description });
+    scheduleDraftPersist();
+  },
+  setIsAmend: (isAmend) => {
+    set({ isAmend });
+    scheduleDraftPersist();
+  },
   setActiveTab: (activeTab) => set({ activeTab }),
   setSelectedCommit: (selectedCommit) => set({ selectedCommit }),
 
@@ -229,11 +277,10 @@ const createGitState: StateCreator<GitState> = (set, get) => ({
     const action = file.includedState === "none" ? "include" : "exclude";
 
     try {
-      const res = await gitApi.applySelection(currentPath, path, "working", "file", action, "", [], []);
+      const res = await gitApi.applySelection(currentPath, path, "working", "file", action, "", [], [], getScopePayload());
       const nodes = statusFilesToNodes(res.status.files);
       set((state) => ({
         allFiles: nodes,
-        checkedFiles: getCheckedFilesForNodes(nodes),
         workingDiffs: pickWorkingDiffs(nodes, state.workingDiffs),
         interactiveDiffs: {
           ...pickInteractiveDiffs(nodes, state.interactiveDiffs),
@@ -255,15 +302,29 @@ const createGitState: StateCreator<GitState> = (set, get) => ({
     const action = allIncluded ? "exclude" : "include";
 
     try {
-      await Promise.all(
-        allFiles.map((file) => gitApi.applySelection(currentPath, file.path, "working", "file", action, "", [], []))
+      const res = await gitApi.applySelectionBatch(
+        currentPath,
+        "working",
+        action,
+        allFiles.map((file) => file.path),
+        getScopePayload()
       );
-      await get().fetchStatus();
+      const nodes = statusFilesToNodes(res.status.files);
+      set((state) => ({
+        allFiles: nodes,
+        workingDiffs: pickWorkingDiffs(nodes, state.workingDiffs),
+        interactiveDiffs: pickInteractiveDiffs(nodes, state.interactiveDiffs),
+      }));
     } catch (err) {
       set({ error: err instanceof Error ? err.message : "Failed to update selection" });
     }
   },
-  reset: () => set(createInitialGitSnapshot()),
+  reset: () =>
+    set(() => ({
+      ...createInitialGitSnapshot(),
+      workspaceSessionId: get().workspaceSessionId,
+      scopeGroupId: groupId || get().scopeGroupId,
+    })),
 
   checkRepo: async () => {
     const { currentPath } = get();
@@ -297,7 +358,6 @@ const createGitState: StateCreator<GitState> = (set, get) => ({
 
     set({
       allFiles: nodes,
-      checkedFiles: getCheckedFilesForNodes(nodes),
       workingDiffs: pickWorkingDiffs(nodes, workingDiffs),
       interactiveDiffs: pickInteractiveDiffs(nodes, interactiveDiffs),
     });
@@ -321,12 +381,11 @@ const createGitState: StateCreator<GitState> = (set, get) => ({
     set({ isLoading: true, error: null });
 
     try {
-      const res = await gitApi.status(currentPath);
+      const res = await gitApi.status(currentPath, getScopePayload());
       const nodes = statusFilesToNodes(res.files);
       const { workingDiffs, interactiveDiffs } = get();
       set({
         allFiles: nodes,
-        checkedFiles: getCheckedFilesForNodes(nodes),
         workingDiffs: pickWorkingDiffs(nodes, workingDiffs),
         interactiveDiffs: pickInteractiveDiffs(nodes, interactiveDiffs),
       });
@@ -440,6 +499,29 @@ const createGitState: StateCreator<GitState> = (set, get) => ({
     }
   },
 
+  fetchDraft: async () => {
+    const { currentPath } = get();
+    if (!currentPath) {
+      return;
+    }
+
+    try {
+      const draft = await gitApi.getDraft(currentPath, getScopePayload());
+      const nextSummary = draft.summary || getDefaultCommitSummary();
+      set({
+        summary: nextSummary,
+        description: draft.description || "",
+        isAmend: draft.isAmend || false,
+      });
+    } catch {
+      set({
+        summary: getDefaultCommitSummary(),
+        description: "",
+        isAmend: false,
+      });
+    }
+  },
+
   syncRepo: async (options = {}) => {
     const { currentPath, isRepo } = get();
     if (!currentPath || isRepo === false) {
@@ -453,7 +535,8 @@ const createGitState: StateCreator<GitState> = (set, get) => ({
       options.remotes !== undefined ||
       options.branchStatus !== undefined ||
       options.stashes !== undefined ||
-      options.conflicts !== undefined;
+      options.conflicts !== undefined ||
+      options.draft !== undefined;
 
     const shouldSyncStatus = options.status ?? !hasSelection;
     const shouldSyncHistory = options.history ?? !hasSelection;
@@ -462,21 +545,32 @@ const createGitState: StateCreator<GitState> = (set, get) => ({
     const shouldSyncBranchStatus = options.branchStatus ?? !hasSelection;
     const shouldSyncStashes = options.stashes ?? !hasSelection;
     const shouldSyncConflicts = options.conflicts ?? !hasSelection;
+    const shouldSyncDraft = options.draft ?? !hasSelection;
     const silent = options.silent ?? false;
 
     if (!silent) {
       set({ isLoading: true, error: null });
     }
 
-    const statusPromise = shouldSyncStatus ? gitApi.status(currentPath) : null;
+    const statusPromise = shouldSyncStatus ? gitApi.status(currentPath, getScopePayload()) : null;
     const logPromise = shouldSyncHistory ? gitApi.log(currentPath, Math.max(get().commits.length, 50)) : null;
     const branchesPromise = shouldSyncBranches ? gitApi.branches(currentPath) : null;
     const remotesPromise = shouldSyncRemotes ? gitApi.remotes(currentPath) : null;
     const branchStatusPromise = shouldSyncBranchStatus ? gitApi.branchStatus(currentPath) : null;
     const stashesPromise = shouldSyncStashes ? gitApi.stashList(currentPath) : null;
     const conflictsPromise = shouldSyncConflicts ? gitApi.conflicts(currentPath) : null;
+    const draftPromise = shouldSyncDraft ? gitApi.getDraft(currentPath, getScopePayload()) : null;
 
-    const [statusResult, logResult, branchesResult, remotesResult, branchStatusResult, stashesResult, conflictsResult] =
+    const [
+      statusResult,
+      logResult,
+      branchesResult,
+      remotesResult,
+      branchStatusResult,
+      stashesResult,
+      conflictsResult,
+      draftResult,
+    ] =
       await Promise.allSettled([
         statusPromise ?? Promise.resolve(null),
         logPromise ?? Promise.resolve(null),
@@ -485,6 +579,7 @@ const createGitState: StateCreator<GitState> = (set, get) => ({
         branchStatusPromise ?? Promise.resolve(null),
         stashesPromise ?? Promise.resolve(null),
         conflictsPromise ?? Promise.resolve(null),
+        draftPromise ?? Promise.resolve(null),
       ]);
 
     if (get().currentPath !== currentPath) {
@@ -500,7 +595,6 @@ const createGitState: StateCreator<GitState> = (set, get) => ({
       const nodes = statusFilesToNodes(statusResult.value.files);
       const { workingDiffs, interactiveDiffs } = get();
       stateUpdate.allFiles = nodes;
-      stateUpdate.checkedFiles = getCheckedFilesForNodes(nodes);
       stateUpdate.workingDiffs = pickWorkingDiffs(nodes, workingDiffs);
       stateUpdate.interactiveDiffs = pickInteractiveDiffs(nodes, interactiveDiffs);
     }
@@ -538,6 +632,13 @@ const createGitState: StateCreator<GitState> = (set, get) => ({
       stateUpdate.conflicts = conflictsResult.value.conflicts ?? [];
     }
 
+    if (shouldSyncDraft && draftResult.status === "fulfilled" && draftResult.value) {
+      const draft = draftResult.value as GitDraft;
+      stateUpdate.summary = draft.summary || getDefaultCommitSummary();
+      stateUpdate.description = draft.description || "";
+      stateUpdate.isAmend = draft.isAmend || false;
+    }
+
     if (Object.keys(stateUpdate).length > 0) {
       set(stateUpdate);
     }
@@ -555,6 +656,7 @@ const createGitState: StateCreator<GitState> = (set, get) => ({
         branchStatusResult,
         stashesResult,
         conflictsResult,
+        draftResult,
       ].find((result) => result.status === "rejected");
 
       if (firstRejected?.status === "rejected") {
@@ -568,22 +670,21 @@ const createGitState: StateCreator<GitState> = (set, get) => ({
   },
 
   commitSelected: async () => {
-    const { currentPath, checkedFiles, summary, description } = get();
-    if (!currentPath || !summary.trim() || checkedFiles.size === 0) {
+    const { currentPath, allFiles, summary, description } = get();
+    if (!currentPath || !summary.trim() || !allFiles.some((file) => file.includedState !== "none")) {
       return false;
     }
 
     set({ isLoading: true, error: null });
 
     try {
-      const res = await gitApi.commitSelected(currentPath, [], [], summary, description);
+      const res = await gitApi.commitSelected(currentPath, [], [], summary, description, getScopePayload());
       const nextSummary = getDefaultCommitSummary();
 
       if (res.status?.files) {
         const nodes = statusFilesToNodes(res.status.files);
         set({
           allFiles: nodes,
-          checkedFiles: getCheckedFilesForNodes(nodes),
           workingDiffs: {},
           interactiveDiffs: {},
           commits: res.commits ?? get().commits,
@@ -595,7 +696,6 @@ const createGitState: StateCreator<GitState> = (set, get) => ({
         });
       } else {
         set({
-          checkedFiles: new Set<string>(),
           workingDiffs: {},
           interactiveDiffs: {},
           selectedCommit: null,
@@ -605,7 +705,7 @@ const createGitState: StateCreator<GitState> = (set, get) => ({
           isAmend: false,
         });
         void Promise.allSettled([
-          gitApi.status(currentPath),
+          gitApi.status(currentPath, getScopePayload()),
           gitApi.log(currentPath, 50),
           gitApi.conflicts(currentPath),
           res.branchStatus ? Promise.resolve(res.branchStatus) : gitApi.branchStatus(currentPath),
@@ -615,7 +715,6 @@ const createGitState: StateCreator<GitState> = (set, get) => ({
           if (statusResult.status === "fulfilled") {
             const nodes = statusFilesToNodes(statusResult.value.files);
             stateUpdate.allFiles = nodes;
-            stateUpdate.checkedFiles = getCheckedFilesForNodes(nodes);
             stateUpdate.workingDiffs = {};
             stateUpdate.interactiveDiffs = {};
           }
@@ -651,22 +750,21 @@ const createGitState: StateCreator<GitState> = (set, get) => ({
   },
 
   amendCommit: async () => {
-    const { currentPath, checkedFiles, summary, description } = get();
-    if (!currentPath || !summary.trim() || checkedFiles.size === 0) {
+    const { currentPath, allFiles, summary, description } = get();
+    if (!currentPath || !summary.trim() || !allFiles.some((file) => file.includedState !== "none")) {
       return false;
     }
 
     set({ isLoading: true, error: null });
 
     try {
-      const res = await gitApi.amend(currentPath, [], [], summary, description);
+      const res = await gitApi.amend(currentPath, [], [], summary, description, getScopePayload());
       const nextSummary = getDefaultCommitSummary();
 
       if (res.status?.files) {
         const nodes = statusFilesToNodes(res.status.files);
         set({
           allFiles: nodes,
-          checkedFiles: getCheckedFilesForNodes(nodes),
           workingDiffs: {},
           interactiveDiffs: {},
           commits: res.commits ?? get().commits,
@@ -678,7 +776,6 @@ const createGitState: StateCreator<GitState> = (set, get) => ({
         });
       } else {
         set({
-          checkedFiles: new Set<string>(),
           workingDiffs: {},
           interactiveDiffs: {},
           selectedCommit: null,
@@ -688,7 +785,7 @@ const createGitState: StateCreator<GitState> = (set, get) => ({
           isAmend: false,
         });
         void Promise.allSettled([
-          gitApi.status(currentPath),
+          gitApi.status(currentPath, getScopePayload()),
           gitApi.log(currentPath, 50),
           gitApi.conflicts(currentPath),
           res.branchStatus ? Promise.resolve(res.branchStatus) : gitApi.branchStatus(currentPath),
@@ -698,7 +795,6 @@ const createGitState: StateCreator<GitState> = (set, get) => ({
           if (statusResult.status === "fulfilled") {
             const nodes = statusFilesToNodes(statusResult.value.files);
             stateUpdate.allFiles = nodes;
-            stateUpdate.checkedFiles = getCheckedFilesForNodes(nodes);
             stateUpdate.workingDiffs = {};
             stateUpdate.interactiveDiffs = {};
           }
@@ -746,7 +842,6 @@ const createGitState: StateCreator<GitState> = (set, get) => ({
       const nodes = statusFilesToNodes(res.status.files);
       set({
         allFiles: nodes,
-        checkedFiles: getCheckedFilesForNodes(nodes),
         workingDiffs: {},
         interactiveDiffs: {},
         commits: res.commits,
@@ -775,7 +870,6 @@ const createGitState: StateCreator<GitState> = (set, get) => ({
       const nodes = statusFilesToNodes(res.status.files);
       set({
         allFiles: nodes,
-        checkedFiles: getCheckedFilesForNodes(nodes),
         workingDiffs: {},
         interactiveDiffs: {},
         currentBranch: res.branch,
@@ -869,7 +963,6 @@ const createGitState: StateCreator<GitState> = (set, get) => ({
       const nodes = statusFilesToNodes(res.status.files);
       set({
         allFiles: nodes,
-        checkedFiles: getCheckedFilesForNodes(nodes),
         workingDiffs: {},
         interactiveDiffs: {},
         commits: res.commits,
@@ -926,7 +1019,6 @@ const createGitState: StateCreator<GitState> = (set, get) => ({
         const nodes = statusFilesToNodes(res.status.files);
         set({
           allFiles: nodes,
-          checkedFiles: getCheckedFilesForNodes(nodes),
           workingDiffs: {},
           interactiveDiffs: {},
         });
@@ -955,7 +1047,6 @@ const createGitState: StateCreator<GitState> = (set, get) => ({
         const nodes = statusFilesToNodes(res.status.files);
         set({
           allFiles: nodes,
-          checkedFiles: getCheckedFilesForNodes(nodes),
           workingDiffs: {},
           interactiveDiffs: {},
         });
@@ -997,11 +1088,20 @@ const createGitState: StateCreator<GitState> = (set, get) => ({
     }
 
     try {
-      const res = await gitApi.applySelection(currentPath, path, "working", "file", "discard", "", [], []);
+      const res = await gitApi.applySelection(
+        currentPath,
+        path,
+        "working",
+        "file",
+        "discard",
+        "",
+        [],
+        [],
+        getScopePayload()
+      );
       const nodes = statusFilesToNodes(res.status.files);
       set((state) => ({
         allFiles: nodes,
-        checkedFiles: getCheckedFilesForNodes(nodes),
         workingDiffs: pickWorkingDiffs(nodes, state.workingDiffs),
         interactiveDiffs: {
           ...pickInteractiveDiffs(nodes, state.interactiveDiffs),
@@ -1072,7 +1172,7 @@ const createGitState: StateCreator<GitState> = (set, get) => ({
     }
 
     try {
-      const diff = await gitApi.fileDiff(currentPath, filePath, mode);
+      const diff = await gitApi.fileDiff(currentPath, filePath, mode, getScopePayload());
       set((state) => ({
         interactiveDiffs: {
           ...state.interactiveDiffs,
@@ -1093,11 +1193,20 @@ const createGitState: StateCreator<GitState> = (set, get) => ({
     }
 
     try {
-      const res = await gitApi.applySelection(currentPath, filePath, mode, target, action, patchHash, lineIds, hunkIds);
+      const res = await gitApi.applySelection(
+        currentPath,
+        filePath,
+        mode,
+        target,
+        action,
+        patchHash,
+        lineIds,
+        hunkIds,
+        getScopePayload()
+      );
       const nodes = statusFilesToNodes(res.status.files);
       set((state) => ({
         allFiles: nodes,
-        checkedFiles: getCheckedFilesForNodes(nodes),
         workingDiffs: pickWorkingDiffs(nodes, state.workingDiffs),
         interactiveDiffs: {
           ...pickInteractiveDiffs(nodes, state.interactiveDiffs),
@@ -1160,9 +1269,10 @@ const createGitState: StateCreator<GitState> = (set, get) => ({
       set({ isLoading: false });
     }
   },
-});
+    });
+  };
 
-export const createGitStore = () => createStore<GitState>(createGitState);
+export const createGitStore = (groupId?: string) => createStore<GitState>(createGitState(groupId));
 
 export type GitStoreApi = ReturnType<typeof createGitStore>;
 
@@ -1176,7 +1286,7 @@ export function getOrCreateGitStore(groupId: string): GitStoreApi {
   if (existing) {
     return existing;
   }
-  const store = createGitStore();
+  const store = createGitStore(groupId);
   gitStores.set(storeId, store);
   return store;
 }

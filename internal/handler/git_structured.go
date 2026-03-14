@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"net/http"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"sort"
@@ -187,6 +188,10 @@ func applySelectionStateToDiff(diff *InteractiveDiff, state fileSelectionState) 
 }
 
 func (h *GitHandler) collectStructuredStatus(repoRoot string) ([]StructuredFile, StatusSummary) {
+	return h.collectStructuredStatusWithScope(repoRoot, repoRoot)
+}
+
+func (h *GitHandler) collectStructuredStatusWithScope(repoRoot string, scopeKey string) ([]StructuredFile, StatusSummary) {
 	cmd := exec.Command("git", "status", "--porcelain=v1", "-z")
 	cmd.Dir = repoRoot
 	output, err := cmd.Output()
@@ -253,13 +258,13 @@ func (h *GitHandler) collectStructuredStatus(repoRoot string) ([]StructuredFile,
 
 		includedState := "all"
 		if h != nil && h.selectionStore != nil {
-			if selectionState, ok := h.selectionStore.get(repoRoot, path); ok {
+			if selectionState, ok := h.selectionStore.get(scopeKey, path); ok {
 				if selectionState.IncludedState == "partial" {
 					diff, diffErr := getGitDiff(repoRoot, path, "working")
 					if diffErr != nil {
-						h.selectionStore.delete(repoRoot, path)
+						h.selectionStore.delete(scopeKey, path)
 					} else {
-						includedState = resolveSelectionState(h.selectionStore, repoRoot, path, diff).IncludedState
+						includedState = resolveSelectionState(h.selectionStore, scopeKey, path, diff).IncludedState
 					}
 				} else if selectionState.IncludedState == "none" {
 					includedState = "none"
@@ -293,7 +298,7 @@ func (h *GitHandler) collectStructuredStatus(repoRoot string) ([]StructuredFile,
 	}
 
 	if h != nil && h.selectionStore != nil {
-		h.selectionStore.pruneRepo(repoRoot, validPaths)
+		h.selectionStore.pruneRepo(scopeKey, validPaths)
 	}
 
 	sort.Slice(files, func(i, j int) bool { return files[i].Path < files[j].Path })
@@ -777,8 +782,7 @@ func getGitDiff(repoRoot, filePath, mode string) (*InteractiveDiff, error) {
 		oldOutput, _ = oldCmd.Output()
 
 		absPath := filepath.Join(repoRoot, filePath)
-		fileCmd := exec.Command("cat", absPath)
-		if out, fileErr := fileCmd.Output(); fileErr == nil {
+		if out, fileErr := os.ReadFile(absPath); fileErr == nil {
 			newOutput = out
 		}
 	}
@@ -800,6 +804,7 @@ type FileDiffRequest struct {
 	Path     string `json:"path" binding:"required"`
 	FilePath string `json:"filePath" binding:"required"`
 	Mode     string `json:"mode"`
+	GitScopeRequest
 }
 
 func (h *GitHandler) FileDiff(c *gin.Context) {
@@ -826,6 +831,7 @@ func (h *GitHandler) FileDiff(c *gin.Context) {
 	}
 
 	repoRoot := w.Filesystem.Root()
+	scopeKey := buildGitScopeKey(req.WorkspaceSessionID, req.GroupID, repoRoot)
 	diff, err := getGitDiff(repoRoot, req.FilePath, req.Mode)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -833,7 +839,7 @@ func (h *GitHandler) FileDiff(c *gin.Context) {
 	}
 
 	if req.Mode == "working" {
-		selectionState := resolveSelectionState(h.selectionStore, repoRoot, req.FilePath, diff)
+		selectionState := resolveSelectionState(h.selectionStore, scopeKey, req.FilePath, diff)
 		applySelectionStateToDiff(diff, selectionState)
 	}
 
@@ -849,6 +855,15 @@ type ApplySelectionRequest struct {
 	PatchHash string   `json:"patchHash"`
 	LineIds   []string `json:"lineIds"`
 	HunkIds   []string `json:"hunkIds"`
+	GitScopeRequest
+}
+
+type ApplySelectionBatchRequest struct {
+	Path      string   `json:"path" binding:"required"`
+	Mode      string   `json:"mode" binding:"required"`
+	Action    string   `json:"action" binding:"required"`
+	FilePaths []string `json:"filePaths" binding:"required"`
+	GitScopeRequest
 }
 
 func (h *GitHandler) ApplySelection(c *gin.Context) {
@@ -870,6 +885,7 @@ func (h *GitHandler) ApplySelection(c *gin.Context) {
 		return
 	}
 	repoRoot := w.Filesystem.Root()
+	scopeKey := buildGitScopeKey(req.WorkspaceSessionID, req.GroupID, repoRoot)
 
 	if req.Mode == "staged" {
 		switch req.Action {
@@ -961,7 +977,7 @@ func (h *GitHandler) ApplySelection(c *gin.Context) {
 			return
 		}
 
-		files, summary := h.collectStructuredStatus(repoRoot)
+		files, summary := h.collectStructuredStatusWithScope(repoRoot, scopeKey)
 		nextDiff, _ := getGitDiff(repoRoot, req.FilePath, req.Mode)
 		result := gin.H{"ok": true, "status": gin.H{"files": files, "summary": summary}}
 		if nextDiff != nil && len(nextDiff.Hunks) > 0 {
@@ -984,12 +1000,12 @@ func (h *GitHandler) ApplySelection(c *gin.Context) {
 	}
 
 	targetLineIDs := getTargetLineIDs(diff, req.Target, req.LineIds, req.HunkIds)
-	currentState := resolveSelectionState(h.selectionStore, repoRoot, req.FilePath, diff)
+	currentState := resolveSelectionState(h.selectionStore, scopeKey, req.FilePath, diff)
 
 	switch req.Action {
 	case "include", "exclude":
 		nextState := buildNextSelectionState(currentState, diff, req.Action, targetLineIDs)
-		persistSelectionState(h.selectionStore, repoRoot, req.FilePath, nextState)
+		persistSelectionState(h.selectionStore, scopeKey, req.FilePath, nextState)
 	case "discard":
 		if req.Target == "file" {
 			cmd := exec.Command("git", "checkout", "--", req.FilePath)
@@ -998,7 +1014,7 @@ func (h *GitHandler) ApplySelection(c *gin.Context) {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": gitCommandError(cmdErr, out).Error()})
 				return
 			}
-			h.selectionStore.delete(repoRoot, req.FilePath)
+			h.selectionStore.delete(scopeKey, req.FilePath)
 			break
 		}
 		patch := buildSelectionPatch(diff, targetLineIDs)
@@ -1015,10 +1031,10 @@ func (h *GitHandler) ApplySelection(c *gin.Context) {
 		return
 	}
 
-	files, summary := h.collectStructuredStatus(repoRoot)
+	files, summary := h.collectStructuredStatusWithScope(repoRoot, scopeKey)
 	diff, _ = getGitDiff(repoRoot, req.FilePath, "working")
 	if diff != nil {
-		selectionState := resolveSelectionState(h.selectionStore, repoRoot, req.FilePath, diff)
+		selectionState := resolveSelectionState(h.selectionStore, scopeKey, req.FilePath, diff)
 		applySelectionStateToDiff(diff, selectionState)
 	}
 
@@ -1026,8 +1042,57 @@ func (h *GitHandler) ApplySelection(c *gin.Context) {
 	if diff != nil && len(diff.Hunks) > 0 {
 		result["diff"] = diff
 	}
-	h.broadcastStatus(req.Path)
+	h.broadcastStatusScoped(req.Path, req.WorkspaceSessionID, req.GroupID)
+	h.broadcastRepoSyncNeededScoped(req.Path, req.WorkspaceSessionID, req.GroupID, gin.H{"status": true, "draft": true})
 	c.JSON(http.StatusOK, result)
+}
+
+func (h *GitHandler) ApplySelectionBatch(c *gin.Context) {
+	var req ApplySelectionBatchRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if req.Mode != "working" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "only working mode batch selection is supported"})
+		return
+	}
+	if req.Action != "include" && req.Action != "exclude" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid action"})
+		return
+	}
+
+	repo, err := h.openRepo(req.Path)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	w, err := repo.Worktree()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	repoRoot := w.Filesystem.Root()
+	scopeKey := buildGitScopeKey(req.WorkspaceSessionID, req.GroupID, repoRoot)
+
+	for _, filePath := range req.FilePaths {
+		diff, diffErr := getGitDiff(repoRoot, filePath, "working")
+		if diffErr != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": diffErr.Error()})
+			return
+		}
+		currentState := resolveSelectionState(h.selectionStore, scopeKey, filePath, diff)
+		nextState := buildNextSelectionState(currentState, diff, req.Action, getSelectableLineIDs(diff))
+		persistSelectionState(h.selectionStore, scopeKey, filePath, nextState)
+	}
+
+	files, summary := h.collectStructuredStatusWithScope(repoRoot, scopeKey)
+	h.broadcastStatusScoped(req.Path, req.WorkspaceSessionID, req.GroupID)
+	h.broadcastRepoSyncNeededScoped(req.Path, req.WorkspaceSessionID, req.GroupID, gin.H{"status": true, "draft": true})
+	c.JSON(http.StatusOK, gin.H{"ok": true, "status": gin.H{"files": files, "summary": summary}})
 }
 
 type StashFilesRequest struct {

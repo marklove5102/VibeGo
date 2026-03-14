@@ -17,10 +17,12 @@ type GitWSEvent struct {
 }
 
 type gitWSClient struct {
-	conn *websocket.Conn
-	path string
-	done chan struct{}
-	mu   sync.Mutex
+	conn               *websocket.Conn
+	path               string
+	workspaceSessionID string
+	groupID            string
+	done               chan struct{}
+	mu                 sync.Mutex
 }
 
 type GitWSHandler struct {
@@ -58,6 +60,8 @@ func (h *GitWSHandler) HandleWS(c *gin.Context) {
 	}
 
 	client := &gitWSClient{conn: conn, path: path, done: make(chan struct{})}
+	client.workspaceSessionID = c.Query("workspace_session_id")
+	client.groupID = c.Query("group_id")
 	h.mu.Lock()
 	h.clients[client] = true
 	h.mu.Unlock()
@@ -130,7 +134,9 @@ func (h *GitWSHandler) pollLoop(client *gitWSClient) {
 				continue
 			}
 
-			files, summary := h.gitHandler.collectStructuredStatus(w.Filesystem.Root())
+			repoRoot := w.Filesystem.Root()
+			scopeKey := buildGitScopeKey(client.workspaceSessionID, client.groupID, repoRoot)
+			files, summary := h.gitHandler.collectStructuredStatusWithScope(repoRoot, scopeKey)
 			payload := gin.H{"files": files, "summary": summary}
 			data, _ := json.Marshal(payload)
 			s := string(data)
@@ -139,7 +145,7 @@ func (h *GitWSHandler) pollLoop(client *gitWSClient) {
 				h.sendEvent(client, GitWSEvent{Type: "file_changed", Data: payload})
 			}
 
-			repoRoot, err := h.gitHandler.getRepoRoot(client.path)
+			repoRoot, err = h.gitHandler.getRepoRoot(client.path)
 			if err != nil {
 				continue
 			}
@@ -214,5 +220,33 @@ func (h *GitWSHandler) Broadcast(path string, event GitWSEvent) {
 		if client.path == path {
 			h.sendEvent(client, event)
 		}
+	}
+}
+
+func (h *GitWSHandler) BroadcastScoped(path string, workspaceSessionID string, groupID string, event GitWSEvent) {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	for client := range h.clients {
+		if client.path != path {
+			continue
+		}
+		if workspaceSessionID != "" && client.workspaceSessionID != workspaceSessionID {
+			continue
+		}
+		if groupID != "" && client.groupID != groupID {
+			continue
+		}
+		h.sendEvent(client, event)
+	}
+}
+
+func (h *GitWSHandler) BroadcastStatusByPath(path string, build func(workspaceSessionID string, groupID string) GitWSEvent) {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	for client := range h.clients {
+		if client.path != path {
+			continue
+		}
+		h.sendEvent(client, build(client.workspaceSessionID, client.groupID))
 	}
 }
