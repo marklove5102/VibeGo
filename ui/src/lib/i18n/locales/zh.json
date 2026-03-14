@@ -293,12 +293,6 @@
       "label": "默认提交信息",
       "description": "打开 Git 页面或提交完成后自动填入的提交标题"
     },
-    "gitCommitTimeMode": {
-      "label": "提交时间模式",
-      "description": "提交时使用客户端当前时间，还是基于上一个提交时间递增",
-      "optionClient": "客户端时间",
-      "optionIncrement": "上次提交递增"
-    },
     "option": {
       "light": "浅色",
       "dark": "深色",

@@ -144,18 +144,6 @@ export const SETTINGS_SCHEMA: SettingSchema[] = [
     descriptionKey: "settings.gitDefaultCommitMessage.description",
     defaultValue: "",
   },
-  {
-    key: "gitCommitTimeMode",
-    type: "select",
-    category: "git",
-    labelKey: "settings.gitCommitTimeMode.label",
-    descriptionKey: "settings.gitCommitTimeMode.description",
-    defaultValue: "client",
-    options: [
-      { value: "client", label: "settings.gitCommitTimeMode.optionClient" },
-      { value: "increment", label: "settings.gitCommitTimeMode.optionIncrement" },
-    ],
-  },
 ];
 
 export const SETTING_CATEGORIES = [
