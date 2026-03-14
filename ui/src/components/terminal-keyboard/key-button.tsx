@@ -218,6 +218,14 @@ const KeyButton: React.FC<KeyButtonProps> = ({ keyDef, modState, shiftActive, on
     return keyDef.label
   })()
 
+  const renderSwipePreview = (content: React.ReactNode, compact = false) => (
+    <div className="tk-swipe-preview">
+      <span className={`tk-swipe-preview__content${compact ? ' tk-swipe-preview__content--compact' : ''}`}>
+        {content}
+      </span>
+    </div>
+  )
+
   return (
     <div
       className={classes}
@@ -244,10 +252,10 @@ const KeyButton: React.FC<KeyButtonProps> = ({ keyDef, modState, shiftActive, on
       })}
       <span className={`tk-label${labelSmall ? ' tk-label--small' : ''}`}>{displayLabel}</span>
       {swipeSubVal && pressed && (
-        <div className="tk-swipe-preview">{DISPLAY_LABELS[swipeSubVal] || swipeSubVal}</div>
+        renderSwipePreview(DISPLAY_LABELS[swipeSubVal] || swipeSubVal, swipeSubVal.length > 1)
       )}
       {sliding && (
-        <div className="tk-swipe-preview">⇔</div>
+        renderSwipePreview('⇔')
       )}
     </div>
   )

@@ -47,7 +47,7 @@ export const TERMINAL_QWERTY: LayoutDef = {
       keys: [
         { id: '123', label: '123', value: '123', type: 'action', width: 1.5 },
         { id: 'emoji', label: '😀', value: 'emoji', type: 'action', width: 1 },
-        { id: 'comma', label: ',', value: ',', type: 'char', width: 1, sub: { nw: '°' } },
+        { id: 'comma', label: '，', value: ',', type: 'char', width: 1, sub: { nw: '。' } },
         { id: 'space', label: ' ', value: ' ', type: 'char', width: 3.5, slider: 'horizontal' },
         { id: 'lang', label: '中/英', value: 'lang', type: 'action', width: 1 },
         { id: 'enter', label: '发送', value: 'Enter', type: 'action', width: 2 },

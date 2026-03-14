@@ -19,15 +19,17 @@
   --tk-font-main: 17px;
   --tk-font-main-small: 13px;
   --tk-font-sub: 10px;
-  --tk-font-family: var(--font-mono, -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Helvetica, Arial, sans-serif);
+  --tk-side-pad: 4px;
+  --tk-font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'PingFang SC', 'Helvetica Neue', Helvetica, Arial, sans-serif;
   --tk-swipe-preview-bg: color-mix(in srgb, var(--ide-accent) 20%, transparent);
+  --tk-unit: calc((100% - var(--tk-side-pad) * 2 - var(--tk-gap-x) * 9) / 10);
 }
 
 .tk-keyboard {
   display: flex;
   flex-direction: column;
   gap: var(--tk-gap-y);
-  padding: 8px 4px 8px;
+  padding: 8px var(--tk-side-pad) 8px;
   background: var(--tk-bg);
   font-family: var(--tk-font-family);
   user-select: none;
@@ -41,7 +43,6 @@
   display: flex;
   gap: var(--tk-gap-x);
   justify-content: center;
-  padding: 0 2px;
 }
 
 .tk-key {
@@ -50,7 +51,8 @@
   grid-template: 1fr 1.4fr 1fr / 1fr 1.4fr 1fr;
   align-items: center;
   justify-items: center;
-  flex: var(--key-flex, 1);
+  flex: none;
+  width: calc(var(--tk-unit) * var(--key-flex, 1) + var(--tk-gap-x) * (var(--key-flex, 1) - 1));
   height: var(--tk-row-height);
   background: var(--tk-key-bg);
   border: none;
@@ -143,24 +145,37 @@
   z-index: 50;
   display: grid;
   grid-template-rows: 55% 45%;
-  align-items: center;
   justify-items: center;
-  font-size: 32px;
   color: var(--tk-text);
   filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.2));
 }
 
-.tk-swipe-preview::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 160%;
-  height: 55%;
-  background: var(--tk-key-bg);
+.tk-swipe-preview__content {
+  grid-row: 1;
+  align-self: stretch;
+  justify-self: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: max-content;
+  min-width: calc(100% + 12px);
+  max-width: min(140px, calc(100vw - 24px));
+  padding: 0 12px;
+  box-sizing: border-box;
   border-radius: 12px;
-  z-index: -1;
+  background: var(--tk-key-bg);
+  font-size: 32px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.tk-swipe-preview__content--compact {
+  font-size: 28px;
+}
+
+.tk-swipe-preview__content svg {
+  width: 26px;
+  height: 26px;
 }
 
 .tk-swipe-preview::after {
