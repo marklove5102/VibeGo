@@ -95,13 +95,18 @@ func (h *GitWSHandler) readPump(client *gitWSClient) {
 }
 
 func (h *GitWSHandler) pollLoop(client *gitWSClient) {
-	ticker := time.NewTicker(3 * time.Second)
+	ticker := time.NewTicker(2 * time.Second)
 	pingTicker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
 	defer pingTicker.Stop()
 
 	var lastStatusJSON string
 	var lastBranchJSON string
+	var lastHeadHash string
+	var lastBranchesJSON string
+	var lastRemotesJSON string
+	var lastStashesJSON string
+	var lastConflictsJSON string
 
 	for {
 		select {
@@ -120,12 +125,18 @@ func (h *GitWSHandler) pollLoop(client *gitWSClient) {
 				continue
 			}
 
-			files := collectFileStatus(repo)
-			data, _ := json.Marshal(files)
+			w, err := repo.Worktree()
+			if err != nil {
+				continue
+			}
+
+			files, summary := h.gitHandler.collectStructuredStatus(w.Filesystem.Root())
+			payload := gin.H{"files": files, "summary": summary}
+			data, _ := json.Marshal(payload)
 			s := string(data)
 			if s != lastStatusJSON {
 				lastStatusJSON = s
-				h.sendEvent(client, GitWSEvent{Type: "file_changed", Data: gin.H{"files": files}})
+				h.sendEvent(client, GitWSEvent{Type: "file_changed", Data: payload})
 			}
 
 			repoRoot, err := h.gitHandler.getRepoRoot(client.path)
@@ -138,6 +149,50 @@ func (h *GitWSHandler) pollLoop(client *gitWSClient) {
 			if bStr != lastBranchJSON {
 				lastBranchJSON = bStr
 				h.sendEvent(client, GitWSEvent{Type: "remote_updated", Data: bs})
+			}
+
+			syncData := gin.H{}
+
+			headHash := collectHeadHash(repo)
+			if headHash != lastHeadHash {
+				lastHeadHash = headHash
+				syncData["history"] = true
+			}
+
+			branches := collectBranchesSnapshot(repo)
+			branchesData, _ := json.Marshal(branches)
+			branchesStr := string(branchesData)
+			if branchesStr != lastBranchesJSON {
+				lastBranchesJSON = branchesStr
+				syncData["branches"] = true
+			}
+
+			remotes := collectRemoteInfos(repo)
+			remotesData, _ := json.Marshal(remotes)
+			remotesStr := string(remotesData)
+			if remotesStr != lastRemotesJSON {
+				lastRemotesJSON = remotesStr
+				syncData["remotes"] = true
+			}
+
+			stashes := collectStashEntries(repoRoot)
+			stashesData, _ := json.Marshal(stashes)
+			stashesStr := string(stashesData)
+			if stashesStr != lastStashesJSON {
+				lastStashesJSON = stashesStr
+				syncData["stashes"] = true
+			}
+
+			conflicts := collectConflictFiles(repo)
+			conflictsData, _ := json.Marshal(conflicts)
+			conflictsStr := string(conflictsData)
+			if conflictsStr != lastConflictsJSON {
+				lastConflictsJSON = conflictsStr
+				syncData["conflicts"] = true
+			}
+
+			if len(syncData) > 0 {
+				h.sendEvent(client, GitWSEvent{Type: "repo_sync_needed", Data: syncData})
 			}
 		}
 	}

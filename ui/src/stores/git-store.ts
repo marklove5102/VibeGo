@@ -5,21 +5,33 @@ import {
   type CommitFileInfo,
   type GitCommit,
   type GitDiff,
+  type GitInteractiveDiff,
   type GitStructuredFile,
   gitApi,
   type StashEntry,
 } from "@/api/git";
-import { buildPatchFromSelection } from "@/lib/git-diff";
 import { useSettingsStore } from "@/lib/settings";
 
 export interface GitFileNode {
   path: string;
   name: string;
   status: "modified" | "added" | "deleted" | "renamed" | "copied" | "untracked";
+  includedState: "none" | "partial" | "all";
 }
 
 export interface GitPartialSelection {
   selectedRowIds: string[];
+}
+
+export interface GitSyncOptions {
+  status?: boolean;
+  history?: boolean;
+  branches?: boolean;
+  remotes?: boolean;
+  branchStatus?: boolean;
+  stashes?: boolean;
+  conflicts?: boolean;
+  silent?: boolean;
 }
 
 export interface GitState {
@@ -29,6 +41,7 @@ export interface GitState {
   checkedFiles: Set<string>;
   partialSelections: Record<string, GitPartialSelection>;
   workingDiffs: Record<string, GitDiff>;
+  interactiveDiffs: Record<string, GitInteractiveDiff>;
   summary: string;
   description: string;
   isAmend: boolean;
@@ -55,8 +68,8 @@ export interface GitState {
   setIsAmend: (v: boolean) => void;
   setActiveTab: (tab: "changes" | "history") => void;
   setSelectedCommit: (c: GitCommit | null) => void;
-  toggleFile: (path: string) => void;
-  toggleAllFiles: () => void;
+  toggleFile: (path: string) => Promise<void>;
+  toggleAllFiles: () => Promise<void>;
   setPartialSelection: (path: string, selectedRowIds: string[], selectableRowIds: string[]) => void;
   reset: () => void;
 
@@ -70,6 +83,7 @@ export interface GitState {
   fetchBranchStatus: () => Promise<void>;
   fetchStashes: () => Promise<void>;
   fetchConflicts: () => Promise<void>;
+  syncRepo: (options?: GitSyncOptions) => Promise<void>;
 
   commitSelected: () => Promise<boolean>;
   amendCommit: () => Promise<boolean>;
@@ -86,6 +100,16 @@ export interface GitState {
   discardFile: (path: string) => Promise<void>;
   resolveConflict: (filePath: string, content: string) => Promise<boolean>;
   getDiff: (filePath: string) => Promise<GitDiff | null>;
+  getInteractiveDiff: (filePath: string, mode?: "working" | "staged") => Promise<GitInteractiveDiff | null>;
+  applySelection: (
+    filePath: string,
+    mode: "working" | "staged",
+    target: "line" | "hunk" | "file",
+    action: "include" | "exclude" | "discard",
+    patchHash: string,
+    lineIds: string[],
+    hunkIds: string[]
+  ) => Promise<GitInteractiveDiff | null>;
   getCommitFiles: (commitHash: string) => Promise<CommitFileInfo[]>;
   getCommitDiff: (commitHash: string, filePath: string) => Promise<GitDiff | null>;
   addPatch: (filePath: string, patch: string) => Promise<boolean>;
@@ -131,13 +155,15 @@ const statusFilesToNodes = (files?: GitStructuredFile[] | null): GitFileNode[] =
         path: file.path,
         name: file.path.split("/").pop() || file.path,
         status: mapStatus(file.changeType || file.worktreeStatus || file.indexStatus),
+        includedState: file.includedState ?? "all",
       });
     }
   }
   return Array.from(map.values()).sort((a, b) => a.path.localeCompare(b.path));
 };
 
-const getCheckedFilesForNodes = (nodes: GitFileNode[]) => new Set(nodes.map((node) => node.path));
+const getCheckedFilesForNodes = (nodes: GitFileNode[]) =>
+  new Set(nodes.filter((node) => node.includedState !== "none").map((node) => node.path));
 
 const getDefaultCommitSummary = () => useSettingsStore.getState().get("gitDefaultCommitMessage");
 
@@ -148,43 +174,9 @@ const pickWorkingDiffs = (nodes: GitFileNode[], workingDiffs: Record<string, Git
   return Object.fromEntries(Object.entries(workingDiffs).filter(([path]) => validPaths.has(path)));
 };
 
-const pickPartialSelections = (
-  nodes: GitFileNode[],
-  checkedFiles: Set<string>,
-  partialSelections: Record<string, GitPartialSelection>
-) => {
+const pickInteractiveDiffs = (nodes: GitFileNode[], interactiveDiffs: Record<string, GitInteractiveDiff>) => {
   const validPaths = getValidPathSet(nodes);
-  return Object.fromEntries(
-    Object.entries(partialSelections).filter(
-      ([path, selection]) => validPaths.has(path) && checkedFiles.has(path) && selection.selectedRowIds.length > 0
-    )
-  );
-};
-
-const buildPartialPatches = async (
-  currentPath: string,
-  checkedFiles: Set<string>,
-  partialSelections: Record<string, GitPartialSelection>,
-  workingDiffs: Record<string, GitDiff>
-) => {
-  const patches: { filePath: string; patch: string }[] = [];
-
-  for (const [filePath, selection] of Object.entries(partialSelections)) {
-    if (!checkedFiles.has(filePath)) {
-      continue;
-    }
-
-    const diff = workingDiffs[filePath] ?? (await gitApi.diff(currentPath, filePath));
-    const patch = buildPatchFromSelection(filePath, diff.old, diff.new, selection.selectedRowIds);
-
-    if (!patch) {
-      throw new Error(`Failed to build patch for ${filePath}`);
-    }
-
-    patches.push({ filePath, patch });
-  }
-
-  return patches;
+  return Object.fromEntries(Object.entries(interactiveDiffs).filter(([path]) => validPaths.has(path)));
 };
 
 const createInitialGitSnapshot = () => ({
@@ -194,6 +186,7 @@ const createInitialGitSnapshot = () => ({
   checkedFiles: new Set<string>(),
   partialSelections: {} as Record<string, GitPartialSelection>,
   workingDiffs: {} as Record<string, GitDiff>,
+  interactiveDiffs: {} as Record<string, GitInteractiveDiff>,
   summary: getDefaultCommitSummary(),
   description: "",
   isAmend: false,
@@ -229,58 +222,57 @@ const createGitState: StateCreator<GitState> = (set, get) => ({
   setActiveTab: (activeTab) => set({ activeTab }),
   setSelectedCommit: (selectedCommit) => set({ selectedCommit }),
 
-  toggleFile: (path) => {
-    const { checkedFiles, partialSelections } = get();
-    const nextCheckedFiles = new Set(checkedFiles);
-    const nextPartialSelections = { ...partialSelections };
-
-    if (nextCheckedFiles.has(path) || nextPartialSelections[path]) {
-      nextCheckedFiles.delete(path);
-      delete nextPartialSelections[path];
-    } else {
-      nextCheckedFiles.add(path);
-    }
-
-    set({ checkedFiles: nextCheckedFiles, partialSelections: nextPartialSelections });
-  },
-
-  toggleAllFiles: () => {
-    const { allFiles, checkedFiles, partialSelections } = get();
-    const allFullySelected =
-      allFiles.length > 0 &&
-      allFiles.every((file) => checkedFiles.has(file.path) && partialSelections[file.path] === undefined);
-
-    if (allFullySelected) {
-      set({ checkedFiles: new Set<string>(), partialSelections: {} });
+  toggleFile: async (path) => {
+    const { currentPath, allFiles } = get();
+    if (!currentPath) {
       return;
     }
 
-    set({
-      checkedFiles: getCheckedFilesForNodes(allFiles),
-      partialSelections: {},
-    });
-  },
-
-  setPartialSelection: (path, selectedRowIds, selectableRowIds) => {
-    const selectableSet = new Set(selectableRowIds);
-    const uniqueSelectedRowIds = Array.from(new Set(selectedRowIds)).filter((rowId) => selectableSet.has(rowId));
-    const { checkedFiles, partialSelections } = get();
-    const nextCheckedFiles = new Set(checkedFiles);
-    const nextPartialSelections = { ...partialSelections };
-
-    if (uniqueSelectedRowIds.length === 0) {
-      nextCheckedFiles.delete(path);
-      delete nextPartialSelections[path];
-    } else if (uniqueSelectedRowIds.length === selectableRowIds.length) {
-      nextCheckedFiles.add(path);
-      delete nextPartialSelections[path];
-    } else {
-      nextCheckedFiles.add(path);
-      nextPartialSelections[path] = { selectedRowIds: uniqueSelectedRowIds };
+    const file = allFiles.find((item) => item.path === path);
+    if (!file) {
+      return;
     }
 
-    set({ checkedFiles: nextCheckedFiles, partialSelections: nextPartialSelections });
+    const action = file.includedState === "none" ? "include" : "exclude";
+
+    try {
+      const res = await gitApi.applySelection(currentPath, path, "working", "file", action, "", [], []);
+      const nodes = statusFilesToNodes(res.status.files);
+      set((state) => ({
+        allFiles: nodes,
+        checkedFiles: getCheckedFilesForNodes(nodes),
+        partialSelections: {},
+        workingDiffs: pickWorkingDiffs(nodes, state.workingDiffs),
+        interactiveDiffs: {
+          ...pickInteractiveDiffs(nodes, state.interactiveDiffs),
+          ...(res.diff ? { [path]: res.diff } : {}),
+        },
+      }));
+    } catch (err) {
+      set({ error: err instanceof Error ? err.message : "Failed to update selection" });
+    }
   },
+
+  toggleAllFiles: async () => {
+    const { currentPath, allFiles } = get();
+    if (!currentPath || allFiles.length === 0) {
+      return;
+    }
+
+    const allIncluded = allFiles.every((file) => file.includedState === "all");
+    const action = allIncluded ? "exclude" : "include";
+
+    try {
+      await Promise.all(
+        allFiles.map((file) => gitApi.applySelection(currentPath, file.path, "working", "file", action, "", [], []))
+      );
+      await get().fetchStatus();
+    } catch (err) {
+      set({ error: err instanceof Error ? err.message : "Failed to update selection" });
+    }
+  },
+
+  setPartialSelection: () => {},
 
   reset: () => set(createInitialGitSnapshot()),
 
@@ -312,23 +304,14 @@ const createGitState: StateCreator<GitState> = (set, get) => ({
 
   applyStatusUpdate: (files) => {
     const nodes = statusFilesToNodes(files);
-    const { allFiles, checkedFiles, partialSelections, workingDiffs } = get();
-    const wasFullySelected =
-      allFiles.length > 0 &&
-      allFiles.every((file) => checkedFiles.has(file.path) && partialSelections[file.path] === undefined);
-    const nextCheckedFiles = new Set<string>();
-
-    for (const node of nodes) {
-      if (wasFullySelected || checkedFiles.has(node.path)) {
-        nextCheckedFiles.add(node.path);
-      }
-    }
+    const { workingDiffs, interactiveDiffs } = get();
 
     set({
       allFiles: nodes,
-      checkedFiles: nextCheckedFiles,
-      partialSelections: pickPartialSelections(nodes, nextCheckedFiles, partialSelections),
+      checkedFiles: getCheckedFilesForNodes(nodes),
+      partialSelections: {},
       workingDiffs: pickWorkingDiffs(nodes, workingDiffs),
+      interactiveDiffs: pickInteractiveDiffs(nodes, interactiveDiffs),
     });
   },
 
@@ -352,11 +335,13 @@ const createGitState: StateCreator<GitState> = (set, get) => ({
     try {
       const res = await gitApi.status(currentPath);
       const nodes = statusFilesToNodes(res.files);
+      const { workingDiffs, interactiveDiffs } = get();
       set({
         allFiles: nodes,
         checkedFiles: getCheckedFilesForNodes(nodes),
         partialSelections: {},
-        workingDiffs: {},
+        workingDiffs: pickWorkingDiffs(nodes, workingDiffs),
+        interactiveDiffs: pickInteractiveDiffs(nodes, interactiveDiffs),
       });
     } catch (err) {
       set({ error: err instanceof Error ? err.message : "Failed to fetch status" });
@@ -468,8 +453,136 @@ const createGitState: StateCreator<GitState> = (set, get) => ({
     }
   },
 
+  syncRepo: async (options = {}) => {
+    const { currentPath, isRepo } = get();
+    if (!currentPath || isRepo === false) {
+      return;
+    }
+
+    const hasSelection =
+      options.status !== undefined ||
+      options.history !== undefined ||
+      options.branches !== undefined ||
+      options.remotes !== undefined ||
+      options.branchStatus !== undefined ||
+      options.stashes !== undefined ||
+      options.conflicts !== undefined;
+
+    const shouldSyncStatus = options.status ?? !hasSelection;
+    const shouldSyncHistory = options.history ?? !hasSelection;
+    const shouldSyncBranches = options.branches ?? !hasSelection;
+    const shouldSyncRemotes = options.remotes ?? !hasSelection;
+    const shouldSyncBranchStatus = options.branchStatus ?? !hasSelection;
+    const shouldSyncStashes = options.stashes ?? !hasSelection;
+    const shouldSyncConflicts = options.conflicts ?? !hasSelection;
+    const silent = options.silent ?? false;
+
+    if (!silent) {
+      set({ isLoading: true, error: null });
+    }
+
+    const statusPromise = shouldSyncStatus ? gitApi.status(currentPath) : null;
+    const logPromise = shouldSyncHistory ? gitApi.log(currentPath, Math.max(get().commits.length, 50)) : null;
+    const branchesPromise = shouldSyncBranches ? gitApi.branches(currentPath) : null;
+    const remotesPromise = shouldSyncRemotes ? gitApi.remotes(currentPath) : null;
+    const branchStatusPromise = shouldSyncBranchStatus ? gitApi.branchStatus(currentPath) : null;
+    const stashesPromise = shouldSyncStashes ? gitApi.stashList(currentPath) : null;
+    const conflictsPromise = shouldSyncConflicts ? gitApi.conflicts(currentPath) : null;
+
+    const [statusResult, logResult, branchesResult, remotesResult, branchStatusResult, stashesResult, conflictsResult] =
+      await Promise.allSettled([
+        statusPromise ?? Promise.resolve(null),
+        logPromise ?? Promise.resolve(null),
+        branchesPromise ?? Promise.resolve(null),
+        remotesPromise ?? Promise.resolve(null),
+        branchStatusPromise ?? Promise.resolve(null),
+        stashesPromise ?? Promise.resolve(null),
+        conflictsPromise ?? Promise.resolve(null),
+      ]);
+
+    if (get().currentPath !== currentPath) {
+      if (!silent) {
+        set({ isLoading: false });
+      }
+      return;
+    }
+
+    const stateUpdate: Partial<GitState> = {};
+
+    if (shouldSyncStatus && statusResult.status === "fulfilled" && statusResult.value) {
+      const nodes = statusFilesToNodes(statusResult.value.files);
+      const { workingDiffs, interactiveDiffs } = get();
+      stateUpdate.allFiles = nodes;
+      stateUpdate.checkedFiles = getCheckedFilesForNodes(nodes);
+      stateUpdate.partialSelections = {};
+      stateUpdate.workingDiffs = pickWorkingDiffs(nodes, workingDiffs);
+      stateUpdate.interactiveDiffs = pickInteractiveDiffs(nodes, interactiveDiffs);
+    }
+
+    if (shouldSyncHistory && logResult.status === "fulfilled" && logResult.value) {
+      const commits = logResult.value.commits;
+      const selectedCommitHash = get().selectedCommit?.hash ?? null;
+      stateUpdate.commits = commits;
+      if (selectedCommitHash) {
+        const nextSelectedCommit = commits.find((commit) => commit.hash === selectedCommitHash) ?? null;
+        stateUpdate.selectedCommit = nextSelectedCommit;
+        if (!nextSelectedCommit) {
+          stateUpdate.selectedCommitFiles = [];
+        }
+      }
+    }
+
+    if (shouldSyncBranches && branchesResult.status === "fulfilled" && branchesResult.value) {
+      stateUpdate.branches = branchesResult.value.branches.map((branch) => branch.name);
+      stateUpdate.remoteBranches = branchesResult.value.remoteBranches ?? [];
+      stateUpdate.currentBranch = branchesResult.value.currentBranch;
+    }
+
+    if (shouldSyncRemotes && remotesResult.status === "fulfilled" && remotesResult.value) {
+      const urls = remotesResult.value.remotes.flatMap((remote) => remote.urls);
+      stateUpdate.hasRemote = remotesResult.value.remotes.length > 0;
+      stateUpdate.remoteUrls = urls;
+    }
+
+    if (shouldSyncStashes && stashesResult.status === "fulfilled" && stashesResult.value) {
+      stateUpdate.stashes = stashesResult.value.stashes ?? [];
+    }
+
+    if (shouldSyncConflicts && conflictsResult.status === "fulfilled" && conflictsResult.value) {
+      stateUpdate.conflicts = conflictsResult.value.conflicts ?? [];
+    }
+
+    if (Object.keys(stateUpdate).length > 0) {
+      set(stateUpdate);
+    }
+
+    if (shouldSyncBranchStatus && branchStatusResult.status === "fulfilled" && branchStatusResult.value) {
+      get().applyBranchStatus(branchStatusResult.value);
+    }
+
+    if (!silent) {
+      const firstRejected = [
+        statusResult,
+        logResult,
+        branchesResult,
+        remotesResult,
+        branchStatusResult,
+        stashesResult,
+        conflictsResult,
+      ].find((result) => result.status === "rejected");
+
+      if (firstRejected?.status === "rejected") {
+        set({
+          error: firstRejected.reason instanceof Error ? firstRejected.reason.message : "Failed to sync git data",
+        });
+      }
+
+      set({ isLoading: false });
+    }
+  },
+
   commitSelected: async () => {
-    const { currentPath, checkedFiles, partialSelections, workingDiffs, summary, description } = get();
+    const { currentPath, checkedFiles, summary, description } = get();
     if (!currentPath || !summary.trim() || checkedFiles.size === 0) {
       return false;
     }
@@ -477,15 +590,7 @@ const createGitState: StateCreator<GitState> = (set, get) => ({
     set({ isLoading: true, error: null });
 
     try {
-      const partialPaths = new Set(Object.keys(partialSelections));
-      const files = Array.from(checkedFiles).filter((path) => !partialPaths.has(path));
-      const patches = await buildPartialPatches(currentPath, checkedFiles, partialSelections, workingDiffs);
-
-      if (files.length === 0 && patches.length === 0) {
-        throw new Error("No selected changes to commit");
-      }
-
-      const res = await gitApi.commitSelected(currentPath, files, patches, summary, description);
+      const res = await gitApi.commitSelected(currentPath, [], [], summary, description);
       const nextSummary = getDefaultCommitSummary();
 
       if (res.status?.files) {
@@ -495,6 +600,7 @@ const createGitState: StateCreator<GitState> = (set, get) => ({
           checkedFiles: getCheckedFilesForNodes(nodes),
           partialSelections: {},
           workingDiffs: {},
+          interactiveDiffs: {},
           commits: res.commits ?? get().commits,
           selectedCommit: null,
           selectedCommitFiles: [],
@@ -507,6 +613,7 @@ const createGitState: StateCreator<GitState> = (set, get) => ({
           checkedFiles: new Set<string>(),
           partialSelections: {},
           workingDiffs: {},
+          interactiveDiffs: {},
           selectedCommit: null,
           selectedCommitFiles: [],
           summary: nextSummary,
@@ -527,6 +634,7 @@ const createGitState: StateCreator<GitState> = (set, get) => ({
             stateUpdate.checkedFiles = getCheckedFilesForNodes(nodes);
             stateUpdate.partialSelections = {};
             stateUpdate.workingDiffs = {};
+            stateUpdate.interactiveDiffs = {};
           }
 
           if (logResult.status === "fulfilled") {
@@ -560,7 +668,7 @@ const createGitState: StateCreator<GitState> = (set, get) => ({
   },
 
   amendCommit: async () => {
-    const { currentPath, checkedFiles, partialSelections, workingDiffs, summary, description } = get();
+    const { currentPath, checkedFiles, summary, description } = get();
     if (!currentPath || !summary.trim() || checkedFiles.size === 0) {
       return false;
     }
@@ -568,15 +676,7 @@ const createGitState: StateCreator<GitState> = (set, get) => ({
     set({ isLoading: true, error: null });
 
     try {
-      const partialPaths = new Set(Object.keys(partialSelections));
-      const files = Array.from(checkedFiles).filter((path) => !partialPaths.has(path));
-      const patches = await buildPartialPatches(currentPath, checkedFiles, partialSelections, workingDiffs);
-
-      if (files.length === 0 && patches.length === 0) {
-        throw new Error("No selected changes to amend");
-      }
-
-      const res = await gitApi.amend(currentPath, files, patches, summary, description);
+      const res = await gitApi.amend(currentPath, [], [], summary, description);
       const nextSummary = getDefaultCommitSummary();
 
       if (res.status?.files) {
@@ -586,6 +686,7 @@ const createGitState: StateCreator<GitState> = (set, get) => ({
           checkedFiles: getCheckedFilesForNodes(nodes),
           partialSelections: {},
           workingDiffs: {},
+          interactiveDiffs: {},
           commits: res.commits ?? get().commits,
           selectedCommit: null,
           selectedCommitFiles: [],
@@ -598,6 +699,7 @@ const createGitState: StateCreator<GitState> = (set, get) => ({
           checkedFiles: new Set<string>(),
           partialSelections: {},
           workingDiffs: {},
+          interactiveDiffs: {},
           selectedCommit: null,
           selectedCommitFiles: [],
           summary: nextSummary,
@@ -618,6 +720,7 @@ const createGitState: StateCreator<GitState> = (set, get) => ({
             stateUpdate.checkedFiles = getCheckedFilesForNodes(nodes);
             stateUpdate.partialSelections = {};
             stateUpdate.workingDiffs = {};
+            stateUpdate.interactiveDiffs = {};
           }
 
           if (logResult.status === "fulfilled") {
@@ -666,6 +769,7 @@ const createGitState: StateCreator<GitState> = (set, get) => ({
         checkedFiles: getCheckedFilesForNodes(nodes),
         partialSelections: {},
         workingDiffs: {},
+        interactiveDiffs: {},
         commits: res.commits,
         selectedCommit: null,
         selectedCommitFiles: [],
@@ -695,6 +799,7 @@ const createGitState: StateCreator<GitState> = (set, get) => ({
         checkedFiles: getCheckedFilesForNodes(nodes),
         partialSelections: {},
         workingDiffs: {},
+        interactiveDiffs: {},
         currentBranch: res.branch,
       });
       if (res.branchStatus) {
@@ -789,6 +894,7 @@ const createGitState: StateCreator<GitState> = (set, get) => ({
         checkedFiles: getCheckedFilesForNodes(nodes),
         partialSelections: {},
         workingDiffs: {},
+        interactiveDiffs: {},
         commits: res.commits,
         conflicts: res.conflicts ?? [],
       });
@@ -846,6 +952,7 @@ const createGitState: StateCreator<GitState> = (set, get) => ({
           checkedFiles: getCheckedFilesForNodes(nodes),
           partialSelections: {},
           workingDiffs: {},
+          interactiveDiffs: {},
         });
       }
       await fetchStashes();
@@ -875,6 +982,7 @@ const createGitState: StateCreator<GitState> = (set, get) => ({
           checkedFiles: getCheckedFilesForNodes(nodes),
           partialSelections: {},
           workingDiffs: {},
+          interactiveDiffs: {},
         });
       }
       await fetchStashes();
@@ -908,14 +1016,24 @@ const createGitState: StateCreator<GitState> = (set, get) => ({
   },
 
   discardFile: async (path) => {
-    const { currentPath, fetchStatus } = get();
+    const { currentPath } = get();
     if (!currentPath) {
       return;
     }
 
     try {
-      await gitApi.checkout(currentPath, [path]);
-      await fetchStatus();
+      const res = await gitApi.applySelection(currentPath, path, "working", "file", "discard", "", [], []);
+      const nodes = statusFilesToNodes(res.status.files);
+      set((state) => ({
+        allFiles: nodes,
+        checkedFiles: getCheckedFilesForNodes(nodes),
+        partialSelections: {},
+        workingDiffs: pickWorkingDiffs(nodes, state.workingDiffs),
+        interactiveDiffs: {
+          ...pickInteractiveDiffs(nodes, state.interactiveDiffs),
+          ...(res.diff ? { [path]: res.diff } : {}),
+        },
+      }));
     } catch (err) {
       set({ error: err instanceof Error ? err.message : "Failed to discard changes" });
     }
@@ -964,6 +1082,58 @@ const createGitState: StateCreator<GitState> = (set, get) => ({
       return diff;
     } catch (err) {
       set({ error: err instanceof Error ? err.message : "Failed to get diff" });
+      return null;
+    }
+  },
+
+  getInteractiveDiff: async (filePath, mode = "working") => {
+    const { currentPath, interactiveDiffs } = get();
+    if (!currentPath) {
+      return null;
+    }
+
+    const cached = interactiveDiffs[filePath];
+    if (cached && cached.mode === mode) {
+      return cached;
+    }
+
+    try {
+      const diff = await gitApi.fileDiff(currentPath, filePath, mode);
+      set((state) => ({
+        interactiveDiffs: {
+          ...state.interactiveDiffs,
+          [filePath]: diff,
+        },
+      }));
+      return diff;
+    } catch (err) {
+      set({ error: err instanceof Error ? err.message : "Failed to get interactive diff" });
+      return null;
+    }
+  },
+
+  applySelection: async (filePath, mode, target, action, patchHash, lineIds, hunkIds) => {
+    const { currentPath } = get();
+    if (!currentPath) {
+      return null;
+    }
+
+    try {
+      const res = await gitApi.applySelection(currentPath, filePath, mode, target, action, patchHash, lineIds, hunkIds);
+      const nodes = statusFilesToNodes(res.status.files);
+      set((state) => ({
+        allFiles: nodes,
+        checkedFiles: getCheckedFilesForNodes(nodes),
+        partialSelections: {},
+        workingDiffs: pickWorkingDiffs(nodes, state.workingDiffs),
+        interactiveDiffs: {
+          ...pickInteractiveDiffs(nodes, state.interactiveDiffs),
+          ...(res.diff ? { [filePath]: res.diff } : {}),
+        },
+      }));
+      return res.diff ?? null;
+    } catch (err) {
+      set({ error: err instanceof Error ? err.message : "Failed to apply selection" });
       return null;
     }
   },

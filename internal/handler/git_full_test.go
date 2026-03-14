@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
 	"os"
 	"os/exec"
@@ -185,7 +186,7 @@ func TestGitFullApplySelectionInclude(t *testing.T) {
 		"path": dir, "filePath": "hello.txt", "mode": "working",
 		"target": "hunk", "action": "include",
 		"patchHash": diffResp.PatchHash,
-		"lineIds": []string{}, "hunkIds": []string{diffResp.Hunks[0].ID},
+		"lineIds":   []string{}, "hunkIds": []string{diffResp.Hunks[0].ID},
 	})
 	assert.Equal(t, http.StatusOK, w.Code)
 	var resp struct {
@@ -237,6 +238,118 @@ func TestGitFullApplySelectionDiscard(t *testing.T) {
 
 	content, _ := os.ReadFile(filepath.Join(dir, "hello.txt"))
 	assert.Equal(t, "hello world\n", string(content))
+}
+
+func TestGitFullServerSidePartialSelectionCommit(t *testing.T) {
+	dir := setupFullRepo(t)
+	defer os.RemoveAll(dir)
+	r, h := setupRouter()
+
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "hello.txt"), []byte("one\ntwo\nthree\n"), 0644))
+	cmd := exec.Command("git", "add", "hello.txt")
+	cmd.Dir = dir
+	require.NoError(t, cmd.Run())
+	cmd = exec.Command("git", "-c", "user.name=Test", "-c", "user.email=test@test.com", "commit", "-m", "seed selection state")
+	cmd.Dir = dir
+	require.NoError(t, cmd.Run())
+
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "hello.txt"), []byte("ONE\ntwo\nTHREE\n"), 0644))
+
+	w := postJSON(r, "/git/file-diff", map[string]interface{}{
+		"path": dir, "filePath": "hello.txt", "mode": "working",
+	})
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var diffResp InteractiveDiff
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &diffResp))
+	require.NotEmpty(t, diffResp.Hunks)
+
+	lineIDs := make([]string, 0)
+	for _, hunk := range diffResp.Hunks {
+		for _, line := range hunk.Lines {
+			if (line.Content == "three" || line.Content == "THREE") && line.Selectable {
+				lineIDs = append(lineIDs, line.ID)
+			}
+		}
+	}
+	require.Len(t, lineIDs, 2)
+
+	w = postJSON(r, "/git/apply-selection", map[string]interface{}{
+		"path": dir, "filePath": "hello.txt", "mode": "working",
+		"target": "line", "action": "exclude",
+		"patchHash": diffResp.PatchHash,
+		"lineIds":   lineIDs, "hunkIds": []string{},
+	})
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var applyResp struct {
+		OK     bool `json:"ok"`
+		Status struct {
+			Files []StructuredFile `json:"files"`
+		} `json:"status"`
+		Diff InteractiveDiff `json:"diff"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &applyResp))
+	require.True(t, applyResp.OK)
+	require.Equal(t, "partial", applyResp.Diff.IncludedState)
+
+	found := false
+	for _, file := range applyResp.Status.Files {
+		if file.Path == "hello.txt" {
+			found = true
+			assert.Equal(t, "partial", file.IncludedState)
+		}
+	}
+	require.True(t, found)
+
+	debugDiff, err := getGitDiff(dir, "hello.txt", "working")
+	require.NoError(t, err)
+	selectionState := resolveSelectionState(h.selectionStore, dir, "hello.txt", debugDiff)
+	require.Equal(t, "partial", selectionState.IncludedState)
+
+	debugPatch := buildSelectionPatch(debugDiff, getSelectedLineIDsForState(selectionState, debugDiff))
+	assert.Equal(t, strings.Join([]string{
+		"--- a/hello.txt",
+		"+++ b/hello.txt",
+		"@@ -1,3 +1,3 @@",
+		"-one",
+		"+ONE",
+		" two",
+		" three",
+		"",
+	}, "\n"), debugPatch)
+
+	w = postJSON(r, "/git/commit-selected", map[string]interface{}{
+		"path":        dir,
+		"files":       []string{},
+		"patches":     []interface{}{},
+		"summary":     "feat: backend selection",
+		"description": "server side partial",
+	})
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+	repo, err := git.PlainOpen(dir)
+	require.NoError(t, err)
+	head, err := repo.Head()
+	require.NoError(t, err)
+	commit, err := repo.CommitObject(head.Hash())
+	require.NoError(t, err)
+	assert.Contains(t, commit.Message, "feat: backend selection")
+	assert.Contains(t, commit.Message, "server side partial")
+
+	file, err := commit.File("hello.txt")
+	require.NoError(t, err)
+	reader, err := file.Reader()
+	require.NoError(t, err)
+	defer reader.Close()
+
+	content, err := io.ReadAll(reader)
+	require.NoError(t, err)
+	assert.Equal(t, "ONE\ntwo\nthree\n", string(content))
+
+	workingTreeContent, err := os.ReadFile(filepath.Join(dir, "hello.txt"))
+	require.NoError(t, err)
+	assert.Equal(t, "ONE\ntwo\nTHREE\n", string(workingTreeContent))
 }
 
 func TestGitFullStashViaAPI(t *testing.T) {
@@ -418,6 +531,72 @@ func TestGitFullCommitSelectedWithDescription(t *testing.T) {
 
 	_, err = os.Stat(filepath.Join(dir, "excluded.txt"))
 	assert.NoError(t, err)
+}
+
+func TestGitFullCommitSelectedWithPartialPatch(t *testing.T) {
+	dir := setupFullRepo(t)
+	defer os.RemoveAll(dir)
+	r, _ := setupRouter()
+
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "hello.txt"), []byte("one\ntwo\nthree\n"), 0644))
+	cmd := exec.Command("git", "add", "hello.txt")
+	cmd.Dir = dir
+	require.NoError(t, cmd.Run())
+	cmd = exec.Command("git", "-c", "user.name=Test", "-c", "user.email=test@test.com", "commit", "-m", "seed hello.txt")
+	cmd.Dir = dir
+	require.NoError(t, cmd.Run())
+
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "hello.txt"), []byte("ONE\ntwo\nTHREE\n"), 0644))
+
+	patch := strings.Join([]string{
+		"--- a/hello.txt",
+		"+++ b/hello.txt",
+		"@@ -1,3 +1,3 @@",
+		"-one",
+		"+ONE",
+		" two",
+		" three",
+		"",
+	}, "\n")
+
+	w := postJSON(r, "/git/commit-selected", map[string]interface{}{
+		"path":  dir,
+		"files": []string{},
+		"patches": []map[string]string{
+			{"filePath": "hello.txt", "patch": patch},
+		},
+		"summary": "feat: partial patch",
+	})
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	repo, err := git.PlainOpen(dir)
+	require.NoError(t, err)
+	head, err := repo.Head()
+	require.NoError(t, err)
+	commit, err := repo.CommitObject(head.Hash())
+	require.NoError(t, err)
+
+	file, err := commit.File("hello.txt")
+	require.NoError(t, err)
+	reader, err := file.Reader()
+	require.NoError(t, err)
+	defer reader.Close()
+
+	content, err := io.ReadAll(reader)
+	require.NoError(t, err)
+	assert.Equal(t, "ONE\ntwo\nthree\n", string(content))
+
+	workingTreeContent, err := os.ReadFile(filepath.Join(dir, "hello.txt"))
+	require.NoError(t, err)
+	assert.Equal(t, "ONE\ntwo\nTHREE\n", string(workingTreeContent))
+
+	cmd = exec.Command("git", "diff", "--", "hello.txt")
+	cmd.Dir = dir
+	diffOutput, err := cmd.Output()
+	require.NoError(t, err)
+	assert.Contains(t, string(diffOutput), "-three")
+	assert.Contains(t, string(diffOutput), "+THREE")
+	assert.NotContains(t, string(diffOutput), "-one")
 }
 
 func TestGitFullAmendChangesMessage(t *testing.T) {

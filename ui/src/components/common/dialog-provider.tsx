@@ -197,9 +197,9 @@ export const DialogProvider: React.FC<{ children: React.ReactNode }> = ({ childr
                 />
               </div>
             )}
-            <DialogFooter className="gap-3 pt-3">
+            <DialogFooter className="gap-3 pt-3 md:flex-row">
               {dialog.type !== "alert" && (
-                <Button variant="outline" onClick={handleClose} className="h-11 w-full">
+                <Button variant="outline" onClick={handleClose} className="h-11 w-full md:w-auto">
                   {dialog.cancelText || t("common.cancel")}
                 </Button>
               )}
@@ -207,7 +207,7 @@ export const DialogProvider: React.FC<{ children: React.ReactNode }> = ({ childr
                 variant={dialog.confirmVariant === "danger" ? "destructive" : "default"}
                 onClick={handleConfirm}
                 className={cn(
-                  "h-11 w-full",
+                  "h-11 w-full md:w-auto",
                   dialog.confirmVariant !== "danger" && "bg-ide-accent text-ide-on-accent hover:bg-ide-accent/90"
                 )}
                 autoFocus={dialog.type !== "prompt"}

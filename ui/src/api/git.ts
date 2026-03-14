@@ -45,6 +45,7 @@ export interface GitDiffLine {
   oldLine: number;
   newLine: number;
   selectable: boolean;
+  selected: boolean;
 }
 
 export interface GitDiffHunk {
@@ -80,6 +81,7 @@ export interface GitInteractiveDiff {
   old: string;
   new: string;
   binary: boolean;
+  includedState: "none" | "partial" | "all";
 }
 
 export interface GitApplySelectionResponse {
@@ -166,7 +168,13 @@ export interface SmartSwitchResponse {
   branchStatus: BranchStatusInfo;
 }
 
-export type GitWSEventType = "file_changed" | "remote_updated" | "push_progress" | "pull_progress" | "operation_done";
+export type GitWSEventType =
+  | "file_changed"
+  | "remote_updated"
+  | "repo_sync_needed"
+  | "push_progress"
+  | "pull_progress"
+  | "operation_done";
 
 export interface GitWSEvent {
   type: GitWSEventType;
@@ -261,13 +269,25 @@ export const gitApi = {
       body: JSON.stringify({ path, message, author, email }),
     }),
 
-  commitSelected: (path: string, files: string[], patches: { filePath: string; patch: string }[], summary: string, description?: string) =>
+  commitSelected: (
+    path: string,
+    files: string[],
+    patches: { filePath: string; patch: string }[],
+    summary: string,
+    description?: string
+  ) =>
     request<CommitSelectedResponse>("/git/commit-selected", {
       method: "POST",
       body: JSON.stringify({ path, files, patches, summary, description }),
     }),
 
-  amend: (path: string, files: string[], patches: { filePath: string; patch: string }[], summary: string, description?: string) =>
+  amend: (
+    path: string,
+    files: string[],
+    patches: { filePath: string; patch: string }[],
+    summary: string,
+    description?: string
+  ) =>
     request<CommitSelectedResponse>("/git/amend", {
       method: "POST",
       body: JSON.stringify({ path, files, patches, summary, description }),

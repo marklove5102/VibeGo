@@ -20,6 +20,12 @@ type BranchStatusInfo struct {
 	Behind   int    `json:"behind"`
 }
 
+type BranchesSnapshot struct {
+	Branches       []string `json:"branches"`
+	RemoteBranches []string `json:"remoteBranches"`
+	CurrentBranch  string   `json:"currentBranch"`
+}
+
 func collectFileStatus(repo *git.Repository) []FileStatus {
 	w, err := repo.Worktree()
 	if err != nil {
@@ -99,6 +105,14 @@ func collectCommitLog(repo *git.Repository, limit int) []CommitInfo {
 	return commits
 }
 
+func collectHeadHash(repo *git.Repository) string {
+	ref, err := repo.Head()
+	if err != nil {
+		return ""
+	}
+	return ref.Hash().String()
+}
+
 func collectBranchStatus(repoRoot string) *BranchStatusInfo {
 	info := &BranchStatusInfo{}
 
@@ -133,6 +147,36 @@ func collectBranchStatus(repoRoot string) *BranchStatusInfo {
 		info.Ahead, _ = strconv.Atoi(parts[1])
 	}
 	return info
+}
+
+func collectBranchesSnapshot(repo *git.Repository) BranchesSnapshot {
+	head, err := repo.Head()
+	if err != nil {
+		return BranchesSnapshot{}
+	}
+
+	currentBranch := ""
+	if head.Name().IsBranch() {
+		currentBranch = head.Name().Short()
+	}
+
+	branches, err := repo.Branches()
+	if err != nil {
+		return BranchesSnapshot{CurrentBranch: currentBranch}
+	}
+
+	var branchList []string
+	_ = branches.ForEach(func(ref *plumbing.Reference) error {
+		branchList = append(branchList, ref.Name().Short())
+		return nil
+	})
+	sort.Strings(branchList)
+
+	return BranchesSnapshot{
+		Branches:       branchList,
+		RemoteBranches: collectRemoteBranches(repo),
+		CurrentBranch:  currentBranch,
+	}
 }
 
 func collectConflictFiles(repo *git.Repository) []string {
@@ -172,4 +216,51 @@ func collectRemoteBranches(repo *git.Repository) []string {
 	})
 	sort.Strings(remote)
 	return remote
+}
+
+func collectRemoteInfos(repo *git.Repository) []RemoteInfo {
+	remotes, err := repo.Remotes()
+	if err != nil {
+		return nil
+	}
+
+	result := make([]RemoteInfo, 0, len(remotes))
+	for _, remote := range remotes {
+		cfg := remote.Config()
+		urls := append([]string(nil), cfg.URLs...)
+		sort.Strings(urls)
+		result = append(result, RemoteInfo{
+			Name: cfg.Name,
+			URLs: urls,
+		})
+	}
+
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].Name < result[j].Name
+	})
+
+	return result
+}
+
+func collectStashEntries(repoRoot string) []StashEntry {
+	cmd := exec.Command("git", "stash", "list")
+	cmd.Dir = repoRoot
+	output, err := cmd.Output()
+	if err != nil {
+		return nil
+	}
+
+	var entries []StashEntry
+	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
+	for i, line := range lines {
+		if line == "" {
+			continue
+		}
+		entries = append(entries, StashEntry{
+			Index:   i,
+			Message: line,
+		})
+	}
+
+	return entries
 }

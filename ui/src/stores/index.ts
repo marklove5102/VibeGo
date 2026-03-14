@@ -33,6 +33,7 @@ export {
   createGitStore,
   type GitFileNode,
   type GitPartialSelection,
+  type GitSyncOptions,
   type GitState,
   type GitStoreApi,
   getOrCreateGitStore,

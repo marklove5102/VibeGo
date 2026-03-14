@@ -17,16 +17,10 @@ import {
   Undo2,
   X,
 } from "lucide-react";
-import React, {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { StashEntry } from "@/api/git";
 import { getTranslation, type Locale } from "@/lib/i18n";
-import type { GitFileNode, GitPartialSelection } from "@/stores";
+import type { GitFileNode } from "@/stores";
 import { useGitStore } from "@/stores";
 
 type FileSelectionType = "all" | "partial" | "none";
@@ -34,8 +28,6 @@ type FileSelectionType = "all" | "partial" | "none";
 interface GitChangesViewProps {
   groupId: string;
   allFiles: GitFileNode[];
-  checkedFiles: Set<string>;
-  partialSelections: Record<string, GitPartialSelection>;
   isLoading: boolean;
   locale: Locale;
   currentBranch: string;
@@ -45,8 +37,8 @@ interface GitChangesViewProps {
   aheadCount: number;
   behindCount: number;
   onFileClick: (path: string) => void;
-  onToggleFile: (path: string) => void;
-  onToggleAll: () => void;
+  onToggleFile: (path: string) => Promise<void>;
+  onToggleAll: () => Promise<void>;
   onDiscardFile: (path: string) => void;
   onConflictClick: (path: string) => void;
   onStash: (message?: string, files?: string[]) => void;
@@ -110,11 +102,8 @@ const getStatusVerb = (status: string): string => {
   }
 };
 
-const generateAutoSummary = (
-  allFiles: GitFileNode[],
-  checkedFiles: Set<string>,
-): string => {
-  const selected = allFiles.filter((f) => checkedFiles.has(f.path));
+const generateAutoSummary = (allFiles: GitFileNode[]): string => {
+  const selected = allFiles.filter((f) => f.includedState !== "none");
   if (selected.length === 0) return "";
   if (selected.length === 1) {
     const file = selected[0];
@@ -133,28 +122,13 @@ const generateAutoSummary = (
   return parts.join(", ");
 };
 
-const getFileSelectionType = (
-  filePath: string,
-  checkedFiles: Set<string>,
-  partialSelections: Record<string, GitPartialSelection>,
-): FileSelectionType => {
-  if (partialSelections[filePath]) {
-    return "partial";
-  }
-  return checkedFiles.has(filePath) ? "all" : "none";
-};
+const getFileSelectionType = (file: GitFileNode): FileSelectionType => file.includedState;
 
-const getAggregateSelectionType = (
-  allFiles: GitFileNode[],
-  checkedFiles: Set<string>,
-  partialSelections: Record<string, GitPartialSelection>,
-): FileSelectionType => {
+const getAggregateSelectionType = (allFiles: GitFileNode[]): FileSelectionType => {
   if (allFiles.length === 0) {
     return "none";
   }
-  const types = allFiles.map((file) =>
-    getFileSelectionType(file.path, checkedFiles, partialSelections),
-  );
+  const types = allFiles.map((file) => getFileSelectionType(file));
   if (types.every((type) => type === "all")) {
     return "all";
   }
@@ -164,11 +138,7 @@ const getAggregateSelectionType = (
   return "partial";
 };
 
-const renderSelectionIcon = (
-  selectionType: FileSelectionType,
-  size: number,
-  className: string,
-) => {
+const renderSelectionIcon = (selectionType: FileSelectionType, size: number, className: string) => {
   if (selectionType === "all") {
     return <SquareCheck size={size} className={className} />;
   }
@@ -211,8 +181,6 @@ const getFilePathClassName = (selectionType: FileSelectionType) => {
 const GitChangesView: React.FC<GitChangesViewProps> = ({
   groupId,
   allFiles,
-  checkedFiles,
-  partialSelections,
   isLoading,
   locale,
   currentBranch,
@@ -235,16 +203,8 @@ const GitChangesView: React.FC<GitChangesViewProps> = ({
   onUndoLastCommit,
 }) => {
   const t = useCallback((key: string) => getTranslation(locale, key), [locale]);
-  const {
-    summary,
-    description,
-    isAmend,
-    setSummary,
-    setDescription,
-    setIsAmend,
-    commitSelected,
-    amendCommit,
-  } = useGitStore(groupId);
+  const { summary, description, isAmend, setSummary, setDescription, setIsAmend, commitSelected, amendCommit } =
+    useGitStore(groupId);
 
   const [showStashes, setShowStashes] = useState(false);
   const [showDescription, setShowDescription] = useState(false);
@@ -261,34 +221,17 @@ const GitChangesView: React.FC<GitChangesViewProps> = ({
   const filteredFiles = useMemo(() => {
     if (!filterText.trim()) return allFiles;
     const lower = filterText.toLowerCase();
-    return allFiles.filter(
-      (f) =>
-        f.path.toLowerCase().includes(lower) ||
-        f.name.toLowerCase().includes(lower),
-    );
+    return allFiles.filter((f) => f.path.toLowerCase().includes(lower) || f.name.toLowerCase().includes(lower));
   }, [allFiles, filterText]);
-  const checkedCount = checkedFiles.size;
-  const allSelectionType = getAggregateSelectionType(
-    allFiles,
-    checkedFiles,
-    partialSelections,
-  );
-  const autoSummary = useMemo(
-    () => generateAutoSummary(allFiles, checkedFiles),
-    [allFiles, checkedFiles],
-  );
+  const checkedCount = useMemo(() => allFiles.filter((file) => file.includedState !== "none").length, [allFiles]);
+  const allSelectionType = getAggregateSelectionType(allFiles);
+  const autoSummary = useMemo(() => generateAutoSummary(allFiles), [allFiles]);
   const effectiveSummary = summary.trim() || autoSummary;
-  const canCommit =
-    checkedCount > 0 && effectiveSummary.length > 0 && safeConflicts.length === 0;
+  const canCommit = checkedCount > 0 && effectiveSummary.length > 0 && safeConflicts.length === 0;
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (
-        (e.ctrlKey || e.metaKey) &&
-        e.key === "Enter" &&
-        canCommit &&
-        !isLoading
-      ) {
+      if ((e.ctrlKey || e.metaKey) && e.key === "Enter" && canCommit && !isLoading) {
         e.preventDefault();
         if (!summary.trim() && autoSummary) {
           setSummary(autoSummary);
@@ -319,10 +262,7 @@ const GitChangesView: React.FC<GitChangesViewProps> = ({
     await onUndoLastCommit();
   }, [onUndoLastCommit]);
 
-  const handleDiscardClick = useCallback(
-    (path: string) => setDiscardConfirm(path),
-    [],
-  );
+  const handleDiscardClick = useCallback((path: string) => setDiscardConfirm(path), []);
   const handleConfirmDiscard = useCallback(() => {
     if (discardConfirm) {
       onDiscardFile(discardConfirm);
@@ -351,12 +291,8 @@ const GitChangesView: React.FC<GitChangesViewProps> = ({
                 onClick={() => onConflictClick(p)}
               >
                 <AlertTriangle size={12} className="text-red-400 shrink-0" />
-                <span className="flex-1 text-xs text-red-400 truncate">
-                  {p}
-                </span>
-                <span className="text-[10px] bg-red-500/20 text-red-400 px-1.5 py-0.5 rounded">
-                  {t("git.resolve")}
-                </span>
+                <span className="flex-1 text-xs text-red-400 truncate">{p}</span>
+                <span className="text-[10px] bg-red-500/20 text-red-400 px-1.5 py-0.5 rounded">{t("git.resolve")}</span>
               </div>
             ))}
           </div>
@@ -366,9 +302,7 @@ const GitChangesView: React.FC<GitChangesViewProps> = ({
           <div className="flex flex-col items-center justify-center p-6 mt-10 gap-4">
             <div className="flex flex-col items-center gap-2 text-center">
               <Check className="text-green-500/50 mb-2" size={32} />
-              <span className="text-ide-text text-sm font-medium">
-                {t("git.noChanges")}
-              </span>
+              <span className="text-ide-text text-sm font-medium">{t("git.noChanges")}</span>
               <span className="text-ide-mute text-xs max-w-[200px]">
                 {!hasRemote
                   ? t("git.noRemoteHint")
@@ -444,7 +378,9 @@ const GitChangesView: React.FC<GitChangesViewProps> = ({
                   title={safeStashes[0].message}
                 >
                   <Archive size={14} className="text-purple-400/70 shrink-0" />
-                  <span className="truncate">{t("git.stashes")} ({safeStashes.length})</span>
+                  <span className="truncate">
+                    {t("git.stashes")} ({safeStashes.length})
+                  </span>
                 </button>
               )}
             </div>
@@ -479,18 +415,16 @@ const GitChangesView: React.FC<GitChangesViewProps> = ({
             <div className="flex items-center gap-2 px-3 py-2 border-b border-ide-border bg-ide-panel/30">
               <div
                 className="flex items-center gap-2 flex-1 cursor-pointer"
-                onClick={onToggleAll}
+                onClick={() => {
+                  void onToggleAll();
+                }}
               >
                 {renderSelectionIcon(
                   allSelectionType,
                   16,
-                  allSelectionType === "none"
-                    ? "text-ide-mute shrink-0"
-                    : "text-ide-accent shrink-0",
+                  allSelectionType === "none" ? "text-ide-mute shrink-0" : "text-ide-accent shrink-0"
                 )}
-                <span className="text-xs text-ide-mute font-medium flex-1">
-                  {t("git.selectAll")}
-                </span>
+                <span className="text-xs text-ide-mute font-medium flex-1">{t("git.selectAll")}</span>
                 <span className="text-xs text-ide-mute">
                   {checkedCount}/{allFiles.length}
                 </span>
@@ -506,11 +440,7 @@ const GitChangesView: React.FC<GitChangesViewProps> = ({
 
             <div>
               {filteredFiles.map((file) => {
-                const selectionType = getFileSelectionType(
-                  file.path,
-                  checkedFiles,
-                  partialSelections,
-                );
+                const selectionType = getFileSelectionType(file);
                 return (
                   <div
                     key={file.path}
@@ -519,34 +449,23 @@ const GitChangesView: React.FC<GitChangesViewProps> = ({
                     <div
                       onClick={(e) => {
                         e.stopPropagation();
-                        onToggleFile(file.path);
+                        void onToggleFile(file.path);
                       }}
                       className="shrink-0"
                     >
                       {renderSelectionIcon(
                         selectionType,
                         16,
-                        selectionType === "none"
-                          ? "text-ide-mute"
-                          : "text-ide-accent",
+                        selectionType === "none" ? "text-ide-mute" : "text-ide-accent"
                       )}
                     </div>
-                    <span
-                      className={`w-4 text-center font-bold text-[10px] shrink-0 ${getStatusColor(file.status)}`}
-                    >
+                    <span className={`w-4 text-center font-bold text-[10px] shrink-0 ${getStatusColor(file.status)}`}>
                       {getStatusLabel(file.status)}
                     </span>
-                    <div
-                      className="flex-1 min-w-0 flex flex-col"
-                      onClick={() => onFileClick(file.path)}
-                    >
-                      <span className={getFileNameClassName(selectionType)}>
-                        {file.name}
-                      </span>
+                    <div className="flex-1 min-w-0 flex flex-col" onClick={() => onFileClick(file.path)}>
+                      <span className={getFileNameClassName(selectionType)}>{file.name}</span>
                       {file.path !== file.name && (
-                        <span className={getFilePathClassName(selectionType)}>
-                          {file.path}
-                        </span>
+                        <span className={getFilePathClassName(selectionType)}>{file.path}</span>
                       )}
                     </div>
                     <button
@@ -574,9 +493,7 @@ const GitChangesView: React.FC<GitChangesViewProps> = ({
                 );
               })}
               {filterText && filteredFiles.length === 0 && (
-                <div className="flex items-center justify-center py-6 text-ide-mute text-xs">
-                  {t("git.noChanges")}
-                </div>
+                <div className="flex items-center justify-center py-6 text-ide-mute text-xs">{t("git.noChanges")}</div>
               )}
             </div>
           </>
@@ -595,9 +512,7 @@ const GitChangesView: React.FC<GitChangesViewProps> = ({
               ) : (
                 <ChevronRight size={12} className="text-ide-mute" />
               )}
-              <span className="text-[10px] font-bold text-ide-mute uppercase">
-                {t("git.stashes")}
-              </span>
+              <span className="text-[10px] font-bold text-ide-mute uppercase">{t("git.stashes")}</span>
             </div>
             <span className="text-[10px] bg-purple-500/20 text-purple-400 px-1.5 py-0.5 rounded">
               {safeStashes.length}
@@ -606,14 +521,9 @@ const GitChangesView: React.FC<GitChangesViewProps> = ({
           {showStashes && (
             <div>
               {safeStashes.map((s) => (
-                <div
-                  key={s.index}
-                  className="flex items-center gap-2 px-3 py-1.5 hover:bg-ide-accent/10 group"
-                >
+                <div key={s.index} className="flex items-center gap-2 px-3 py-1.5 hover:bg-ide-accent/10 group">
                   <Archive size={12} className="text-purple-400 shrink-0" />
-                  <span className="flex-1 text-[10px] text-ide-text truncate">
-                    {s.message}
-                  </span>
+                  <span className="flex-1 text-[10px] text-ide-text truncate">{s.message}</span>
                   <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                     <button
                       className="px-1.5 py-0.5 text-[10px] bg-green-500/20 text-green-400 rounded hover:bg-green-500/30"
@@ -644,9 +554,7 @@ const GitChangesView: React.FC<GitChangesViewProps> = ({
             value={summary}
             onChange={(e) => setSummary(e.target.value)}
             className={`w-full bg-ide-bg border rounded pl-3 pr-14 py-2 text-sm text-ide-text focus:outline-none ${
-              !summary && autoSummary
-                ? "placeholder-ide-accent/50"
-                : "placeholder-ide-mute"
+              !summary && autoSummary ? "placeholder-ide-accent/50" : "placeholder-ide-mute"
             } ${
               summary.length > 72
                 ? "border-orange-500/50 focus:border-orange-500 focus:ring-1 focus:ring-orange-500/20"
@@ -664,13 +572,7 @@ const GitChangesView: React.FC<GitChangesViewProps> = ({
               </button>
             )}
             {summary.length > 0 && (
-              <span
-                className={`text-[10px] ${
-                  summary.length > 72
-                    ? "text-orange-500 font-medium"
-                    : "text-ide-mute"
-                }`}
-              >
+              <span className={`text-[10px] ${summary.length > 72 ? "text-orange-500 font-medium" : "text-ide-mute"}`}>
                 {summary.length}
               </span>
             )}
@@ -685,10 +587,7 @@ const GitChangesView: React.FC<GitChangesViewProps> = ({
             className="w-full bg-ide-bg border border-ide-border rounded px-3 py-2 text-xs text-ide-text focus:outline-none focus:border-ide-accent min-h-[48px] resize-none placeholder-ide-mute/50"
           />
         ) : (
-          <button
-            className="text-[10px] text-ide-mute hover:text-ide-accent"
-            onClick={() => setShowDescription(true)}
-          >
+          <button className="text-[10px] text-ide-mute hover:text-ide-accent" onClick={() => setShowDescription(true)}>
             + {t("git.descriptionPlaceholder")}
           </button>
         )}
@@ -718,9 +617,7 @@ const GitChangesView: React.FC<GitChangesViewProps> = ({
             <>
               <Check size={14} />
               {t("git.commitTo")} {currentBranch}
-              {checkedCount > 0 && (
-                <span className="text-xs opacity-80">({checkedCount})</span>
-              )}
+              {checkedCount > 0 && <span className="text-xs opacity-80">({checkedCount})</span>}
             </>
           )}
         </button>
@@ -737,16 +634,12 @@ const GitChangesView: React.FC<GitChangesViewProps> = ({
           >
             <div className="flex items-center gap-2 mb-3">
               <AlertTriangle size={20} className="text-red-400" />
-              <span className="text-sm font-medium text-ide-text">
-                {t("git.discardConfirm")}
-              </span>
+              <span className="text-sm font-medium text-ide-text">{t("git.discardConfirm")}</span>
             </div>
             <p className="text-xs text-ide-mute mb-2 font-mono bg-ide-panel px-2 py-1 rounded truncate">
               {discardConfirm}
             </p>
-            <p className="text-xs text-red-400 mb-4">
-              {t("git.discardWarning")}
-            </p>
+            <p className="text-xs text-red-400 mb-4">{t("git.discardWarning")}</p>
             <div className="flex gap-2">
               <button
                 onClick={() => setDiscardConfirm(null)}
@@ -769,9 +662,7 @@ const GitChangesView: React.FC<GitChangesViewProps> = ({
         <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-50 animate-in slide-in-from-bottom-4 fade-in duration-300">
           <div className="flex items-center gap-2.5 bg-ide-panel border border-ide-border rounded-md px-3 py-2 shadow-xl shadow-black/20">
             <Check size={14} className="text-green-500 shrink-0" />
-            <span className="text-xs text-ide-text mr-1">
-              {t("git.commit")}
-            </span>
+            <span className="text-xs text-ide-text mr-1">{t("git.commit")}</span>
             <button
               onClick={handleUndoFromToast}
               className="flex items-center gap-1 px-2 py-0.5 rounded text-[11px] text-ide-accent hover:bg-ide-accent/10 font-medium transition-colors"
@@ -780,10 +671,7 @@ const GitChangesView: React.FC<GitChangesViewProps> = ({
               {t("git.undo")}
             </button>
             <div className="w-px h-3 bg-ide-border mx-1"></div>
-            <button
-              onClick={() => setUndoToast(false)}
-              className="text-ide-mute hover:text-ide-text transition-colors"
-            >
+            <button onClick={() => setUndoToast(false)} className="text-ide-mute hover:text-ide-text transition-colors">
               <X size={14} />
             </button>
           </div>

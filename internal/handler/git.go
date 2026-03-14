@@ -22,11 +22,14 @@ import (
 )
 
 type GitHandler struct {
-	settings *settings.Store
+	settings       *settings.Store
+	selectionStore *gitSelectionStore
 }
 
 func NewGitHandler(db *gorm.DB) *GitHandler {
-	h := &GitHandler{}
+	h := &GitHandler{
+		selectionStore: newGitSelectionStore(),
+	}
 	if db != nil {
 		h.settings = settings.New(db)
 	}
@@ -264,7 +267,7 @@ func (h *GitHandler) Status(c *gin.Context) {
 		return
 	}
 
-	files, summary := collectStructuredStatus(w.Filesystem.Root())
+	files, summary := h.collectStructuredStatus(w.Filesystem.Root())
 	c.JSON(http.StatusOK, gin.H{"files": files, "summary": summary})
 }
 
@@ -811,6 +814,37 @@ type CommitSelectedRequest struct {
 	Email       string            `json:"email"`
 }
 
+func (h *GitHandler) buildSelectedCommitPayload(repoRoot string) ([]string, []GitPatchPayload, error) {
+	files, _ := h.collectStructuredStatus(repoRoot)
+	selectedFiles := make([]string, 0)
+	selectedPatches := make([]GitPatchPayload, 0)
+
+	for _, file := range files {
+		switch file.IncludedState {
+		case "all":
+			selectedFiles = append(selectedFiles, file.Path)
+		case "partial":
+			diff, err := getGitDiff(repoRoot, file.Path, "working")
+			if err != nil {
+				return nil, nil, err
+			}
+
+			selectionState := resolveSelectionState(h.selectionStore, repoRoot, file.Path, diff)
+			patch := buildSelectionPatch(diff, getSelectedLineIDsForState(selectionState, diff))
+			if patch == "" {
+				continue
+			}
+
+			selectedPatches = append(selectedPatches, GitPatchPayload{
+				FilePath: file.Path,
+				Patch:    patch,
+			})
+		}
+	}
+
+	return selectedFiles, selectedPatches, nil
+}
+
 func (h *GitHandler) CommitSelected(c *gin.Context) {
 	var req CommitSelectedRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -830,11 +864,6 @@ func (h *GitHandler) CommitSelected(c *gin.Context) {
 		return
 	}
 
-	if len(req.Files) == 0 && len(req.Patches) == 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "no selected changes"})
-		return
-	}
-
 	repoRoot, err := h.getRepoRoot(req.Path)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -849,12 +878,28 @@ func (h *GitHandler) CommitSelected(c *gin.Context) {
 		email = req.Email
 	}
 
-	if len(req.Patches) == 0 {
-		hash, err := h.commitOnlySelectedFiles(repoRoot, req.Files, req.Summary, req.Description, author, email, false)
+	filesToCommit := append([]string(nil), req.Files...)
+	patchesToCommit := append([]GitPatchPayload(nil), req.Patches...)
+	if len(filesToCommit) == 0 && len(patchesToCommit) == 0 {
+		filesToCommit, patchesToCommit, err = h.buildSelectedCommitPayload(repoRoot)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
+	}
+
+	if len(filesToCommit) == 0 && len(patchesToCommit) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "no selected changes"})
+		return
+	}
+
+	if len(patchesToCommit) == 0 {
+		hash, err := h.commitOnlySelectedFiles(repoRoot, filesToCommit, req.Summary, req.Description, author, email, false)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		h.selectionStore.resetRepo(repoRoot)
 		bs := collectBranchStatus(repoRoot)
 		c.JSON(http.StatusOK, gin.H{"ok": true, "hash": hash, "branchStatus": bs})
 		return
@@ -865,14 +910,14 @@ func (h *GitHandler) CommitSelected(c *gin.Context) {
 		_ = w.Reset(&git.ResetOptions{Commit: head.Hash(), Mode: git.MixedReset})
 	}
 
-	for _, file := range req.Files {
+	for _, file := range filesToCommit {
 		if _, err := w.Add(file); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to add " + file + ": " + err.Error()})
 			return
 		}
 	}
 
-	for _, patch := range req.Patches {
+	for _, patch := range patchesToCommit {
 		if err := applyPatchToIndex(repoRoot, patch.Patch); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to apply patch for " + patch.FilePath + ": " + err.Error()})
 			return
@@ -892,15 +937,16 @@ func (h *GitHandler) CommitSelected(c *gin.Context) {
 		return
 	}
 
+	h.selectionStore.resetRepo(repoRoot)
+	files, summary := h.collectStructuredStatus(repoRoot)
 	repo, _ = h.openRepo(req.Path)
-	files := collectFileStatus(repo)
 	commits := collectCommitLog(repo, 20)
 	repoRoot, _ = h.getRepoRoot(req.Path)
 	bs := collectBranchStatus(repoRoot)
 
 	c.JSON(http.StatusOK, gin.H{
 		"ok": true, "hash": hash.String(),
-		"status": gin.H{"files": files}, "commits": commits, "branchStatus": bs,
+		"status": gin.H{"files": files, "summary": summary}, "commits": commits, "branchStatus": bs,
 	})
 }
 
@@ -923,11 +969,6 @@ func (h *GitHandler) Amend(c *gin.Context) {
 		return
 	}
 
-	if len(req.Files) == 0 && len(req.Patches) == 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "no selected changes"})
-		return
-	}
-
 	repoRoot, err := h.getRepoRoot(req.Path)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -942,12 +983,28 @@ func (h *GitHandler) Amend(c *gin.Context) {
 		email = req.Email
 	}
 
-	if len(req.Patches) == 0 {
-		hash, err := h.commitOnlySelectedFiles(repoRoot, req.Files, req.Summary, req.Description, author, email, true)
+	filesToCommit := append([]string(nil), req.Files...)
+	patchesToCommit := append([]GitPatchPayload(nil), req.Patches...)
+	if len(filesToCommit) == 0 && len(patchesToCommit) == 0 {
+		filesToCommit, patchesToCommit, err = h.buildSelectedCommitPayload(repoRoot)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
+	}
+
+	if len(filesToCommit) == 0 && len(patchesToCommit) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "no selected changes"})
+		return
+	}
+
+	if len(patchesToCommit) == 0 {
+		hash, err := h.commitOnlySelectedFiles(repoRoot, filesToCommit, req.Summary, req.Description, author, email, true)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		h.selectionStore.resetRepo(repoRoot)
 		bs := collectBranchStatus(repoRoot)
 		c.JSON(http.StatusOK, gin.H{"ok": true, "hash": hash, "branchStatus": bs})
 		return
@@ -958,14 +1015,14 @@ func (h *GitHandler) Amend(c *gin.Context) {
 		_ = w.Reset(&git.ResetOptions{Commit: head.Hash(), Mode: git.MixedReset})
 	}
 
-	for _, file := range req.Files {
+	for _, file := range filesToCommit {
 		if _, err := w.Add(file); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to add " + file + ": " + err.Error()})
 			return
 		}
 	}
 
-	for _, patch := range req.Patches {
+	for _, patch := range patchesToCommit {
 		if err := applyPatchToIndex(repoRoot, patch.Patch); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to apply patch for " + patch.FilePath + ": " + err.Error()})
 			return
@@ -986,14 +1043,15 @@ func (h *GitHandler) Amend(c *gin.Context) {
 		return
 	}
 
+	h.selectionStore.resetRepo(repoRoot)
 	repoRoot, _ = h.getRepoRoot(req.Path)
 	repo, _ = h.openRepo(req.Path)
-	files := collectFileStatus(repo)
+	files, summary := h.collectStructuredStatus(repoRoot)
 	commits := collectCommitLog(repo, 20)
 	bs := collectBranchStatus(repoRoot)
 
 	c.JSON(http.StatusOK, gin.H{
-		"ok": true, "status": gin.H{"files": files}, "commits": commits, "branchStatus": bs,
+		"ok": true, "status": gin.H{"files": files, "summary": summary}, "commits": commits, "branchStatus": bs,
 	})
 }
 
@@ -1705,8 +1763,17 @@ type GitPatchPayload struct {
 	Patch    string `json:"patch" binding:"required"`
 }
 
-func applyPatchToIndex(repoRoot string, patch string) error {
-	cmd := exec.Command("git", "apply", "--cached", "--unidiff-zero", "--whitespace=nowarn", "-")
+func applyGitPatch(repoRoot string, patch string, cached bool, reverse bool) error {
+	args := []string{"apply"}
+	if cached {
+		args = append(args, "--cached")
+	}
+	if reverse {
+		args = append(args, "-R")
+	}
+	args = append(args, "--unidiff-zero", "--whitespace=nowarn", "-")
+
+	cmd := exec.Command("git", args...)
 	cmd.Dir = repoRoot
 	cmd.Stdin = strings.NewReader(patch)
 	output, err := cmd.CombinedOutput()
@@ -1718,6 +1785,10 @@ func applyPatchToIndex(repoRoot string, patch string) error {
 		return fmt.Errorf("%s", message)
 	}
 	return nil
+}
+
+func applyPatchToIndex(repoRoot string, patch string) error {
+	return applyGitPatch(repoRoot, patch, true, false)
 }
 
 // AddPatch godoc
