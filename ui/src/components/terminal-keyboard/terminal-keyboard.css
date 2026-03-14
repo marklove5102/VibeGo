@@ -13,7 +13,8 @@
   --tk-mod-latched-text: var(--ide-on-accent, #ffffff);
   --tk-mod-locked-bg: var(--ide-diff-add);
   --tk-mod-locked-text: #ffffff;
-  --tk-gap: 3px;
+  --tk-gap-x: 6px;
+  --tk-gap-y: 8px;
   --tk-row-height: 42px;
   --tk-font-main: 17px;
   --tk-font-main-small: 13px;
@@ -25,8 +26,8 @@
 .tk-keyboard {
   display: flex;
   flex-direction: column;
-  gap: var(--tk-gap);
-  padding: 4px 2px 6px;
+  gap: var(--tk-gap-y);
+  padding: 8px 4px 8px;
   background: var(--tk-bg);
   font-family: var(--tk-font-family);
   user-select: none;
@@ -38,9 +39,9 @@
 
 .tk-row {
   display: flex;
-  gap: var(--tk-gap);
+  gap: var(--tk-gap-x);
   justify-content: center;
-  padding: 0 1px;
+  padding: 0 2px;
 }
 
 .tk-key {
