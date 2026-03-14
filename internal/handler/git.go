@@ -109,9 +109,11 @@ func (h *GitHandler) Register(r *gin.RouterGroup) {
 	g.POST("/status", h.Status)
 	g.POST("/log", h.Log)
 	g.POST("/diff", h.Diff)
+	g.POST("/file-diff", h.FileDiff)
 	g.POST("/show", h.Show)
 	g.POST("/add", h.Add)
 	g.POST("/reset", h.Reset)
+	g.POST("/apply-selection", h.ApplySelection)
 	g.POST("/checkout", h.Checkout)
 	g.POST("/commit", h.Commit)
 	g.POST("/undo", h.UndoCommit)
@@ -125,10 +127,13 @@ func (h *GitHandler) Register(r *gin.RouterGroup) {
 	g.POST("/push", h.Push)
 	g.POST("/stash", h.Stash)
 	g.POST("/stash-list", h.StashList)
+	g.POST("/stash-files", h.StashFiles)
+	g.POST("/stash-diff", h.StashDiff)
 	g.POST("/stash-pop", h.StashPop)
 	g.POST("/stash-drop", h.StashDrop)
 	g.POST("/conflicts", h.Conflicts)
-	g.POST("/resolve-conflict", h.ResolveConflict)
+	g.POST("/conflict-details", h.ConflictDetails)
+	g.POST("/conflict-resolve", h.ConflictResolve)
 	g.POST("/create-branch", h.CreateBranch)
 	g.POST("/delete-branch", h.DeleteBranch)
 	g.POST("/add-patch", h.AddPatch)
@@ -242,7 +247,14 @@ func (h *GitHandler) Status(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"files": collectFileStatus(repo)})
+	w, err := repo.Worktree()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	files, summary := collectStructuredStatus(w.Filesystem.Root())
+	c.JSON(http.StatusOK, gin.H{"files": files, "summary": summary})
 }
 
 type GitLogRequest struct {
