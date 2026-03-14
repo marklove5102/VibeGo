@@ -828,32 +828,24 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
     }
 
     try {
-      const detail = await sessionApi.get(currentSessionId);
-      const remoteState = detail.workspace_state;
-      if (hasRestorableSessionContent(remoteState)) {
-        restoreSessionState(remoteState);
-      }
+      const terminalList = await terminalApi.list({ workspace_session_id: currentSessionId });
+      const terminalStore = useTerminalStore.getState();
+      const normalized = reconcileRemoteTerminals(terminalStore.terminalsByGroup, terminalList.terminals);
+      const sanitized = sanitizeTerminalWorkspaceState({
+        terminalsByGroup: normalized,
+        activeTerminalByGroup: terminalStore.activeIdByGroup,
+        listManagerOpenByGroup: terminalStore.listManagerOpenByGroup,
+        terminalLayouts: terminalStore.terminalLayouts,
+        focusedIdByGroup: terminalStore.focusedIdByGroup,
+      });
 
-      try {
-        const terminalList = await terminalApi.list({ workspace_session_id: currentSessionId });
-        const terminalStore = useTerminalStore.getState();
-        const normalized = reconcileRemoteTerminals(terminalStore.terminalsByGroup, terminalList.terminals);
-        const sanitized = sanitizeTerminalWorkspaceState({
-          terminalsByGroup: normalized,
-          activeTerminalByGroup: terminalStore.activeIdByGroup,
-          listManagerOpenByGroup: terminalStore.listManagerOpenByGroup,
-          terminalLayouts: terminalStore.terminalLayouts,
-          focusedIdByGroup: terminalStore.focusedIdByGroup,
-        });
-
-        useTerminalStore.setState({
-          terminalsByGroup: sanitized.terminalsByGroup,
-          activeIdByGroup: sanitized.activeTerminalByGroup,
-          listManagerOpenByGroup: sanitized.listManagerOpenByGroup,
-          terminalLayouts: sanitized.terminalLayouts,
-          focusedIdByGroup: sanitized.focusedIdByGroup,
-        });
-      } catch {}
+      useTerminalStore.setState({
+        terminalsByGroup: sanitized.terminalsByGroup,
+        activeIdByGroup: sanitized.activeTerminalByGroup,
+        listManagerOpenByGroup: sanitized.listManagerOpenByGroup,
+        terminalLayouts: sanitized.terminalLayouts,
+        focusedIdByGroup: sanitized.focusedIdByGroup,
+      });
     } catch {}
   },
 
