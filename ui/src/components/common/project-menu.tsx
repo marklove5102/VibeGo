@@ -19,7 +19,7 @@ import {
   X,
   XCircle,
 } from "lucide-react";
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { fileApi } from "@/api/file";
 import { useDialog } from "@/components/common";
 import { type Locale, useTranslation } from "@/lib/i18n";
@@ -47,6 +47,15 @@ const ProjectMenu: React.FC<ProjectMenuProps> = ({
   onNewPage,
 }) => {
   const t = useTranslation(locale);
+  const [serverVersion, setServerVersion] = useState("");
+
+  useEffect(() => {
+    if (!isOpen) return;
+    fetch("/version")
+      .then((r) => r.json())
+      .then((d) => setServerVersion(d.version || ""))
+      .catch(() => {});
+  }, [isOpen]);
   const dialog = useDialog();
   const settings = useSettingsStore((s) => s.settings);
   const setSetting = useSettingsStore((s) => s.set);
@@ -356,7 +365,9 @@ const ProjectMenu: React.FC<ProjectMenuProps> = ({
         ))}
 
         <div className="mt-6 pt-4 border-t border-ide-border flex justify-between text-[10px] text-ide-mute">
-          <span>VibeGo v0.9.0</span>
+          <a href="https://github.com/xxnuo/VibeGo" target="_blank" rel="noopener noreferrer" className="hover:text-ide-accent transition-colors underline">
+            VibeGo{serverVersion ? ` ${serverVersion}` : ""}
+          </a>
           <span>{t("common.connected")}</span>
         </div>
       </div>

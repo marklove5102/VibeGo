@@ -23,6 +23,10 @@ export default defineConfig({
         changeOrigin: true,
         ws: true,
       },
+      "/version": {
+        target: "http://127.0.0.1:1984",
+        changeOrigin: true,
+      },
     },
   },
   preview: {
@@ -32,6 +36,10 @@ export default defineConfig({
         target: "http://127.0.0.1:1984",
         changeOrigin: true,
         ws: true,
+      },
+      "/version": {
+        target: "http://127.0.0.1:1984",
+        changeOrigin: true,
       },
     },
   },
