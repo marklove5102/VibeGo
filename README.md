@@ -4,6 +4,14 @@ A Web IDE built for professionals, designed for Vibe Coding anytime, anywhere. F
 
 为专业人士打造，支持随时随地 Vibe Coding 的 Web IDE。 自由使用你的 Claude Code、Gemini CLI、CodeX、OpenCode 及更多工具。
 
+In active development. Experience the beta version:
+
+激情开发功能中，体验预览版：
+
+```
+npx vibego@latest
+```
+
 ## Preview
 
 <p align="center">
