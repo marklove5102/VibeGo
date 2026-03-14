@@ -3,7 +3,7 @@ import react from "@vitejs/plugin-react";
 import path from "path";
 import { defineConfig } from "vite";
 
-const proxyTarget = process.env.VG_DEV_PROXY_TARGET || "https://127.0.0.1:11984";
+const proxyTarget = process.env.VG_DEV_PROXY_TARGET || "http://127.0.0.1:11984";
 const proxy = {
   "/api": {
     target: proxyTarget,
@@ -37,10 +37,12 @@ export default defineConfig({
     },
   },
   server: {
+    host: "0.0.0.0",
     allowedHosts: true,
     proxy,
   },
   preview: {
+    host: "0.0.0.0",
     allowedHosts: true,
     port: 4173,
     proxy,

@@ -6,11 +6,13 @@ import (
 	"crypto/rand"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"errors"
 	"encoding/pem"
 	"math/big"
 	"net"
 	"os"
 	"path/filepath"
+	"slices"
 	"time"
 )
 
@@ -19,7 +21,8 @@ func EnsureCert(configDir string) (certFile, keyFile string, err error) {
 	keyFile = filepath.Join(configDir, "key.pem")
 
 	if fileExists(certFile) && fileExists(keyFile) {
-		if !isCertExpired(certFile) {
+		valid, certErr := isCertUsable(certFile)
+		if certErr == nil && valid {
 			return
 		}
 	}
@@ -86,6 +89,7 @@ func generateCert(certFile, keyFile string) error {
 }
 
 func collectLocalIPs() []net.IP {
+	seen := make(map[string]struct{})
 	var ips []net.IP
 	ifaces, err := net.Interfaces()
 	if err != nil {
@@ -107,11 +111,24 @@ func collectLocalIPs() []net.IP {
 			case *net.IPAddr:
 				ip = v.IP
 			}
-			if ip != nil {
-				ips = append(ips, ip)
+			if ip == nil {
+				continue
 			}
+			ip = normalizeIP(ip)
+			if ip == nil {
+				continue
+			}
+			key := ip.String()
+			if _, ok := seen[key]; ok {
+				continue
+			}
+			seen[key] = struct{}{}
+			ips = append(ips, ip)
 		}
 	}
+	slices.SortFunc(ips, func(a, b net.IP) int {
+		return slices.Compare([]byte(a), []byte(b))
+	})
 	return ips
 }
 
@@ -120,18 +137,61 @@ func fileExists(path string) bool {
 	return err == nil
 }
 
-func isCertExpired(certFile string) bool {
+func isCertUsable(certFile string) (bool, error) {
 	data, err := os.ReadFile(certFile)
 	if err != nil {
-		return true
+		return false, err
 	}
 	block, _ := pem.Decode(data)
 	if block == nil {
-		return true
+		return false, errors.New("invalid pem")
 	}
 	cert, err := x509.ParseCertificate(block.Bytes)
 	if err != nil {
+		return false, err
+	}
+	if time.Now().After(cert.NotAfter) {
+		return false, nil
+	}
+	return certCoversLocalIPs(cert), nil
+}
+
+func certCoversLocalIPs(cert *x509.Certificate) bool {
+	expected := collectLocalIPs()
+	for _, ip := range []net.IP{net.ParseIP("127.0.0.1"), net.ParseIP("::1")} {
+		ip = normalizeIP(ip)
+		if ip != nil {
+			expected = append(expected, ip)
+		}
+	}
+
+	if len(expected) == 0 {
 		return true
 	}
-	return time.Now().After(cert.NotAfter)
+
+	certIPs := make(map[string]struct{}, len(cert.IPAddresses))
+	for _, ip := range cert.IPAddresses {
+		ip = normalizeIP(ip)
+		if ip == nil {
+			continue
+		}
+		certIPs[ip.String()] = struct{}{}
+	}
+
+	for _, ip := range expected {
+		if _, ok := certIPs[ip.String()]; !ok {
+			return false
+		}
+	}
+	return true
+}
+
+func normalizeIP(ip net.IP) net.IP {
+	if ip == nil {
+		return nil
+	}
+	if v4 := ip.To4(); v4 != nil {
+		return v4
+	}
+	return ip.To16()
 }
