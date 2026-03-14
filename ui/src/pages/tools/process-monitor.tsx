@@ -20,6 +20,7 @@ import {
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Area, AreaChart, Cell, Pie, PieChart, Tooltip, XAxis, YAxis } from "recharts";
 import type { ProcessInfo } from "@/api/process";
+import { ActionButton } from "@/components/common/action-button";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -279,9 +280,17 @@ const ProcessDetailSheet = memo(({ process, open, onClose, onKill, locale, t }: 
               <div className="font-mono text-xs break-all max-h-32 overflow-auto">{process.cmdline}</div>
             </div>
           )}
-          <Button variant="destructive" className="w-full" onClick={() => onKill(process)}>
-            <X size={14} className="mr-2" /> {t("plugin.processMonitor.killProcess")}
-          </Button>
+          <div className="pt-2 border-t border-ide-border mt-2 -mx-2">
+            <div className="px-2">
+              <ActionButton
+                onClick={() => onKill(process)}
+                icon={<X size={18} className="text-red-500" />}
+                label={t("plugin.processMonitor.killProcess")}
+                destructive
+                className="w-full"
+              />
+            </div>
+          </div>
         </div>
       </SheetContent>
     </Sheet>
