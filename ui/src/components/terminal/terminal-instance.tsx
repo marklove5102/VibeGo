@@ -13,6 +13,7 @@ import { Check, ChevronDown, ChevronUp, Copy, X } from "lucide-react";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import "@xterm/xterm/css/xterm.css";
 import { terminalApi } from "@/api/terminal";
+import TerminalSelectionMenu from "@/components/terminal/terminal-selection-menu";
 import { useTranslation } from "@/lib/i18n";
 import {
   armTerminalBrowserUnloadGuard,
@@ -44,6 +45,11 @@ interface ParsedTerminalNotification {
   title: string;
 }
 
+interface SelectionMenuState {
+  left: number;
+  top: number;
+}
+
 type TerminalDisposable = { dispose: () => void };
 
 type TerminalShortcutEvent = Pick<
@@ -54,8 +60,12 @@ type TerminalShortcutEvent = Pick<
 const TERMINAL_CTRL_SHORTCUT_KEYS = new Set(["a", "d", "h", "j", "k", "l", "n", "o", "p", "r", "s", "t", "u", "w"]);
 const TERMINAL_ALT_SHORTCUT_KEYS = new Set(["ArrowLeft", "ArrowRight"]);
 const TERMINAL_FUNCTION_SHORTCUT_KEYS = new Set(["F5"]);
+const SELECTION_MENU_WIDTH = 216;
+const SELECTION_MENU_HEIGHT = 44;
+const SELECTION_MENU_MARGIN = 8;
 
 const normalizeShortcutKey = (key: string): string => (key.length === 1 ? key.toLowerCase() : key);
+const clamp = (value: number, min: number, max: number): number => Math.min(Math.max(value, min), max);
 
 const shouldPreventTerminalBrowserShortcut = (
   event: Pick<KeyboardEvent, "altKey" | "ctrlKey" | "key" | "metaKey" | "shiftKey">
@@ -417,10 +427,13 @@ const TerminalInstance: React.FC<TerminalInstanceProps> = ({
   const [searchTerm, setSearchTerm] = useState("");
   const [searchCaseSensitive, setSearchCaseSensitive] = useState(false);
   const [searchRegex, setSearchRegex] = useState(false);
+  const [selectionMenu, setSelectionMenu] = useState<SelectionMenuState | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const searchVisibleRef = useRef(false);
   const openSearchRef = useRef<() => void>(() => {});
   const closeSearchRef = useRef<() => void>(() => {});
+  const selectionAnchorRef = useRef<{ clientX: number; clientY: number } | null>(null);
+  const selectionMenuFrameRef = useRef<number | null>(null);
 
   const [progress, setProgress] = useState<{ value: number; state: 0 | 1 | 2 | 3 | 4 } | null>(null);
   const [copySuccess, setCopySuccess] = useState(false);
@@ -469,6 +482,136 @@ const TerminalInstance: React.FC<TerminalInstanceProps> = ({
       reconnectTimerRef.current = null;
     }
   };
+
+  const cancelSelectionMenuFrame = useCallback(() => {
+    if (selectionMenuFrameRef.current !== null) {
+      cancelAnimationFrame(selectionMenuFrameRef.current);
+      selectionMenuFrameRef.current = null;
+    }
+  }, []);
+
+  const hideSelectionMenu = useCallback(() => {
+    cancelSelectionMenuFrame();
+    setSelectionMenu(null);
+  }, [cancelSelectionMenuFrame]);
+
+  const clearTerminalSelection = useCallback(() => {
+    terminalRef.current?.clearSelection();
+    hideSelectionMenu();
+  }, [hideSelectionMenu]);
+
+  const getDomSelectionRect = useCallback((): DOMRect | null => {
+    const wrapper = wrapperRef.current;
+    if (!wrapper) {
+      return null;
+    }
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0 || selection.isCollapsed) {
+      return null;
+    }
+    const range = selection.getRangeAt(0);
+    const ancestor = range.commonAncestorContainer;
+    if (!(ancestor instanceof Node) || !wrapper.contains(ancestor)) {
+      return null;
+    }
+    const rects = Array.from(range.getClientRects()).filter((rect) => rect.width > 0 || rect.height > 0);
+    if (rects.length === 0) {
+      return null;
+    }
+    const wrapperRect = wrapper.getBoundingClientRect();
+    const visibleRects = rects.filter(
+      (rect) =>
+        rect.bottom >= wrapperRect.top &&
+        rect.top <= wrapperRect.bottom &&
+        rect.right >= wrapperRect.left &&
+        rect.left <= wrapperRect.right
+    );
+    if (visibleRects.length === 0) {
+      return null;
+    }
+    const left = Math.min(...visibleRects.map((rect) => rect.left));
+    const right = Math.max(...visibleRects.map((rect) => rect.right));
+    const top = Math.min(...visibleRects.map((rect) => rect.top));
+    const bottom = Math.max(...visibleRects.map((rect) => rect.bottom));
+    return new DOMRect(left, top, right - left, bottom - top);
+  }, []);
+
+  const getTerminalSelectionRect = useCallback((terminal: Terminal): DOMRect | null => {
+    const screenElement = containerRef.current?.querySelector(".xterm-screen");
+    if (!(screenElement instanceof HTMLElement)) {
+      return null;
+    }
+    const selection = terminal.getSelectionPosition();
+    if (!selection) {
+      return null;
+    }
+    const screenRect = screenElement.getBoundingClientRect();
+    const cellWidth = screenRect.width / Math.max(terminal.cols, 1);
+    const cellHeight = screenRect.height / Math.max(terminal.rows, 1);
+    if (!Number.isFinite(cellWidth) || !Number.isFinite(cellHeight) || cellWidth <= 0 || cellHeight <= 0) {
+      return null;
+    }
+    const viewportY = terminal.buffer.active.viewportY;
+    const startRow = selection.start.y - viewportY;
+    const endRow = selection.end.y - viewportY;
+    if (endRow < 0 || startRow > terminal.rows - 1) {
+      return null;
+    }
+    const visibleRow = clamp(startRow, 0, terminal.rows - 1);
+    const top = screenRect.top + visibleRow * cellHeight;
+    const bottom = top + cellHeight;
+    if (startRow === endRow && startRow >= 0 && startRow < terminal.rows) {
+      const startCol = clamp(selection.start.x, 0, terminal.cols - 1);
+      const endCol = clamp(Math.max(selection.end.x, selection.start.x + 1), 1, terminal.cols);
+      const left = screenRect.left + startCol * cellWidth;
+      const right = screenRect.left + endCol * cellWidth;
+      return new DOMRect(left, top, Math.max(right - left, cellWidth), bottom - top);
+    }
+    const left = screenRect.left + clamp(selection.start.x, 0, terminal.cols - 1) * cellWidth;
+    return new DOMRect(left, top, Math.max(screenRect.right - left, cellWidth), bottom - top);
+  }, []);
+
+  const updateSelectionMenu = useCallback(() => {
+    const wrapper = wrapperRef.current;
+    const terminal = terminalRef.current;
+    if (!wrapper || !terminal || !terminal.hasSelection()) {
+      setSelectionMenu(null);
+      return;
+    }
+    const selectionText = terminal.getSelection();
+    if (!selectionText) {
+      setSelectionMenu(null);
+      return;
+    }
+    const wrapperRect = wrapper.getBoundingClientRect();
+    const selectionRect = getDomSelectionRect() ?? getTerminalSelectionRect(terminal);
+    const fallbackX = selectionAnchorRef.current?.clientX ?? wrapperRect.left + wrapperRect.width / 2;
+    const fallbackY = selectionAnchorRef.current?.clientY ?? wrapperRect.top + wrapperRect.height / 2;
+    const anchorX = selectionRect ? selectionRect.left + selectionRect.width / 2 : fallbackX;
+    const anchorTop = selectionRect ? selectionRect.top : fallbackY;
+    const anchorBottom = selectionRect ? selectionRect.bottom : fallbackY;
+    const halfWidth = SELECTION_MENU_WIDTH / 2;
+    const leftMin = Math.min(halfWidth + SELECTION_MENU_MARGIN, wrapperRect.width / 2);
+    const leftMax = Math.max(wrapperRect.width - halfWidth - SELECTION_MENU_MARGIN, leftMin);
+    const left = clamp(anchorX - wrapperRect.left, leftMin, leftMax);
+    let top = anchorTop - wrapperRect.top - SELECTION_MENU_HEIGHT - 10;
+    if (top < SELECTION_MENU_MARGIN) {
+      top = anchorBottom - wrapperRect.top + 10;
+    }
+    const maxTop = Math.max(wrapperRect.height - SELECTION_MENU_HEIGHT - SELECTION_MENU_MARGIN, SELECTION_MENU_MARGIN);
+    setSelectionMenu({
+      left,
+      top: clamp(top, SELECTION_MENU_MARGIN, maxTop),
+    });
+  }, [getDomSelectionRect, getTerminalSelectionRect]);
+
+  const queueSelectionMenuUpdate = useCallback(() => {
+    cancelSelectionMenuFrame();
+    selectionMenuFrameRef.current = requestAnimationFrame(() => {
+      selectionMenuFrameRef.current = null;
+      updateSelectionMenu();
+    });
+  }, [cancelSelectionMenuFrame, updateSelectionMenu]);
 
   const connectWebSocket = useCallback(
     (terminal: Terminal) => {
@@ -654,10 +797,11 @@ const TerminalInstance: React.FC<TerminalInstanceProps> = ({
   );
 
   const openSearch = useCallback(() => {
+    hideSelectionMenu();
     setSearchVisible(true);
     searchVisibleRef.current = true;
     setTimeout(() => searchInputRef.current?.focus(), 50);
-  }, []);
+  }, [hideSelectionMenu]);
 
   const closeSearch = useCallback(() => {
     setSearchVisible(false);
@@ -687,17 +831,43 @@ const TerminalInstance: React.FC<TerminalInstanceProps> = ({
     setTerminalBrowserShortcutFocus(terminalId, hasFocusedTerminalInput);
   }, [isFocused, terminalId]);
 
-  const sendTerminalInput = useCallback((data: string) => {
-    if (callbacksRef.current.isExited) return;
-    if (!inputReadyRef.current) return;
-    if (wsRef.current?.readyState !== WebSocket.OPEN) return;
-    wsRef.current.send(
-      JSON.stringify({
-        type: "input",
-        data: encodeUtf8Base64(data),
-      })
-    );
-  }, []);
+  const sendTerminalInput = useCallback(
+    (data: string) => {
+      if (callbacksRef.current.isExited) return;
+      if (!inputReadyRef.current) return;
+      if (wsRef.current?.readyState !== WebSocket.OPEN) return;
+      hideSelectionMenu();
+      wsRef.current.send(
+        JSON.stringify({
+          type: "input",
+          data: encodeUtf8Base64(data),
+        })
+      );
+    },
+    [hideSelectionMenu]
+  );
+
+  const handleSelectionCopy = useCallback(() => {
+    const text = terminalRef.current?.getSelection();
+    if (!text) {
+      hideSelectionMenu();
+      return;
+    }
+    void navigator.clipboard.writeText(text).catch(() => {});
+    clearTerminalSelection();
+    terminalRef.current?.focus();
+  }, [clearTerminalSelection, hideSelectionMenu]);
+
+  const handleSelectionSearch = useCallback(() => {
+    const text = terminalRef.current?.getSelection();
+    if (!text) {
+      hideSelectionMenu();
+      return;
+    }
+    setSearchTerm(text);
+    clearTerminalSelection();
+    openSearchRef.current();
+  }, [clearTerminalSelection, hideSelectionMenu]);
 
   const isFocusInsideInstance = useCallback(
     (target: EventTarget | null) => {
@@ -739,6 +909,33 @@ const TerminalInstance: React.FC<TerminalInstanceProps> = ({
     syncBrowserShortcutFocus();
     return () => setTerminalBrowserShortcutFocus(terminalId, false);
   }, [syncBrowserShortcutFocus, terminalId]);
+
+  useEffect(() => {
+    if (!selectionMenu) {
+      return;
+    }
+    const handleResize = () => queueSelectionMenuUpdate();
+    const handleSelectionChange = () => queueSelectionMenuUpdate();
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) {
+        hideSelectionMenu();
+        return;
+      }
+      if (wrapperRef.current?.contains(target)) {
+        return;
+      }
+      hideSelectionMenu();
+    };
+    window.addEventListener("resize", handleResize);
+    document.addEventListener("selectionchange", handleSelectionChange);
+    window.addEventListener("pointerdown", handlePointerDown, true);
+    return () => {
+      window.removeEventListener("resize", handleResize);
+      document.removeEventListener("selectionchange", handleSelectionChange);
+      window.removeEventListener("pointerdown", handlePointerDown, true);
+    };
+  }, [hideSelectionMenu, queueSelectionMenuUpdate, selectionMenu]);
 
   useEffect(() => {
     callbacksRef.current = { isActive, isFocused, isExited, onExited, terminalName, t };
@@ -869,6 +1066,7 @@ const TerminalInstance: React.FC<TerminalInstanceProps> = ({
         const selection = terminal.getSelection();
         if (selection) {
           event.preventDefault();
+          hideSelectionMenu();
           void navigator.clipboard.writeText(selection).catch(() => {});
           return false;
         }
@@ -901,6 +1099,18 @@ const TerminalInstance: React.FC<TerminalInstanceProps> = ({
       return true;
     });
 
+    terminal.onSelectionChange(() => {
+      queueSelectionMenuUpdate();
+    });
+
+    terminal.onScroll(() => {
+      if (terminal.hasSelection()) {
+        queueSelectionMenuUpdate();
+      } else {
+        hideSelectionMenu();
+      }
+    });
+
     terminal.onData((data) => {
       if (callbacksRef.current.isExited) return;
       if (!inputReadyRef.current) return;
@@ -918,6 +1128,7 @@ const TerminalInstance: React.FC<TerminalInstanceProps> = ({
     return () => {
       isUnmountingRef.current = true;
       inputReadyRef.current = false;
+      cancelSelectionMenuFrame();
       clearReconnectTimer();
       if (wsRef.current) {
         const ws = wsRef.current;
@@ -939,7 +1150,14 @@ const TerminalInstance: React.FC<TerminalInstanceProps> = ({
       progressAddonRef.current = null;
       initializedRef.current = false;
     };
-  }, [connectWebSocket, handleOscNotification, terminalId]);
+  }, [
+    cancelSelectionMenuFrame,
+    connectWebSocket,
+    handleOscNotification,
+    hideSelectionMenu,
+    queueSelectionMenuUpdate,
+    terminalId,
+  ]);
 
   useEffect(() => {
     if (isActive && fitAddonRef.current && terminalRef.current) {
@@ -1059,11 +1277,27 @@ const TerminalInstance: React.FC<TerminalInstanceProps> = ({
       }}
       onFocusCapture={() => setTerminalBrowserShortcutFocus(terminalId, true)}
       onBlurCapture={() => setTimeout(syncBrowserShortcutFocus, 0)}
+      onPointerUpCapture={(e) => {
+        selectionAnchorRef.current = { clientX: e.clientX, clientY: e.clientY };
+        queueSelectionMenuUpdate();
+      }}
     >
       <div
         ref={containerRef}
         className="absolute inset-0 [&_.xterm]:!p-0 [&_.xterm]:!m-0 [&_.xterm-viewport]:!p-0 [&_.xterm-screen]:!p-0 [&_.xterm-screen]:!m-0"
       />
+      {selectionMenu && (
+        <TerminalSelectionMenu
+          left={selectionMenu.left}
+          top={selectionMenu.top}
+          copyLabel={t("common.copy")}
+          searchLabel={t("common.search")}
+          clearLabel={t("common.clear")}
+          onCopy={handleSelectionCopy}
+          onSearch={handleSelectionSearch}
+          onClear={clearTerminalSelection}
+        />
+      )}
       {progress && (
         <div className="absolute bottom-0 left-0 right-0 z-10">
           <div
