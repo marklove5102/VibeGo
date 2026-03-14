@@ -41,9 +41,10 @@ interface KeyButtonProps {
   shiftActive?: boolean
   onKeyOutput: (value: string, special: boolean) => void
   onSlide: (dir: 'left' | 'right') => void
+  edge?: 'left' | 'right'
 }
 
-const KeyButton: React.FC<KeyButtonProps> = ({ keyDef, modState, shiftActive, onKeyOutput, onSlide }) => {
+const KeyButton: React.FC<KeyButtonProps> = ({ keyDef, modState, shiftActive, onKeyOutput, onSlide, edge }) => {
   const [pressed, setPressed] = useState(false)
   const [swipeDir, setSwipeDir] = useState<SwipeDir | null>(null)
   const [sliding, setSliding] = useState(false)
@@ -221,6 +222,7 @@ const KeyButton: React.FC<KeyButtonProps> = ({ keyDef, modState, shiftActive, on
     <div
       className={classes}
       style={{ '--key-flex': keyDef.width ?? 1 } as React.CSSProperties}
+      data-edge={edge}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}

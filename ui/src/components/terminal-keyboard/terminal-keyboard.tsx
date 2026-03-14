@@ -111,16 +111,23 @@ const TerminalKeyboard: React.FC<TerminalKeyboardProps> = ({
     <div className="tk-keyboard">
       {layout.rows.map((row, ri) => (
         <div key={ri} className={rowClasses[ri]}>
-          {row.keys.map(keyDef => (
-            <KeyButton
-              key={keyDef.id}
-              keyDef={keyDef}
-              modState={keyDef.type === 'modifier' ? getModState(keyDef.value) : undefined}
-              shiftActive={shiftActive}
-              onKeyOutput={handleKeyOutput}
-              onSlide={handleSlide}
-            />
-          ))}
+          {row.keys.map((keyDef, ki) => {
+            let edge: 'left' | 'right' | undefined
+            if (ki === 0) edge = 'left'
+            else if (ki === row.keys.length - 1) edge = 'right'
+
+            return (
+              <KeyButton
+                key={keyDef.id}
+                keyDef={keyDef}
+                modState={keyDef.type === 'modifier' ? getModState(keyDef.value) : undefined}
+                shiftActive={shiftActive}
+                onKeyOutput={handleKeyOutput}
+                onSlide={handleSlide}
+                edge={edge}
+              />
+            )
+          })}
         </div>
       ))}
     </div>
