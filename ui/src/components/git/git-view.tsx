@@ -19,9 +19,9 @@ import { usePageTopBar } from "@/hooks/use-page-top-bar";
 import { getTranslation, type Locale } from "@/lib/i18n";
 import { getOrCreateGitStore, useGitStore } from "@/stores";
 import { useSessionStore } from "@/stores/session-store";
-import BranchSelector from "./branch-selector";
-import GitChangesView from "./git-changes-view";
-import GitHistoryView from "./git-history-view";
+import BranchSelector from "@/components/git/branch-selector";
+import GitChangesView from "@/components/git/git-changes-view";
+import GitHistoryView from "@/components/git/git-history-view";
 
 interface GitDiffRequest {
   original: string;

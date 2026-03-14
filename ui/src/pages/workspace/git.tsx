@@ -3,8 +3,8 @@ import React, { useCallback } from "react";
 import { ConflictView, DiffView, GitView } from "@/components/git";
 import { getOrCreateGitStore, useFrameStore } from "@/stores";
 import { useAppStore } from "@/stores/app-store";
-import { registerPage } from "../registry";
-import type { PageViewProps } from "../types";
+import { registerPage } from "@/pages/registry";
+import type { PageViewProps } from "@/pages/types";
 
 interface GitDiffTabPayload {
   original: string;

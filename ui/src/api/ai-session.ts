@@ -1,5 +1,5 @@
 import type { AIListResponse, AIMessagesResponse, AIOverviewResponse, AISessionConfig } from "@/types/ai-session";
-import { request } from "./request";
+import { request } from "@/api/request";
 
 export const aiSessionApi = {
   overview: () => request<AIOverviewResponse>("/ai-sessions/overview"),

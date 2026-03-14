@@ -1,4 +1,4 @@
-import { request } from "./request";
+import { request } from "@/api/request";
 
 export const settingsApi = {
   list: () => request<Record<string, string>>("/settings/list"),

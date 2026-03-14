@@ -11,8 +11,8 @@ import {
   Delete,
   CornerDownLeft
 } from 'lucide-react'
-import type { KeyDef, SwipeDir } from './core/types'
-import { getSwipeDirection, SWIPE_DIRS, isSpecialKey, MODIFIER_KEYS } from './core/types'
+import type { KeyDef, SwipeDir } from '@/components/terminal-keyboard/core/types'
+import { getSwipeDirection, SWIPE_DIRS, isSpecialKey, MODIFIER_KEYS } from '@/components/terminal-keyboard/core/types'
 
 const SWIPE_THRESHOLD = 18
 const SLIDE_STEP = 18

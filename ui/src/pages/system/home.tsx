@@ -3,8 +3,8 @@ import React from "react";
 import { HomePage } from "@/components/home";
 import { useAppStore } from "@/stores/app-store";
 import { useSessionStore } from "@/stores/session-store";
-import { registerPage } from "../registry";
-import type { PageViewProps } from "../types";
+import { registerPage } from "@/pages/registry";
+import type { PageViewProps } from "@/pages/types";
 
 const HomeView: React.FC<PageViewProps> = () => {
   const locale = useAppStore((s) => s.locale);

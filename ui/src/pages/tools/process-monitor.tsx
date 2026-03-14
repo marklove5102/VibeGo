@@ -40,8 +40,8 @@ import { useFrameController } from "@/framework/frame/controller";
 import { useCombinedStats, useProcessKill } from "@/hooks/use-process";
 import { getIntlLocale, useTranslation } from "@/lib/i18n";
 import { useAppStore } from "@/stores/app-store";
-import { registerPage } from "../registry";
-import type { PageViewProps } from "../types";
+import { registerPage } from "@/pages/registry";
+import type { PageViewProps } from "@/pages/types";
 
 type SortField = "pid" | "name" | "cpuPercent" | "memPercent" | "status" | "numThreads" | "createTime";
 type SortDirection = "asc" | "desc";

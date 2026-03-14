@@ -3,7 +3,7 @@ import React from "react";
 import { useTranslation } from "@/lib/i18n";
 import { useAppStore } from "@/stores";
 import type { TerminalSession } from "@/stores/terminal-store";
-import TerminalTabs from "./terminal-tabs";
+import TerminalTabs from "@/components/terminal/terminal-tabs";
 
 interface TerminalToolbarProps {
   terminals: TerminalSession[];

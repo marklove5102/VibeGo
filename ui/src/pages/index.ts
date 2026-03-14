@@ -1,12 +1,12 @@
-export { pageRegistry, registerPage, unregisterPage } from "./registry";
-export type { PageCategory, PageContext, PageDefinition, PageId, PageViewProps } from "./types";
+export { pageRegistry, registerPage, unregisterPage } from "@/pages/registry";
+export type { PageCategory, PageContext, PageDefinition, PageId, PageViewProps } from "@/pages/types";
 
-import "./tools/ai-session-manager";
-import "./system/home";
-import "./system/settings";
-import "./tools/process-monitor";
-import "./workspace/files";
-import "./workspace/git";
-import "./workspace/terminal";
-import "./tools/remote-control";
-import "./tools/keyboard-test";
+import "@/pages/tools/ai-session-manager";
+import "@/pages/system/home";
+import "@/pages/system/settings";
+import "@/pages/tools/process-monitor";
+import "@/pages/workspace/files";
+import "@/pages/workspace/git";
+import "@/pages/workspace/terminal";
+import "@/pages/tools/remote-control";
+import "@/pages/tools/keyboard-test";

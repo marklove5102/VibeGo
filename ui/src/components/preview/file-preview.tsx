@@ -5,12 +5,12 @@ import { useTranslation } from "@/lib/i18n";
 import { useAppStore } from "@/stores";
 import type { FileItem } from "@/stores/file-manager-store";
 import { getPreviewType, usePreviewStore } from "@/stores/preview-store";
-import CodePreview from "./code-preview";
-import ImagePreview from "./image-preview";
-import MarkdownPreview from "./markdown-preview";
-import MediaPreview from "./media-preview";
-import PDFPreview from "./pdf-preview";
-import { formatFileSize, isFileTooLarge } from "./utils";
+import CodePreview from "@/components/preview/code-preview";
+import ImagePreview from "@/components/preview/image-preview";
+import MarkdownPreview from "@/components/preview/markdown-preview";
+import MediaPreview from "@/components/preview/media-preview";
+import PDFPreview from "@/components/preview/pdf-preview";
+import { formatFileSize, isFileTooLarge } from "@/components/preview/utils";
 
 interface FilePreviewProps {
   file: FileItem | null;

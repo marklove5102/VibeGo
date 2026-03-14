@@ -1,9 +1,9 @@
 import React from "react";
 import { useFrameStore } from "@/stores/frame-store";
-import BottomBar from "./bottom-bar";
-import SideBar from "./side-bar";
-import TabBar from "./tab-bar";
-import TopBar from "./top-bar";
+import BottomBar from "@/components/frame/bottom-bar";
+import SideBar from "@/components/frame/side-bar";
+import TabBar from "@/components/frame/tab-bar";
+import TopBar from "@/components/frame/top-bar";
 
 interface AppFrameProps {
   children: React.ReactNode;

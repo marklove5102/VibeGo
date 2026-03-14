@@ -1,9 +1,9 @@
 import { create } from "zustand";
-import { fileApi } from "../api/file";
-import { settingsApi } from "../api/settings";
-import { type SessionInfo, type WorkspaceState, sessionApi } from "../api/session";
-import { terminalApi } from "../api/terminal";
-import { cleanupAllTerminals } from "../services/terminal-cleanup-service";
+import { fileApi } from "@/api/file";
+import { settingsApi } from "@/api/settings";
+import { type SessionInfo, type WorkspaceState, sessionApi } from "@/api/session";
+import { terminalApi } from "@/api/terminal";
+import { cleanupAllTerminals } from "@/services/terminal-cleanup-service";
 import {
   type FileManagerState,
   type SortField,
@@ -13,10 +13,10 @@ import {
   removeFileManagerStore,
   resetFileManagerStores,
   subscribeFileManagerStoreChanges,
-} from "./file-manager-store";
-import { type GenericGroup, type GroupPage, type ToolGroup, useFrameStore } from "./frame-store";
-import * as gitStoreModule from "./git-store";
-import { type LayoutNode, type TerminalSession, useTerminalStore } from "./terminal-store";
+} from "@/stores/file-manager-store";
+import { type GenericGroup, type GroupPage, type ToolGroup, useFrameStore } from "@/stores/frame-store";
+import * as gitStoreModule from "@/stores/git-store";
+import { type LayoutNode, type TerminalSession, useTerminalStore } from "@/stores/terminal-store";
 
 const CURRENT_SESSION_SETTING_KEY = "workspaceCurrentSessionId";
 

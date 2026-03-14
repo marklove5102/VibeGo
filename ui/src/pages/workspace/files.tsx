@@ -3,8 +3,8 @@ import React, { useCallback } from "react";
 import { FileManager } from "@/components/file";
 import { FilePreview } from "@/components/preview";
 import { type FileItem, useFrameStore } from "@/stores";
-import { registerPage } from "../registry";
-import type { PageViewProps } from "../types";
+import { registerPage } from "@/pages/registry";
+import type { PageViewProps } from "@/pages/types";
 
 const FilesView: React.FC<PageViewProps> = ({ context }) => {
   const tabs = useFrameStore((s) => s.getCurrentTabs());

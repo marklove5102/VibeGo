@@ -15,8 +15,8 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { remoteApi } from "@/api/remote";
 import { useTranslation } from "@/lib/i18n";
 import { useAppStore } from "@/stores/app-store";
-import { registerPage } from "../registry";
-import type { PageViewProps } from "../types";
+import { registerPage } from "@/pages/registry";
+import type { PageViewProps } from "@/pages/types";
 
 const POLL_INTERVAL = 3000;
 

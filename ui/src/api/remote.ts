@@ -1,4 +1,4 @@
-import { request } from "./request";
+import { request } from "@/api/request";
 
 export interface VolumeState {
   level: number;

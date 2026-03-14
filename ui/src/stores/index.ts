@@ -1,5 +1,5 @@
-export { type Locale, type Theme, useAppStore } from "./app-store";
-export { type EditorTab, useEditorStore } from "./editor-store";
+export { type Locale, type Theme, useAppStore } from "@/stores/app-store";
+export { type EditorTab, useEditorStore } from "@/stores/editor-store";
 export {
   createFileManagerStore,
   type FileItem,
@@ -13,8 +13,8 @@ export {
   type SortOrder,
   useFileManagerStore,
   type ViewMode,
-} from "./file-manager-store";
-export { type FileNode, useFileStore } from "./file-store";
+} from "@/stores/file-manager-store";
+export { type FileNode, useFileStore } from "@/stores/file-store";
 export {
   type GenericGroup,
   type GroupPage,
@@ -28,7 +28,7 @@ export {
   type ToolGroup,
   useFrameStore,
   type ViewType,
-} from "./frame-store";
+} from "@/stores/frame-store";
 export {
   createGitStore,
   type GitFileNode,
@@ -39,14 +39,14 @@ export {
   removeGitStore,
   resetGitStores,
   useGitStore,
-} from "./git-store";
+} from "@/stores/git-store";
 export {
   getLanguageFromExtension,
   getPreviewType,
   type PreviewType,
   usePreviewStore,
-} from "./preview-store";
-export { useSessionStore } from "./session-store";
+} from "@/stores/preview-store";
+export { useSessionStore } from "@/stores/session-store";
 export {
   type LayoutNode,
   type SplitDirection,
@@ -54,4 +54,4 @@ export {
   type TerminalLeaf,
   type TerminalSession,
   useTerminalStore,
-} from "./terminal-store";
+} from "@/stores/terminal-store";

@@ -2,8 +2,8 @@ import { Keyboard } from "lucide-react";
 import React, { useState, useRef, useCallback } from "react";
 import { TerminalKeyboard } from "@/components/terminal-keyboard";
 import type { TerminalKeyEvent } from "@/components/terminal-keyboard";
-import { registerPage } from "../registry";
-import type { PageViewProps } from "../types";
+import { registerPage } from "@/pages/registry";
+import type { PageViewProps } from "@/pages/types";
 
 interface EventLogEntry {
   id: number;

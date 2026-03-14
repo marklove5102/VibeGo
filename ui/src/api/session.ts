@@ -1,4 +1,4 @@
-import { request } from "./request";
+import { request } from "@/api/request";
 import type { GroupPage } from "@/stores/frame-store";
 import type { SortField, SortOrder, ViewMode } from "@/stores/file-manager-store";
 import type { LayoutNode, TerminalSession } from "@/stores/terminal-store";

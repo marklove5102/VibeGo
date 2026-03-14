@@ -27,9 +27,9 @@ import {
   fileManagerStore,
   getOrCreateFileManagerStore,
 } from "@/stores/file-manager-store";
-import FileDetailSheet from "./file-detail-sheet";
-import FileManagerBreadcrumb from "./file-manager-breadcrumb";
-import FileManagerToolbar from "./file-manager-toolbar";
+import FileDetailSheet from "@/components/file/file-detail-sheet";
+import FileManagerBreadcrumb from "@/components/file/file-manager-breadcrumb";
+import FileManagerToolbar from "@/components/file/file-manager-toolbar";
 
 function formatFileSize(bytes: number): string {
   if (bytes === 0) return "0 B";

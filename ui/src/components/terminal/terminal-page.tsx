@@ -9,10 +9,10 @@ import { syncTerminalWorkspaceState, useSessionStore } from "@/stores/session-st
 import { useAppStore } from "@/stores";
 import { useFrameStore } from "@/stores/frame-store";
 import { type SplitDirection, type TerminalSession, useTerminalStore } from "@/stores/terminal-store";
-import TerminalHistoryPage from "./terminal-history-page";
-import TerminalInstance from "./terminal-instance";
-import TerminalListManager from "./terminal-list-manager";
-import TerminalSplitView from "./terminal-split-view";
+import TerminalHistoryPage from "@/components/terminal/terminal-history-page";
+import TerminalInstance from "@/components/terminal/terminal-instance";
+import TerminalListManager from "@/components/terminal/terminal-list-manager";
+import TerminalSplitView from "@/components/terminal/terminal-split-view";
 
 interface TerminalPageProps {
   groupId: string;
