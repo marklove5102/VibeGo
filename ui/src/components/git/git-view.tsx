@@ -17,7 +17,7 @@ import { useDialog } from "@/components/common";
 import { usePageTopBar } from "@/hooks/use-page-top-bar";
 import { getTranslation, type Locale } from "@/lib/i18n";
 import { useSessionStore } from "@/stores/session-store";
-import { type GitSyncOptions, useGitStore } from "@/stores";
+import { getOrCreateGitStore, type GitSyncOptions, useGitStore } from "@/stores";
 import BranchSelector from "./branch-selector";
 import GitChangesView from "./git-changes-view";
 import GitHistoryView from "./git-history-view";
@@ -209,23 +209,23 @@ const GitView: React.FC<GitViewProps> = ({ groupId, path, locale, onFileDiff, on
     wsCleanupRef.current = gitApi.connectWs(
       path,
       (event) => {
-      if (event.type === "file_changed" && event.data.files) {
-        applyStatusUpdate(event.data.files as any);
-      }
-      if (event.type === "remote_updated") {
-        applyBranchStatus(event.data as any);
-      }
-      if (event.type === "repo_sync_needed") {
-        scheduleAutoSync({
-          status: event.data.status === true,
-          history: event.data.history === true,
-          branches: event.data.branches === true,
-          remotes: event.data.remotes === true,
-          stashes: event.data.stashes === true,
-          conflicts: event.data.conflicts === true,
-          draft: event.data.draft === true,
-        });
-      }
+        if (event.type === "file_changed" && event.data.files) {
+          applyStatusUpdate(event.data.files as any);
+        }
+        if (event.type === "remote_updated") {
+          applyBranchStatus(event.data as any);
+        }
+        if (event.type === "repo_sync_needed") {
+          scheduleAutoSync({
+            status: event.data.status === true,
+            history: event.data.history === true,
+            branches: event.data.branches === true,
+            remotes: event.data.remotes === true,
+            stashes: event.data.stashes === true,
+            conflicts: event.data.conflicts === true,
+            draft: event.data.draft === true,
+          });
+        }
       },
       { workspace_session_id: currentSessionId || undefined, group_id: groupId }
     );
@@ -274,14 +274,38 @@ const GitView: React.FC<GitViewProps> = ({ groupId, path, locale, onFileDiff, on
     void syncRepo();
   }, [syncRepo]);
 
+  const handleFetch = useCallback(async () => {
+    const ok = await gitFetch();
+    if (!ok) {
+      await dialog.alert(t("git.operationFailed"), getOrCreateGitStore(groupId).getState().error || undefined);
+    }
+  }, [dialog, gitFetch, groupId, t]);
+
+  const handlePull = useCallback(async () => {
+    const ok = await gitPull();
+    if (!ok) {
+      await dialog.alert(t("git.operationFailed"), getOrCreateGitStore(groupId).getState().error || undefined);
+    }
+  }, [dialog, gitPull, groupId, t]);
+
+  const handlePush = useCallback(
+    async (force?: boolean) => {
+      const ok = await gitPush(force);
+      if (!ok) {
+        await dialog.alert(t("git.operationFailed"), getOrCreateGitStore(groupId).getState().error || undefined);
+      }
+    },
+    [dialog, gitPush, groupId, t]
+  );
+
   const smartAction = useMemo(() => {
-    if (!hasRemote) return { label: t("git.publish"), icon: <CloudUpload size={14} />, action: gitPush };
+    if (!hasRemote) return { label: t("git.publish"), icon: <CloudUpload size={14} />, action: handlePush };
     if (behindCount > 0)
-      return { label: `${t("git.pull")} (${behindCount})`, icon: <ArrowDown size={14} />, action: gitPull };
+      return { label: `${t("git.pull")} (${behindCount})`, icon: <ArrowDown size={14} />, action: handlePull };
     if (aheadCount > 0)
-      return { label: `${t("git.push")} (${aheadCount})`, icon: <ArrowUp size={14} />, action: gitPush };
-    return { label: t("git.fetch"), icon: <RefreshCw size={14} />, action: gitFetch };
-  }, [hasRemote, aheadCount, behindCount, gitPull, gitPush, gitFetch, t]);
+      return { label: `${t("git.push")} (${aheadCount})`, icon: <ArrowUp size={14} />, action: handlePush };
+    return { label: t("git.fetch"), icon: <RefreshCw size={14} />, action: handleFetch };
+  }, [hasRemote, aheadCount, behindCount, handleFetch, handlePull, handlePush, t]);
 
   const topBarConfig = useMemo(() => {
     if (!isActive) return null;
@@ -488,7 +512,9 @@ const GitView: React.FC<GitViewProps> = ({ groupId, path, locale, onFileDiff, on
           {(hasRemote || aheadCount > 0) && (
             <button
               className="flex items-center gap-1.5 px-2 py-1 rounded text-xs text-ide-accent hover:bg-ide-accent/10 active:bg-ide-accent/15 transition-colors disabled:opacity-50 shrink-0"
-              onClick={smartAction.action}
+              onClick={() => {
+                void smartAction.action();
+              }}
               disabled={isLoading}
             >
               {smartAction.icon}
@@ -518,9 +544,9 @@ const GitView: React.FC<GitViewProps> = ({ groupId, path, locale, onFileDiff, on
               onStash={stash}
               onStashPop={stashPop}
               onStashDrop={stashDrop}
-              onPull={gitPull}
-              onPush={gitPush}
-              onFetch={gitFetch}
+              onPull={handlePull}
+              onPush={handlePush}
+              onFetch={handleFetch}
               onUndoLastCommit={undoLastCommit}
             />
           ) : (

@@ -1389,10 +1389,40 @@ func (h *GitHandler) Push(c *gin.Context) {
 		remoteName = "origin"
 	}
 
-	args := []string{"push", remoteName}
+	branchCmd := exec.Command("git", "branch", "--show-current")
+	branchCmd.Dir = repoRoot
+	branchOutput, err := branchCmd.Output()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	currentBranch := strings.TrimSpace(string(branchOutput))
+	if currentBranch == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "cannot push from detached HEAD"})
+		return
+	}
+
+	upstreamBranch := ""
+	upstreamCmd := exec.Command("git", "rev-parse", "--abbrev-ref", currentBranch+"@{upstream}")
+	upstreamCmd.Dir = repoRoot
+	if upstreamOutput, upstreamErr := upstreamCmd.Output(); upstreamErr == nil {
+		upstreamBranch = strings.TrimSpace(string(upstreamOutput))
+	}
+
+	targetBranch := currentBranch
+	if upstreamBranch != "" && strings.HasPrefix(upstreamBranch, remoteName+"/") {
+		targetBranch = strings.TrimPrefix(upstreamBranch, remoteName+"/")
+	}
+
+	args := []string{"push"}
 	if req.Force {
 		args = append(args, "--force")
 	}
+	if upstreamBranch == "" {
+		args = append(args, "--set-upstream")
+	}
+	args = append(args, remoteName, "HEAD:refs/heads/"+targetBranch)
 
 	cmd := exec.Command("git", args...)
 	cmd.Dir = repoRoot

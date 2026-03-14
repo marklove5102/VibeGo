@@ -15,6 +15,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func runGitCommand(t *testing.T, dir string, args ...string) string {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, "git %s failed: %s", strings.Join(args, " "), string(out))
+	return strings.TrimSpace(string(out))
+}
+
 func setupFullRepo(t *testing.T) string {
 	dir, err := os.MkdirTemp("", "git-full-test")
 	require.NoError(t, err)
@@ -1114,6 +1123,103 @@ func TestGitFullCloneHasRemote(t *testing.T) {
 	json.Unmarshal(w.Body.Bytes(), &resp)
 	assert.NotEmpty(t, resp.Remotes)
 	assert.Equal(t, "origin", resp.Remotes[0].Name)
+}
+
+func TestGitFullPushSetsUpstreamForNewBranch(t *testing.T) {
+	dir := setupFullRepo(t)
+	defer os.RemoveAll(dir)
+
+	remoteDir, err := os.MkdirTemp("", "git-push-remote")
+	require.NoError(t, err)
+	defer os.RemoveAll(remoteDir)
+
+	remotePath := filepath.Join(remoteDir, "origin.git")
+	runGitCommand(t, remoteDir, "init", "--bare", remotePath)
+	runGitCommand(t, dir, "remote", "add", "origin", remotePath)
+
+	baseBranch := runGitCommand(t, dir, "branch", "--show-current")
+	runGitCommand(t, dir, "push", "-u", "origin", baseBranch)
+	runGitCommand(t, dir, "checkout", "-b", "feature-sync")
+
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "feature-sync.txt"), []byte("feature sync\n"), 0644))
+	runGitCommand(t, dir, "add", "feature-sync.txt")
+	runGitCommand(t, dir, "commit", "-m", "feature sync")
+
+	r, _ := setupRouter()
+	w := postJSON(r, "/git/push", map[string]string{"path": dir, "remote": "origin"})
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var resp struct {
+		OK           bool             `json:"ok"`
+		BranchStatus BranchStatusInfo `json:"branchStatus"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.True(t, resp.OK)
+	assert.Equal(t, "feature-sync", resp.BranchStatus.Branch)
+	assert.Equal(t, "origin/feature-sync", resp.BranchStatus.Upstream)
+	assert.Equal(t, 0, resp.BranchStatus.Ahead)
+	assert.Equal(t, 0, resp.BranchStatus.Behind)
+	assert.Equal(t, "origin/feature-sync", runGitCommand(t, dir, "rev-parse", "--abbrev-ref", "HEAD@{upstream}"))
+
+	head := runGitCommand(t, dir, "rev-parse", "HEAD")
+	remoteRefs := strings.Fields(runGitCommand(t, dir, "ls-remote", "--heads", remotePath, "feature-sync"))
+	require.Len(t, remoteRefs, 2)
+	assert.Equal(t, head, remoteRefs[0])
+}
+
+func TestGitFullPushRestoresGoneUpstream(t *testing.T) {
+	dir := setupFullRepo(t)
+	defer os.RemoveAll(dir)
+
+	remoteDir, err := os.MkdirTemp("", "git-push-remote")
+	require.NoError(t, err)
+	defer os.RemoveAll(remoteDir)
+
+	remotePath := filepath.Join(remoteDir, "origin.git")
+	runGitCommand(t, remoteDir, "init", "--bare", remotePath)
+	runGitCommand(t, dir, "remote", "add", "origin", remotePath)
+
+	baseBranch := runGitCommand(t, dir, "branch", "--show-current")
+	runGitCommand(t, dir, "push", "-u", "origin", baseBranch)
+	runGitCommand(t, dir, "checkout", "-b", "recover-upstream")
+
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "recover.txt"), []byte("recover\n"), 0644))
+	runGitCommand(t, dir, "add", "recover.txt")
+	runGitCommand(t, dir, "commit", "-m", "recover upstream")
+	runGitCommand(t, dir, "push", "-u", "origin", "recover-upstream")
+	runGitCommand(t, dir, "push", "origin", "--delete", "recover-upstream")
+
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "recover.txt"), []byte("recover again\n"), 0644))
+	runGitCommand(t, dir, "add", "recover.txt")
+	runGitCommand(t, dir, "commit", "-m", "recover upstream again")
+
+	r, _ := setupRouter()
+
+	statusResp := postJSON(r, "/git/branch-status", map[string]string{"path": dir})
+	assert.Equal(t, http.StatusOK, statusResp.Code)
+	var before BranchStatusInfo
+	require.NoError(t, json.Unmarshal(statusResp.Body.Bytes(), &before))
+	assert.Equal(t, "", before.Upstream)
+
+	w := postJSON(r, "/git/push", map[string]string{"path": dir, "remote": "origin"})
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var resp struct {
+		OK           bool             `json:"ok"`
+		BranchStatus BranchStatusInfo `json:"branchStatus"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.True(t, resp.OK)
+	assert.Equal(t, "recover-upstream", resp.BranchStatus.Branch)
+	assert.Equal(t, "origin/recover-upstream", resp.BranchStatus.Upstream)
+	assert.Equal(t, 0, resp.BranchStatus.Ahead)
+	assert.Equal(t, 0, resp.BranchStatus.Behind)
+	assert.Equal(t, "origin/recover-upstream", runGitCommand(t, dir, "rev-parse", "--abbrev-ref", "HEAD@{upstream}"))
+
+	head := runGitCommand(t, dir, "rev-parse", "HEAD")
+	remoteRefs := strings.Fields(runGitCommand(t, dir, "ls-remote", "--heads", remotePath, "recover-upstream"))
+	require.Len(t, remoteRefs, 2)
+	assert.Equal(t, head, remoteRefs[0])
 }
 
 func TestGitFullMissingPath(t *testing.T) {
