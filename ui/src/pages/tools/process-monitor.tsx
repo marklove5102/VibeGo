@@ -837,7 +837,7 @@ const ProcessMonitorView: React.FC<PageViewProps> = ({ context }) => {
       />
 
       <AlertDialog open={killDialogOpen} onOpenChange={setKillDialogOpen}>
-        <AlertDialogContent className="max-w-[calc(100%-2rem)] sm:max-w-lg">
+        <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2 text-base sm:text-lg">
               <AlertTriangle className="text-red-500" size={18} />
