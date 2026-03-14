@@ -52,7 +52,7 @@ interface GitChangesViewProps {
   onStashPop: (index: number) => void;
   onStashDrop: (index: number) => void;
   onPull: () => void;
-  onPush: () => void;
+  onPush: (force?: boolean) => void;
   onFetch: () => void;
   onUndoLastCommit: () => Promise<boolean>;
 }
@@ -334,7 +334,7 @@ const GitChangesView: React.FC<GitChangesViewProps> = ({
             <div className="flex flex-wrap justify-center gap-2 mt-2">
               {!hasRemote ? (
                 <button
-                  onClick={onPush}
+                  onClick={() => onPush()}
                   disabled={isLoading}
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs text-ide-mute hover:text-ide-text hover:bg-ide-panel/80 border border-transparent hover:border-ide-border transition-all disabled:opacity-50"
                   title={t("git.publish")}
@@ -363,14 +363,25 @@ const GitChangesView: React.FC<GitChangesViewProps> = ({
                     </button>
                   )}
                   {aheadCount > 0 && (
-                    <button
-                      onClick={onPush}
-                      disabled={isLoading}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs text-ide-mute hover:text-ide-text hover:bg-ide-panel/80 border border-transparent hover:border-ide-border transition-all disabled:opacity-50"
-                    >
-                      <ArrowUp size={14} className="text-blue-400/70 shrink-0" />
-                      {t("git.push")} {aheadCount}
-                    </button>
+                    <div className="flex items-center ml-1">
+                      <button
+                        onClick={() => onPush()}
+                        disabled={isLoading}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-l-full text-xs text-ide-mute hover:text-ide-text hover:bg-ide-panel/80 border border-transparent hover:border-ide-border transition-all disabled:opacity-50 border-r border-ide-border/50"
+                      >
+                        <ArrowUp size={14} className="text-blue-400/70 shrink-0" />
+                        {t("git.push")} {aheadCount}
+                      </button>
+                      <button
+                        onClick={() => onPush(true)}
+                        disabled={isLoading}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-r-full text-xs text-red-500/70 hover:text-red-500 hover:bg-red-500/10 border border-transparent hover:border-red-500/30 transition-all disabled:opacity-50 border-l border-ide-border/50"
+                        title={t("git.forcePush")}
+                      >
+                        <ArrowUp size={14} className="shrink-0" />
+                        {t("git.forcePush")} {aheadCount}
+                      </button>
+                    </div>
                   )}
                 </>
               )}

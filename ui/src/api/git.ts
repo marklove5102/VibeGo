@@ -338,10 +338,10 @@ export const gitApi = {
       body: JSON.stringify({ path, remote, branch }),
     }),
 
-  push: (path: string, remote = "origin") =>
+  push: (path: string, remote = "origin", force?: boolean) =>
     request<{ ok: boolean; branchStatus: BranchStatusInfo }>("/git/push", {
       method: "POST",
-      body: JSON.stringify({ path, remote }),
+      body: JSON.stringify({ path, remote, force }),
     }),
 
   stash: (path: string, message?: string, files?: string[]) =>

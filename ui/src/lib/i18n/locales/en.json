@@ -115,6 +115,7 @@
     "push": "Push",
     "fetch": "Fetch",
     "pull": "Pull",
+    "forcePush": "Force Push",
     "publish": "Publish",
     "filesChanged": "files changed",
     "loading": "Loading...",

@@ -115,6 +115,7 @@
     "push": "推送",
     "fetch": "拉取更新",
     "pull": "拉取",
+    "forcePush": "强制推送",
     "publish": "发布",
     "filesChanged": "个文件变更",
     "loading": "加载中...",
