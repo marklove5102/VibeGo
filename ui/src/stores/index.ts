@@ -47,4 +47,11 @@ export {
   usePreviewStore,
 } from "./preview-store";
 export { useSessionStore } from "./session-store";
-export { type TerminalSession, useTerminalStore } from "./terminal-store";
+export {
+  type LayoutNode,
+  type SplitDirection,
+  type SplitNode,
+  type TerminalLeaf,
+  type TerminalSession,
+  useTerminalStore,
+} from "./terminal-store";

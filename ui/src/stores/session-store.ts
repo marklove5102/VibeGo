@@ -11,7 +11,7 @@ import {
 } from "./file-manager-store";
 import { type GenericGroup, type GroupPage, type ToolGroup, useFrameStore } from "./frame-store";
 import * as gitStoreModule from "./git-store";
-import { type TerminalSession, useTerminalStore } from "./terminal-store";
+import { type LayoutNode, type TerminalSession, useTerminalStore } from "./terminal-store";
 
 const CURRENT_SESSION_KEY = "current_session_id";
 const SESSION_STATE_BACKUP_KEY_PREFIX = "session_state_backup:";
@@ -34,6 +34,8 @@ export interface SessionState {
   terminalsByGroup: Record<string, TerminalSession[]>;
   activeTerminalByGroup: Record<string, string | null>;
   listManagerOpenByGroup: Record<string, boolean>;
+  terminalLayouts: Record<string, LayoutNode>;
+  focusedIdByGroup: Record<string, string | null>;
   settingsOpen: boolean;
   activeGroupId: string | null;
   fileManagerByGroup: Record<
@@ -88,6 +90,8 @@ function createEmptySessionState(): SessionState {
     terminalsByGroup: {},
     activeTerminalByGroup: {},
     listManagerOpenByGroup: {},
+    terminalLayouts: {},
+    focusedIdByGroup: {},
     settingsOpen: false,
     activeGroupId: null,
     fileManagerByGroup: {},
@@ -284,6 +288,8 @@ function buildSessionState(): SessionState {
     terminalsByGroup: terminalState.terminalsByGroup,
     activeTerminalByGroup: terminalState.activeIdByGroup,
     listManagerOpenByGroup: terminalState.listManagerOpenByGroup,
+    terminalLayouts: terminalState.terminalLayouts,
+    focusedIdByGroup: terminalState.focusedIdByGroup,
     settingsOpen: !!settingsGroup,
     activeGroupId: frameState.activeGroupId,
     fileManagerByGroup,
@@ -309,6 +315,10 @@ function parseSessionState(rawState: string): SessionState {
       parsed.listManagerOpenByGroup && typeof parsed.listManagerOpenByGroup === "object"
         ? parsed.listManagerOpenByGroup
         : {},
+    terminalLayouts:
+      parsed.terminalLayouts && typeof parsed.terminalLayouts === "object" ? parsed.terminalLayouts : {},
+    focusedIdByGroup:
+      parsed.focusedIdByGroup && typeof parsed.focusedIdByGroup === "object" ? parsed.focusedIdByGroup : {},
     settingsOpen: !!parsed.settingsOpen,
     activeGroupId: typeof parsed.activeGroupId === "string" ? parsed.activeGroupId : null,
     fileManagerByGroup:
@@ -347,6 +357,8 @@ function restoreSessionState(state: SessionState): void {
     terminalsByGroup: state.terminalsByGroup || {},
     activeIdByGroup: state.activeTerminalByGroup || {},
     listManagerOpenByGroup: state.listManagerOpenByGroup || {},
+    terminalLayouts: state.terminalLayouts || {},
+    focusedIdByGroup: state.focusedIdByGroup || {},
   });
 
   const currentGroups = useFrameStore.getState().groups;
