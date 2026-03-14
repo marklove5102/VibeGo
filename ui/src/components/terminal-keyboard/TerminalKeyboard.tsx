@@ -8,7 +8,6 @@ import './terminal-keyboard.css'
 interface TerminalKeyboardProps {
   onKeyEvent: (event: TerminalKeyEvent) => void
   layout?: LayoutDef
-  theme?: 'light' | 'dark'
 }
 
 const INITIAL_MOD = { active: false, locked: false }
@@ -16,7 +15,6 @@ const INITIAL_MOD = { active: false, locked: false }
 const TerminalKeyboard: React.FC<TerminalKeyboardProps> = ({
   onKeyEvent,
   layout = TERMINAL_QWERTY,
-  theme = 'dark',
 }) => {
   const [modifiers, setModifiers] = useState<ModifiersState>({
     ctrl: { ...INITIAL_MOD },
@@ -110,7 +108,7 @@ const TerminalKeyboard: React.FC<TerminalKeyboardProps> = ({
   }, [layout])
 
   return (
-    <div className="tk-keyboard" data-theme={theme}>
+    <div className="tk-keyboard">
       {layout.rows.map((row, ri) => (
         <div key={ri} className={rowClasses[ri]}>
           {row.keys.map(keyDef => (

@@ -215,7 +215,7 @@ const KeyboardTestView: React.FC<PageViewProps> = () => {
         </div>
 
         <div style={{ flexShrink: 0 }}>
-          <TerminalKeyboard onKeyEvent={handleKeyEvent} theme="dark" />
+          <TerminalKeyboard onKeyEvent={handleKeyEvent} />
         </div>
       </div>
 
