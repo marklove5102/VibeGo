@@ -44,7 +44,10 @@ interface ParsedTerminalNotification {
 
 type TerminalDisposable = { dispose: () => void };
 
-type TerminalShortcutEvent = Pick<KeyboardEvent, "altKey" | "ctrlKey" | "key" | "metaKey" | "preventDefault" | "type">;
+type TerminalShortcutEvent = Pick<
+  KeyboardEvent,
+  "altKey" | "ctrlKey" | "key" | "metaKey" | "preventDefault" | "shiftKey" | "type"
+>;
 
 const TERMINAL_CTRL_SHORTCUT_KEYS = new Set(["a", "d", "h", "j", "k", "l", "n", "o", "p", "r", "s", "t", "u", "w"]);
 const TERMINAL_ALT_SHORTCUT_KEYS = new Set(["ArrowLeft", "ArrowRight"]);
@@ -53,13 +56,13 @@ const TERMINAL_FUNCTION_SHORTCUT_KEYS = new Set(["F5"]);
 const normalizeShortcutKey = (key: string): string => (key.length === 1 ? key.toLowerCase() : key);
 
 const shouldPreventTerminalBrowserShortcut = (
-  event: Pick<KeyboardEvent, "altKey" | "ctrlKey" | "key" | "metaKey">
+  event: Pick<KeyboardEvent, "altKey" | "ctrlKey" | "key" | "metaKey" | "shiftKey">
 ): boolean => {
   const key = normalizeShortcutKey(event.key);
   if (event.metaKey) {
     return false;
   }
-  if (event.ctrlKey && !event.altKey && TERMINAL_CTRL_SHORTCUT_KEYS.has(key)) {
+  if (event.ctrlKey && !event.altKey && !event.shiftKey && TERMINAL_CTRL_SHORTCUT_KEYS.has(key)) {
     return true;
   }
   if (!event.ctrlKey && event.altKey && TERMINAL_ALT_SHORTCUT_KEYS.has(key)) {
@@ -88,10 +91,18 @@ const shouldArmTerminalUnloadGuard = (
 };
 
 const getTerminalShortcutInput = (
-  event: Pick<KeyboardEvent, "altKey" | "ctrlKey" | "key" | "metaKey">
+  event: Pick<KeyboardEvent, "altKey" | "ctrlKey" | "key" | "metaKey" | "shiftKey">
 ): string | null => {
   const key = normalizeShortcutKey(event.key);
-  if (!event.metaKey && event.ctrlKey && !event.altKey && key.length === 1 && key >= "a" && key <= "z") {
+  if (
+    !event.metaKey &&
+    event.ctrlKey &&
+    !event.altKey &&
+    !event.shiftKey &&
+    key.length === 1 &&
+    key >= "a" &&
+    key <= "z"
+  ) {
     if (key === "f") {
       return null;
     }
@@ -107,6 +118,39 @@ const getTerminalShortcutInput = (
     return "\u001b[15~";
   }
   return null;
+};
+
+const shouldCopyTerminalSelection = (
+  event: Pick<KeyboardEvent, "altKey" | "ctrlKey" | "key" | "metaKey">,
+  hasSelection: boolean
+): boolean => {
+  if (!hasSelection) {
+    return false;
+  }
+  const key = normalizeShortcutKey(event.key);
+  if (event.metaKey && !event.ctrlKey && !event.altKey && key === "c") {
+    return true;
+  }
+  if (!event.metaKey && event.ctrlKey && !event.altKey && (key === "c" || key === "Insert")) {
+    return true;
+  }
+  return false;
+};
+
+const shouldPasteIntoTerminal = (
+  event: Pick<KeyboardEvent, "altKey" | "ctrlKey" | "key" | "metaKey" | "shiftKey">
+): boolean => {
+  const key = normalizeShortcutKey(event.key);
+  if (event.metaKey && !event.ctrlKey && !event.altKey && key === "v") {
+    return true;
+  }
+  if (!event.metaKey && event.ctrlKey && !event.altKey && key === "v") {
+    return true;
+  }
+  if (!event.metaKey && !event.ctrlKey && !event.altKey && event.shiftKey && key === "Insert") {
+    return true;
+  }
+  return false;
 };
 
 const shouldEnableTerminalWebgl = (): boolean => {
@@ -813,6 +857,26 @@ const TerminalInstance: React.FC<TerminalInstanceProps> = ({
       }
       if (event.type === "keydown" && shouldArmTerminalUnloadGuard(event)) {
         armTerminalBrowserUnloadGuard();
+      }
+      if (event.type === "keydown" && shouldCopyTerminalSelection(event, terminal.hasSelection())) {
+        const selection = terminal.getSelection();
+        if (selection) {
+          event.preventDefault();
+          void navigator.clipboard.writeText(selection).catch(() => {});
+          return false;
+        }
+      }
+      if (event.type === "keydown" && shouldPasteIntoTerminal(event)) {
+        event.preventDefault();
+        void navigator.clipboard
+          .readText()
+          .then((text) => {
+            if (text) {
+              terminal.paste(text);
+            }
+          })
+          .catch(() => {});
+        return false;
       }
       const manualInput = event.type === "keydown" ? getTerminalShortcutInput(event) : null;
       if (manualInput) {
