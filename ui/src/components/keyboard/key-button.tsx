@@ -6,16 +6,19 @@ import {
   ArrowRight,
   ArrowBigUp,
   ArrowBigUpDash,
+  ArrowRightToLine,
+  ArrowLeftToLine,
   ChevronsUp,
   ChevronsDown,
-  ArrowLeftToLine,
-  ArrowRightToLine,
+  MoveHorizontal,
   Delete,
   CornerDownLeft,
   Undo2,
   Scissors,
   Copy,
   Clipboard,
+  ClipboardPaste,
+  ClipboardList,
   Keyboard,
   Smile,
   Mic,
@@ -26,8 +29,8 @@ import { getSwipeDirection, isSpecialKey, MODIFIER_KEYS, SWIPE_DIRS } from '@/co
 
 const SWIPE_THRESHOLD = 18
 const SLIDE_STEP = 18
-const LONG_PRESS_DELAY = 400
-const REPEAT_INTERVAL = 60
+const LONG_PRESS_DELAY = 800
+const REPEAT_INTERVAL = 120
 
 const DISPLAY_LABELS: Record<string, React.ReactNode> = {
   ArrowUp: <ArrowUp size={12} strokeWidth={2.5} />,
@@ -43,13 +46,13 @@ const DISPLAY_LABELS: Record<string, React.ReactNode> = {
   Enter: <CornerDownLeft size={12} strokeWidth={2.5} />,
   Insert: 'Ins',
   Delete: 'Del',
-  Tab: '⇥',
+  Tab: <ArrowRightToLine size={12} strokeWidth={2.5} />,
   Select: <BoxSelect size={12} strokeWidth={2.5} />,
   Undo: <Undo2 size={12} strokeWidth={2.5} />,
   Cut: <Scissors size={12} strokeWidth={2.5} />,
   Copy: <Copy size={12} strokeWidth={2.5} />,
-  Paste: <Clipboard size={12} strokeWidth={2.5} />,
-  Clipboard: <Clipboard size={12} strokeWidth={2.5} />,
+  Paste: <ClipboardPaste size={12} strokeWidth={2.5} />,
+  Clipboard: <ClipboardList size={12} strokeWidth={2.5} />,
   Keyboard: <Keyboard size={12} strokeWidth={2.5} />,
   Emoji: <Smile size={12} strokeWidth={2.5} />,
   Mic: <Mic size={12} strokeWidth={2.5} />,
@@ -285,7 +288,7 @@ const KeyButton: React.FC<KeyButtonProps> = ({ keyDef, modState, shiftActive, on
         renderSwipePreview(DISPLAY_LABELS[swipeSubVal] || swipeSubVal, swipeSubVal.length > 1)
       )}
       {sliding && (
-        renderSwipePreview('⇔')
+        renderSwipePreview(<MoveHorizontal size={20} strokeWidth={2} />)
       )}
     </div>
   )
