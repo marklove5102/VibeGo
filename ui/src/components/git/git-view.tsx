@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowUp, CloudUpload, FileText, GitBranch, GitGraph, History, RefreshCw } from "lucide-react";
+import { ArrowDown, ArrowUp, CloudUpload, FileText, FolderGit2, GitBranch, GitGraph, History, Loader2, RefreshCw } from "lucide-react";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { GitCommit } from "@/api/git";
 import { gitApi } from "@/api/git";
@@ -35,6 +35,7 @@ const GitView: React.FC<GitViewProps> = ({ groupId, path, locale, onFileDiff, on
   const [showBranchSelector, setShowBranchSelector] = useState(false);
   const {
     currentPath: currentRepoPath,
+    isRepo,
     allFiles,
     checkedFiles,
     partialSelections,
@@ -56,6 +57,8 @@ const GitView: React.FC<GitViewProps> = ({ groupId, path, locale, onFileDiff, on
     setCurrentPath,
     setActiveTab,
     reset,
+    checkRepo,
+    initRepo,
     fetchStatus,
     fetchLog,
     fetchMoreLog,
@@ -88,6 +91,16 @@ const GitView: React.FC<GitViewProps> = ({ groupId, path, locale, onFileDiff, on
   const initializedRef = useRef(false);
   const wsCleanupRef = useRef<(() => void) | null>(null);
 
+  const fetchAllGitData = useCallback(() => {
+    fetchStatus();
+    fetchLog();
+    fetchBranches();
+    fetchRemotes();
+    fetchBranchStatus();
+    fetchStashes();
+    fetchConflicts();
+  }, [fetchStatus, fetchLog, fetchBranches, fetchRemotes, fetchBranchStatus, fetchStashes, fetchConflicts]);
+
   useEffect(() => {
     const pathChanged = currentRepoPath !== path;
     if (pathChanged) {
@@ -97,30 +110,14 @@ const GitView: React.FC<GitViewProps> = ({ groupId, path, locale, onFileDiff, on
     }
     if (!initializedRef.current) {
       initializedRef.current = true;
-      fetchStatus();
-      fetchLog();
-      fetchBranches();
-      fetchRemotes();
-      fetchBranchStatus();
-      fetchStashes();
-      fetchConflicts();
+      checkRepo().then((ok) => {
+        if (ok) fetchAllGitData();
+      });
     }
-  }, [
-    path,
-    currentRepoPath,
-    setCurrentPath,
-    reset,
-    fetchStatus,
-    fetchLog,
-    fetchBranches,
-    fetchRemotes,
-    fetchBranchStatus,
-    fetchStashes,
-    fetchConflicts,
-  ]);
+  }, [path, currentRepoPath, setCurrentPath, reset, checkRepo, fetchAllGitData]);
 
   useEffect(() => {
-    if (!path || !isActive) return;
+    if (!path || !isActive || isRepo !== true) return;
     wsCleanupRef.current = gitApi.connectWs(path, (event) => {
       if (event.type === "file_changed" && event.data.files) {
         applyStatusUpdate(event.data.files as any);
@@ -133,7 +130,7 @@ const GitView: React.FC<GitViewProps> = ({ groupId, path, locale, onFileDiff, on
       wsCleanupRef.current?.();
       wsCleanupRef.current = null;
     };
-  }, [path, isActive, applyStatusUpdate, applyBranchStatus]);
+  }, [path, isActive, isRepo, applyStatusUpdate, applyBranchStatus]);
 
   const handleRefresh = useCallback(() => {
     fetchStatus();
@@ -152,6 +149,14 @@ const GitView: React.FC<GitViewProps> = ({ groupId, path, locale, onFileDiff, on
 
   const topBarConfig = useMemo(() => {
     if (!isActive) return null;
+    if (isRepo !== true) {
+      return {
+        show: true,
+        leftButtons: [{ icon: <GitGraph size={18} />, active: true }],
+        centerContent: null,
+        rightButtons: [],
+      };
+    }
     return {
       show: true,
       leftButtons: [{ icon: <GitGraph size={18} />, active: true }],
@@ -192,9 +197,20 @@ const GitView: React.FC<GitViewProps> = ({ groupId, path, locale, onFileDiff, on
         },
       ],
     };
-  }, [isActive, activeTab, allFiles.length, isLoading, t, setActiveTab, handleRefresh]);
+  }, [isActive, isRepo, activeTab, allFiles.length, isLoading, t, setActiveTab, handleRefresh]);
 
   usePageTopBar(topBarConfig, [topBarConfig]);
+
+  const handleInitRepo = useCallback(async () => {
+    const confirmed = await dialog.confirm(t("git.initRepoConfirmTitle"), t("git.initRepoConfirmMessage"), {
+      confirmText: t("git.initRepo"),
+    });
+    if (!confirmed) return;
+    const ok = await initRepo();
+    if (ok) {
+      fetchAllGitData();
+    }
+  }, [dialog, t, initRepo, fetchAllGitData]);
 
   const handleFileClick = useCallback(
     async (filePath: string) => {
@@ -278,6 +294,34 @@ const GitView: React.FC<GitViewProps> = ({ groupId, path, locale, onFileDiff, on
     },
     [path, onConflict]
   );
+
+  if (isRepo === null) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full bg-ide-bg">
+        <Loader2 size={24} className="text-ide-mute animate-spin" />
+      </div>
+    );
+  }
+
+  if (isRepo === false) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full bg-ide-bg gap-4">
+        <FolderGit2 size={48} className="text-ide-mute/40" />
+        <div className="flex flex-col items-center gap-1.5 text-center">
+          <span className="text-ide-text text-sm font-medium">{t("git.notARepo")}</span>
+          <span className="text-ide-mute text-xs max-w-[240px]">{t("git.notARepoHint")}</span>
+        </div>
+        <button
+          onClick={handleInitRepo}
+          disabled={isLoading}
+          className="flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium bg-ide-accent text-ide-bg hover:bg-ide-accent/80 transition-colors disabled:opacity-50"
+        >
+          <GitGraph size={16} />
+          {t("git.initRepo")}
+        </button>
+      </div>
+    );
+  }
 
   return (
     <>
@@ -382,3 +426,4 @@ const GitView: React.FC<GitViewProps> = ({ groupId, path, locale, onFileDiff, on
 };
 
 export default GitView;
+

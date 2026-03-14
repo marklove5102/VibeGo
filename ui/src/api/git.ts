@@ -174,6 +174,12 @@ export interface GitWSEvent {
 }
 
 export const gitApi = {
+  check: (path: string) =>
+    request<{ isRepo: boolean }>("/git/check", {
+      method: "POST",
+      body: JSON.stringify({ path }),
+    }),
+
   init: (path: string) =>
     request<{ ok: boolean }>("/git/init", {
       method: "POST",

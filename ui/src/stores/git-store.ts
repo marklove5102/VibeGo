@@ -24,6 +24,7 @@ export interface GitPartialSelection {
 
 export interface GitState {
   currentPath: string | null;
+  isRepo: boolean | null;
   allFiles: GitFileNode[];
   checkedFiles: Set<string>;
   partialSelections: Record<string, GitPartialSelection>;
@@ -59,6 +60,8 @@ export interface GitState {
   setPartialSelection: (path: string, selectedRowIds: string[], selectableRowIds: string[]) => void;
   reset: () => void;
 
+  checkRepo: () => Promise<boolean>;
+  initRepo: () => Promise<boolean>;
   fetchStatus: () => Promise<void>;
   fetchLog: (limit?: number) => Promise<void>;
   fetchMoreLog: (limit?: number) => Promise<void>;
@@ -186,6 +189,7 @@ const buildPartialPatches = async (
 
 const createInitialGitSnapshot = () => ({
   currentPath: null as string | null,
+  isRepo: null as boolean | null,
   allFiles: [] as GitFileNode[],
   checkedFiles: new Set<string>(),
   partialSelections: {} as Record<string, GitPartialSelection>,
@@ -280,6 +284,32 @@ const createGitState: StateCreator<GitState> = (set, get) => ({
 
   reset: () => set(createInitialGitSnapshot()),
 
+  checkRepo: async () => {
+    const { currentPath } = get();
+    if (!currentPath) return false;
+    try {
+      const res = await gitApi.check(currentPath);
+      set({ isRepo: res.isRepo });
+      return res.isRepo;
+    } catch {
+      set({ isRepo: false });
+      return false;
+    }
+  },
+
+  initRepo: async () => {
+    const { currentPath } = get();
+    if (!currentPath) return false;
+    try {
+      await gitApi.init(currentPath);
+      set({ isRepo: true, error: null });
+      return true;
+    } catch (err) {
+      set({ error: err instanceof Error ? err.message : "Failed to init repository" });
+      return false;
+    }
+  },
+
   applyStatusUpdate: (files) => {
     const nodes = statusFilesToNodes(files);
     const { allFiles, checkedFiles, partialSelections, workingDiffs } = get();
@@ -312,8 +342,8 @@ const createGitState: StateCreator<GitState> = (set, get) => ({
   },
 
   fetchStatus: async () => {
-    const { currentPath } = get();
-    if (!currentPath) {
+    const { currentPath, isRepo } = get();
+    if (!currentPath || isRepo === false) {
       return;
     }
 

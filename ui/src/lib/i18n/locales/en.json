@@ -153,7 +153,12 @@
     "hourShort": "h",
     "minuteShort": "m",
     "noRemoteHint": "No remote configured",
-    "upToDate": "Up to date with remote"
+    "upToDate": "Up to date with remote",
+    "notARepo": "Not a Git repository",
+    "notARepoHint": "This folder is not initialized as a Git repository. Initialize one to start tracking changes.",
+    "initRepo": "Initialize Repository",
+    "initRepoConfirmTitle": "Initialize Git repository?",
+    "initRepoConfirmMessage": "This will create a .git directory in the current folder and start tracking file changes."
   },
   "terminal": {
     "noActiveSession": "No terminal session active",

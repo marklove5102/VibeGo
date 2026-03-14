@@ -104,6 +104,7 @@ func (h *GitHandler) commitOnlySelectedFiles(repoRoot string, files []string, su
 
 func (h *GitHandler) Register(r *gin.RouterGroup) {
 	g := r.Group("/git")
+	g.POST("/check", h.Check)
 	g.POST("/init", h.Init)
 	g.POST("/clone", h.Clone)
 	g.POST("/status", h.Status)
@@ -145,6 +146,16 @@ func (h *GitHandler) Register(r *gin.RouterGroup) {
 
 func (h *GitHandler) openRepo(path string) (*git.Repository, error) {
 	return git.PlainOpenWithOptions(path, &git.PlainOpenOptions{DetectDotGit: true})
+}
+
+func (h *GitHandler) Check(c *gin.Context) {
+	var req GitPathRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	_, err := h.openRepo(req.Path)
+	c.JSON(http.StatusOK, gin.H{"isRepo": err == nil})
 }
 
 type GitInitRequest struct {
