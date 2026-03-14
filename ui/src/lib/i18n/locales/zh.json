@@ -89,6 +89,7 @@
     "summaryPlaceholder": "摘要（必填）",
     "descriptionPlaceholder": "详细描述",
     "amend": "修改上次提交",
+    "useAutoMessage": "使用自动生成的提交信息",
     "selectAll": "全选",
     "noChanges": "没有更改",
     "noCommits": "暂无提交记录",

@@ -10,6 +10,7 @@ import {
   Loader2,
   RefreshCw,
   Search,
+  Sparkles,
   Square,
   SquareCheck,
   SquareMinus,
@@ -91,6 +92,45 @@ const getStatusLabel = (status: string) => {
     default:
       return "?";
   }
+};
+
+const getStatusVerb = (status: string): string => {
+  switch (status) {
+    case "added":
+    case "untracked":
+      return "Create";
+    case "deleted":
+      return "Delete";
+    case "renamed":
+      return "Rename";
+    case "copied":
+      return "Copy";
+    default:
+      return "Update";
+  }
+};
+
+const generateAutoSummary = (
+  allFiles: GitFileNode[],
+  checkedFiles: Set<string>,
+): string => {
+  const selected = allFiles.filter((f) => checkedFiles.has(f.path));
+  if (selected.length === 0) return "";
+  if (selected.length === 1) {
+    const file = selected[0];
+    return `${getStatusVerb(file.status)} ${file.name}`;
+  }
+  const statusCounts = new Map<string, number>();
+  for (const file of selected) {
+    const verb = getStatusVerb(file.status);
+    statusCounts.set(verb, (statusCounts.get(verb) || 0) + 1);
+  }
+  if (statusCounts.size === 1) {
+    const [verb, count] = [...statusCounts.entries()][0];
+    return `${verb} ${count} files`;
+  }
+  const parts = [...statusCounts.entries()].map(([verb, count]) => `${verb} ${count}`);
+  return parts.join(", ");
 };
 
 const getFileSelectionType = (
@@ -233,8 +273,13 @@ const GitChangesView: React.FC<GitChangesViewProps> = ({
     checkedFiles,
     partialSelections,
   );
+  const autoSummary = useMemo(
+    () => generateAutoSummary(allFiles, checkedFiles),
+    [allFiles, checkedFiles],
+  );
+  const effectiveSummary = summary.trim() || autoSummary;
   const canCommit =
-    checkedCount > 0 && summary.trim().length > 0 && safeConflicts.length === 0;
+    checkedCount > 0 && effectiveSummary.length > 0 && safeConflicts.length === 0;
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -245,22 +290,28 @@ const GitChangesView: React.FC<GitChangesViewProps> = ({
         !isLoading
       ) {
         e.preventDefault();
+        if (!summary.trim() && autoSummary) {
+          setSummary(autoSummary);
+        }
         if (isAmend) amendCommit();
         else commitSelected();
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [canCommit, isLoading, isAmend, commitSelected, amendCommit]);
+  }, [canCommit, isLoading, isAmend, commitSelected, amendCommit, summary, autoSummary, setSummary]);
 
   const handleCommit = useCallback(async () => {
+    if (!summary.trim() && autoSummary) {
+      setSummary(autoSummary);
+    }
     const ok = isAmend ? await amendCommit() : await commitSelected();
     if (ok) {
       if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
       setUndoToast(true);
       undoTimerRef.current = setTimeout(() => setUndoToast(false), 5000);
     }
-  }, [isAmend, amendCommit, commitSelected]);
+  }, [isAmend, amendCommit, commitSelected, summary, autoSummary, setSummary]);
 
   const handleUndoFromToast = useCallback(async () => {
     setUndoToast(false);
@@ -589,26 +640,41 @@ const GitChangesView: React.FC<GitChangesViewProps> = ({
           <input
             ref={summaryRef}
             type="text"
-            placeholder={t("git.summaryPlaceholder")}
+            placeholder={autoSummary || t("git.summaryPlaceholder")}
             value={summary}
             onChange={(e) => setSummary(e.target.value)}
-            className={`w-full bg-ide-bg border rounded px-3 py-2 text-sm text-ide-text focus:outline-none placeholder-ide-mute ${
+            className={`w-full bg-ide-bg border rounded pl-3 pr-14 py-2 text-sm text-ide-text focus:outline-none ${
+              !summary && autoSummary
+                ? "placeholder-ide-accent/50"
+                : "placeholder-ide-mute"
+            } ${
               summary.length > 72
                 ? "border-orange-500/50 focus:border-orange-500 focus:ring-1 focus:ring-orange-500/20"
                 : "border-ide-border focus:border-ide-accent focus:ring-1 focus:ring-ide-accent/20"
             }`}
           />
-          {summary.length > 0 && (
-            <span
-              className={`absolute right-3 top-1/2 -translate-y-1/2 text-[10px] ${
-                summary.length > 72
-                  ? "text-orange-500 font-medium"
-                  : "text-ide-mute"
-              }`}
-            >
-              {summary.length}
-            </span>
-          )}
+          <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+            {!summary && autoSummary && (
+              <button
+                onClick={() => setSummary(autoSummary)}
+                className="p-0.5 text-ide-accent/60 hover:text-ide-accent transition-colors"
+                title={t("git.useAutoMessage")}
+              >
+                <Sparkles size={12} />
+              </button>
+            )}
+            {summary.length > 0 && (
+              <span
+                className={`text-[10px] ${
+                  summary.length > 72
+                    ? "text-orange-500 font-medium"
+                    : "text-ide-mute"
+                }`}
+              >
+                {summary.length}
+              </span>
+            )}
+          </div>
         </div>
 
         {showDescription ? (
