@@ -5,7 +5,7 @@ DIST_DIR ?= dist
 ARTIFACTS_DIR ?= artifacts
 BINARY_NAME ?= vibego
 UI_DIR ?= ui
-RELEASE_TARGETS ?= linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64
+RELEASE_TARGETS ?= android/arm64 linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64
 
 generate-docs:
 	@echo "Generating docs..."
