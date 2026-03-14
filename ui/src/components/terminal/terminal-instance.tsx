@@ -1,7 +1,16 @@
+import { ClipboardAddon } from "@xterm/addon-clipboard";
 import { FitAddon } from "@xterm/addon-fit";
+import { ImageAddon } from "@xterm/addon-image";
+import { LigaturesAddon } from "@xterm/addon-ligatures";
+import { ProgressAddon } from "@xterm/addon-progress";
+import { SearchAddon } from "@xterm/addon-search";
+import { SerializeAddon } from "@xterm/addon-serialize";
+import { Unicode11Addon } from "@xterm/addon-unicode11";
 import { WebLinksAddon } from "@xterm/addon-web-links";
+import { WebglAddon } from "@xterm/addon-webgl";
 import { type ITheme, Terminal } from "@xterm/xterm";
-import React, { useCallback, useEffect, useRef } from "react";
+import { ChevronDown, ChevronUp, Copy, Check, X } from "lucide-react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import "@xterm/xterm/css/xterm.css";
 import { terminalApi } from "@/api/terminal";
 import { useTranslation } from "@/lib/i18n";
@@ -251,6 +260,8 @@ const TerminalInstance: React.FC<TerminalInstanceProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
+  const searchAddonRef = useRef<SearchAddon | null>(null);
+  const serializeAddonRef = useRef<SerializeAddon | null>(null);
   const oscHandlersRef = useRef<TerminalDisposable[]>([]);
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -270,6 +281,19 @@ const TerminalInstance: React.FC<TerminalInstanceProps> = ({
     terminalName,
     t: (key: string) => key,
   });
+
+  const [searchVisible, setSearchVisible] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [searchCaseSensitive, setSearchCaseSensitive] = useState(false);
+  const [searchRegex, setSearchRegex] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const searchVisibleRef = useRef(false);
+  const openSearchRef = useRef<() => void>(() => {});
+  const closeSearchRef = useRef<() => void>(() => {});
+
+  const [progress, setProgress] = useState<{ value: number; state: 0 | 1 | 2 | 3 | 4 } | null>(null);
+  const [copySuccess, setCopySuccess] = useState(false);
+  const progressAddonRef = useRef<ProgressAddon | null>(null);
 
   const theme = useAppStore((s) => s.theme);
   const locale = useAppStore((s) => s.locale);
@@ -495,6 +519,31 @@ const TerminalInstance: React.FC<TerminalInstanceProps> = ({
     [terminalId]
   );
 
+  const openSearch = useCallback(() => {
+    setSearchVisible(true);
+    searchVisibleRef.current = true;
+    setTimeout(() => searchInputRef.current?.focus(), 50);
+  }, []);
+
+  const closeSearch = useCallback(() => {
+    setSearchVisible(false);
+    searchVisibleRef.current = false;
+    terminalRef.current?.focus();
+  }, []);
+
+  openSearchRef.current = openSearch;
+  closeSearchRef.current = closeSearch;
+
+  const handleSearchNext = useCallback(() => {
+    if (!searchAddonRef.current || !searchTerm) return;
+    searchAddonRef.current.findNext(searchTerm, { caseSensitive: searchCaseSensitive, regex: searchRegex });
+  }, [searchTerm, searchCaseSensitive, searchRegex]);
+
+  const handleSearchPrev = useCallback(() => {
+    if (!searchAddonRef.current || !searchTerm) return;
+    searchAddonRef.current.findPrevious(searchTerm, { caseSensitive: searchCaseSensitive, regex: searchRegex });
+  }, [searchTerm, searchCaseSensitive, searchRegex]);
+
   useEffect(() => {
     callbacksRef.current = { isActive, isExited, onExited, terminalName, t };
     if (isExited && terminalRef.current) {
@@ -525,6 +574,11 @@ const TerminalInstance: React.FC<TerminalInstanceProps> = ({
   }, [theme]);
 
   useEffect(() => {
+    if (!searchAddonRef.current || !searchTerm) return;
+    searchAddonRef.current.findNext(searchTerm, { caseSensitive: searchCaseSensitive, regex: searchRegex });
+  }, [searchTerm, searchCaseSensitive, searchRegex]);
+
+  useEffect(() => {
     if (!containerRef.current || initializedRef.current) return;
 
     initializedRef.current = true;
@@ -545,15 +599,54 @@ const TerminalInstance: React.FC<TerminalInstanceProps> = ({
     });
 
     const fitAddon = new FitAddon();
+    const searchAddon = new SearchAddon();
+    const serializeAddon = new SerializeAddon();
+    const unicode11Addon = new Unicode11Addon();
     const webLinksAddon = new WebLinksAddon();
+    const clipboardAddon = new ClipboardAddon();
+    const imageAddon = new ImageAddon();
+    const progressAddon = new ProgressAddon();
 
+    terminal.loadAddon(unicode11Addon);
     terminal.loadAddon(fitAddon);
+    terminal.loadAddon(searchAddon);
+    terminal.loadAddon(serializeAddon);
     terminal.loadAddon(webLinksAddon);
+    terminal.loadAddon(clipboardAddon);
+    terminal.loadAddon(imageAddon);
+    terminal.loadAddon(progressAddon);
+
+    progressAddon.onChange((p) => {
+      if (p.state === 0) {
+        setProgress(null);
+      } else {
+        setProgress({ value: p.value, state: p.state });
+      }
+    });
+
     terminal.open(containerRef.current);
+    terminal.unicode.activeVersion = "11";
+
+    try {
+      const webglAddon = new WebglAddon();
+      webglAddon.onContextLoss(() => {
+        webglAddon.dispose();
+      });
+      terminal.loadAddon(webglAddon);
+      try {
+        const ligaturesAddon = new LigaturesAddon();
+        terminal.loadAddon(ligaturesAddon);
+      } catch {}
+    } catch {}
+
     fitAddon.fit();
 
     terminalRef.current = terminal;
     fitAddonRef.current = fitAddon;
+    searchAddonRef.current = searchAddon;
+    serializeAddonRef.current = serializeAddon;
+    progressAddonRef.current = progressAddon;
+
     oscHandlersRef.current = [
       terminal.parser.registerOscHandler(9, (data) => {
         const defaultTitle = callbacksRef.current.terminalName.trim() || callbacksRef.current.t("sidebar.terminal");
@@ -563,6 +656,18 @@ const TerminalInstance: React.FC<TerminalInstanceProps> = ({
         return handleOscNotification(data, parseOsc777Notification);
       }),
     ];
+
+    terminal.attachCustomKeyEventHandler((event) => {
+      if ((event.ctrlKey || event.metaKey) && event.key === "f" && event.type === "keydown") {
+        openSearchRef.current();
+        return false;
+      }
+      if (event.key === "Escape" && event.type === "keydown" && searchVisibleRef.current) {
+        closeSearchRef.current();
+        return false;
+      }
+      return true;
+    });
 
     terminal.onData((data) => {
       if (callbacksRef.current.isExited) return;
@@ -597,6 +702,9 @@ const TerminalInstance: React.FC<TerminalInstanceProps> = ({
       terminal.dispose();
       terminalRef.current = null;
       fitAddonRef.current = null;
+      searchAddonRef.current = null;
+      serializeAddonRef.current = null;
+      progressAddonRef.current = null;
       initializedRef.current = false;
     };
   }, [connectWebSocket, handleOscNotification, terminalId]);
@@ -687,13 +795,104 @@ const TerminalInstance: React.FC<TerminalInstanceProps> = ({
 
   return (
     <div
-      ref={containerRef}
-      className="absolute inset-0 [&_.xterm]:!p-0 [&_.xterm]:!m-0 [&_.xterm-viewport]:!p-0 [&_.xterm-screen]:!p-0 [&_.xterm-screen]:!m-0"
+      className="absolute inset-0"
       style={{
         display: isActive ? "block" : "none",
         backgroundColor: getXtermTheme(theme).background,
       }}
-    />
+    >
+      <div
+        ref={containerRef}
+        className="absolute inset-0 [&_.xterm]:!p-0 [&_.xterm]:!m-0 [&_.xterm-viewport]:!p-0 [&_.xterm-screen]:!p-0 [&_.xterm-screen]:!m-0"
+      />
+      {progress && (
+        <div className="absolute bottom-0 left-0 right-0 z-10">
+          <div
+            className={`h-0.5 transition-all duration-300 ${
+              progress.state === 2
+                ? "bg-red-500"
+                : progress.state === 4
+                  ? "bg-yellow-500"
+                  : "bg-blue-500"
+            }`}
+            style={{
+              width: progress.state === 3 ? "100%" : `${progress.value}%`,
+              animation: progress.state === 3 ? "pulse 1.5s ease-in-out infinite" : undefined,
+            }}
+          />
+        </div>
+      )}
+      {searchVisible && (
+        <div className="absolute top-2 right-2 z-10 flex items-center gap-1.5 rounded-lg border border-zinc-700 bg-zinc-900/95 px-2 py-1.5 shadow-lg backdrop-blur-sm">
+          <input
+            ref={searchInputRef}
+            type="text"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.shiftKey ? handleSearchPrev() : handleSearchNext();
+              } else if (e.key === "Escape") {
+                closeSearch();
+              }
+            }}
+            placeholder="Search..."
+            className="w-40 bg-transparent text-xs text-zinc-200 outline-none placeholder:text-zinc-500"
+          />
+          <button
+            onClick={() => setSearchCaseSensitive((v) => !v)}
+            title="Case Sensitive"
+            className={`rounded px-1 py-0.5 text-xs font-medium transition-colors ${searchCaseSensitive ? "bg-zinc-600 text-zinc-100" : "text-zinc-400 hover:text-zinc-200"}`}
+          >
+            Aa
+          </button>
+          <button
+            onClick={() => setSearchRegex((v) => !v)}
+            title="Use Regex"
+            className={`rounded px-1 py-0.5 font-mono text-xs transition-colors ${searchRegex ? "bg-zinc-600 text-zinc-100" : "text-zinc-400 hover:text-zinc-200"}`}
+          >
+            .*
+          </button>
+          <div className="h-4 w-px bg-zinc-700" />
+          <button
+            onClick={handleSearchPrev}
+            title="Previous (Shift+Enter)"
+            className="rounded p-0.5 text-zinc-400 transition-colors hover:text-zinc-200"
+          >
+            <ChevronUp size={14} />
+          </button>
+          <button
+            onClick={handleSearchNext}
+            title="Next (Enter)"
+            className="rounded p-0.5 text-zinc-400 transition-colors hover:text-zinc-200"
+          >
+            <ChevronDown size={14} />
+          </button>
+          <div className="h-4 w-px bg-zinc-700" />
+          <button
+            onClick={() => {
+              const text = serializeAddonRef.current?.serialize();
+              if (!text) return;
+              navigator.clipboard.writeText(text).then(() => {
+                setCopySuccess(true);
+                setTimeout(() => setCopySuccess(false), 1500);
+              });
+            }}
+            title="Copy all output"
+            className="rounded p-0.5 text-zinc-400 transition-colors hover:text-zinc-200"
+          >
+            {copySuccess ? <Check size={14} className="text-green-400" /> : <Copy size={14} />}
+          </button>
+          <button
+            onClick={closeSearch}
+            title="Close (Escape)"
+            className="rounded p-0.5 text-zinc-400 transition-colors hover:text-zinc-200"
+          >
+            <X size={14} />
+          </button>
+        </div>
+      )}
+    </div>
   );
 };
 
