@@ -237,7 +237,7 @@ function resetWorkspaceRuntimeState(): void {
   resetGitStores();
 }
 
-function buildTerminalWorkspaceAssignments(state: SessionState) {
+function buildTerminalWorkspaceAssignments(state: Pick<SessionState, "terminalsByGroup">) {
   return Object.entries(state.terminalsByGroup).flatMap(([groupId, terminals]) =>
     terminals.map((terminal) => ({
       id: terminal.id,
