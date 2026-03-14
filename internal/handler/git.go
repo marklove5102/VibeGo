@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -74,7 +73,7 @@ func buildGitScopeKey(workspaceSessionID, groupID, repoRoot string) string {
 
 func (h *GitHandler) commitOnlySelectedFiles(repoRoot string, files []string, summary, description, author, email string, amend bool) (string, error) {
 	addArgs := append([]string{"add", "--"}, files...)
-	addCmd := exec.Command("git", addArgs...)
+	addCmd := newGitCommand(addArgs...)
 	addCmd.Dir = repoRoot
 	if output, err := addCmd.CombinedOutput(); err != nil {
 		return "", gitCommandError(err, output)
@@ -88,9 +87,9 @@ func (h *GitHandler) commitOnlySelectedFiles(repoRoot string, files []string, su
 	commitArgs = append(commitArgs, "--")
 	commitArgs = append(commitArgs, files...)
 
-	commitCmd := exec.Command("git", commitArgs...)
+	commitCmd := newGitCommand(commitArgs...)
 	commitCmd.Dir = repoRoot
-	commitCmd.Env = append(os.Environ(),
+	commitCmd.Env = append(commitCmd.Env,
 		"GIT_AUTHOR_NAME="+author,
 		"GIT_AUTHOR_EMAIL="+email,
 		"GIT_COMMITTER_NAME="+author,
@@ -100,7 +99,7 @@ func (h *GitHandler) commitOnlySelectedFiles(repoRoot string, files []string, su
 		return "", gitCommandError(err, output)
 	}
 
-	hashCmd := exec.Command("git", "rev-parse", "HEAD")
+	hashCmd := newGitCommand("rev-parse", "HEAD")
 	hashCmd.Dir = repoRoot
 	output, err := hashCmd.Output()
 	if err != nil {
@@ -155,7 +154,7 @@ func (h *GitHandler) Register(r *gin.RouterGroup) {
 }
 
 func (h *GitHandler) getRepoRoot(path string) (string, error) {
-	cmd := exec.Command("git", "rev-parse", "--show-toplevel")
+	cmd := newGitCommand("rev-parse", "--show-toplevel")
 	cmd.Dir = path
 	output, err := cmd.Output()
 	if err != nil {
@@ -207,7 +206,7 @@ func (h *GitHandler) Init(c *gin.Context) {
 		return
 	}
 
-	cmd := exec.Command("git", "init", req.Path)
+	cmd := newGitCommand("init", req.Path)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": gitCommandError(err, output).Error()})
@@ -238,7 +237,7 @@ func (h *GitHandler) Clone(c *gin.Context) {
 		return
 	}
 
-	cmd := exec.Command("git", "clone", req.URL, req.Path)
+	cmd := newGitCommand("clone", req.URL, req.Path)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": gitCommandError(err, output).Error()})
@@ -324,7 +323,7 @@ func (h *GitHandler) Log(c *gin.Context) {
 		return
 	}
 
-	headCmd := exec.Command("git", "rev-parse", "HEAD")
+	headCmd := newGitCommand("rev-parse", "HEAD")
 	headCmd.Dir = repoRoot
 	if err := headCmd.Run(); err != nil {
 		c.JSON(http.StatusOK, gin.H{"commits": []CommitInfo{}})
@@ -347,7 +346,7 @@ func (h *GitHandler) Log(c *gin.Context) {
 		args = append(args, fmt.Sprintf("--skip=%d", skip))
 	}
 
-	cmd := exec.Command("git", args...)
+	cmd := newGitCommand(args...)
 	cmd.Dir = repoRoot
 	output, err := cmd.Output()
 	if err != nil {
@@ -417,7 +416,7 @@ func (h *GitHandler) Diff(c *gin.Context) {
 	}
 
 	var oldContent string
-	showCmd := exec.Command("git", "show", "HEAD:"+req.FilePath)
+	showCmd := newGitCommand("show", "HEAD:"+req.FilePath)
 	showCmd.Dir = repoRoot
 	showOutput, err := showCmd.Output()
 	if err == nil {
@@ -470,14 +469,14 @@ func (h *GitHandler) Show(c *gin.Context) {
 		return
 	}
 
-	verifyCmd := exec.Command("git", "rev-parse", "--verify", req.Ref)
+	verifyCmd := newGitCommand("rev-parse", "--verify", req.Ref)
 	verifyCmd.Dir = repoRoot
 	if err := verifyCmd.Run(); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid ref: " + err.Error()})
 		return
 	}
 
-	showCmd := exec.Command("git", "show", req.Ref+":"+req.FilePath)
+	showCmd := newGitCommand("show", req.Ref+":"+req.FilePath)
 	showCmd.Dir = repoRoot
 	output, err := showCmd.Output()
 	if err != nil {
@@ -517,7 +516,7 @@ func (h *GitHandler) Add(c *gin.Context) {
 	}
 
 	args := append([]string{"add", "--"}, req.Files...)
-	cmd := exec.Command("git", args...)
+	cmd := newGitCommand(args...)
 	cmd.Dir = repoRoot
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -561,7 +560,7 @@ func (h *GitHandler) Reset(c *gin.Context) {
 		args = append(args, "--")
 		args = append(args, req.Files...)
 	}
-	cmd := exec.Command("git", args...)
+	cmd := newGitCommand(args...)
 	cmd.Dir = repoRoot
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -596,7 +595,7 @@ func (h *GitHandler) Checkout(c *gin.Context) {
 	}
 
 	for _, p := range req.Files {
-		checkCmd := exec.Command("git", "ls-files", "--error-unmatch", p)
+		checkCmd := newGitCommand("ls-files", "--error-unmatch", p)
 		checkCmd.Dir = repoRoot
 		if err := checkCmd.Run(); err != nil {
 			absP := filepath.Join(repoRoot, p)
@@ -606,7 +605,7 @@ func (h *GitHandler) Checkout(c *gin.Context) {
 			continue
 		}
 
-		restoreCmd := exec.Command("git", "checkout", "--", p)
+		restoreCmd := newGitCommand("checkout", "--", p)
 		restoreCmd.Dir = repoRoot
 		if output, err := restoreCmd.CombinedOutput(); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": gitCommandError(err, output).Error()})
@@ -656,10 +655,10 @@ func (h *GitHandler) Commit(c *gin.Context) {
 		email = req.Email
 	}
 
-	commitCmd := exec.Command("git", "-c", "user.name="+author, "-c", "user.email="+email,
+	commitCmd := newGitCommand("-c", "user.name="+author, "-c", "user.email="+email,
 		"commit", "-m", req.Message)
 	commitCmd.Dir = repoRoot
-	commitCmd.Env = append(os.Environ(),
+	commitCmd.Env = append(commitCmd.Env,
 		"GIT_AUTHOR_NAME="+author,
 		"GIT_AUTHOR_EMAIL="+email,
 		"GIT_COMMITTER_NAME="+author,
@@ -671,7 +670,7 @@ func (h *GitHandler) Commit(c *gin.Context) {
 		return
 	}
 
-	hashCmd := exec.Command("git", "rev-parse", "HEAD")
+	hashCmd := newGitCommand("rev-parse", "HEAD")
 	hashCmd.Dir = repoRoot
 	hashOut, _ := hashCmd.Output()
 
@@ -701,14 +700,14 @@ func (h *GitHandler) UndoCommit(c *gin.Context) {
 		return
 	}
 
-	parentCmd := exec.Command("git", "rev-parse", "HEAD~1")
+	parentCmd := newGitCommand("rev-parse", "HEAD~1")
 	parentCmd.Dir = repoRoot
 	if err := parentCmd.Run(); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "initial commit cannot be undone"})
 		return
 	}
 
-	resetCmd := exec.Command("git", "reset", "--soft", "HEAD~1")
+	resetCmd := newGitCommand("reset", "--soft", "HEAD~1")
 	resetCmd.Dir = repoRoot
 	output, err := resetCmd.CombinedOutput()
 	if err != nil {
@@ -906,12 +905,12 @@ func (h *GitHandler) CommitSelected(c *gin.Context) {
 		return
 	}
 
-	resetCmd := exec.Command("git", "reset", "HEAD")
+	resetCmd := newGitCommand("reset", "HEAD")
 	resetCmd.Dir = repoRoot
 	resetCmd.Run()
 
 	for _, file := range filesToCommit {
-		addCmd := exec.Command("git", "add", "--", file)
+		addCmd := newGitCommand("add", "--", file)
 		addCmd.Dir = repoRoot
 		if output, err := addCmd.CombinedOutput(); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to add " + file + ": " + gitCommandError(err, output).Error()})
@@ -931,10 +930,10 @@ func (h *GitHandler) CommitSelected(c *gin.Context) {
 		message += "\n\n" + req.Description
 	}
 
-	commitCmd := exec.Command("git", "-c", "user.name="+author, "-c", "user.email="+email,
+	commitCmd := newGitCommand("-c", "user.name="+author, "-c", "user.email="+email,
 		"commit", "-m", message)
 	commitCmd.Dir = repoRoot
-	commitCmd.Env = append(os.Environ(),
+	commitCmd.Env = append(commitCmd.Env,
 		"GIT_AUTHOR_NAME="+author,
 		"GIT_AUTHOR_EMAIL="+email,
 		"GIT_COMMITTER_NAME="+author,
@@ -946,7 +945,7 @@ func (h *GitHandler) CommitSelected(c *gin.Context) {
 		return
 	}
 
-	hashCmd := exec.Command("git", "rev-parse", "HEAD")
+	hashCmd := newGitCommand("rev-parse", "HEAD")
 	hashCmd.Dir = repoRoot
 	hashOut, _ := hashCmd.Output()
 	hash := strings.TrimSpace(string(hashOut))
@@ -1030,12 +1029,12 @@ func (h *GitHandler) Amend(c *gin.Context) {
 		return
 	}
 
-	resetCmd := exec.Command("git", "reset", "HEAD")
+	resetCmd := newGitCommand("reset", "HEAD")
 	resetCmd.Dir = repoRoot
 	resetCmd.Run()
 
 	for _, file := range filesToCommit {
-		addCmd := exec.Command("git", "add", "--", file)
+		addCmd := newGitCommand("add", "--", file)
 		addCmd.Dir = repoRoot
 		if output, err := addCmd.CombinedOutput(); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to add " + file + ": " + gitCommandError(err, output).Error()})
@@ -1055,10 +1054,10 @@ func (h *GitHandler) Amend(c *gin.Context) {
 		message += "\n\n" + req.Description
 	}
 
-	commitCmd := exec.Command("git", "-c", "user.name="+author, "-c", "user.email="+email,
+	commitCmd := newGitCommand("-c", "user.name="+author, "-c", "user.email="+email,
 		"commit", "--amend", "-m", message)
 	commitCmd.Dir = repoRoot
-	commitCmd.Env = append(os.Environ(),
+	commitCmd.Env = append(commitCmd.Env,
 		"GIT_AUTHOR_NAME="+author,
 		"GIT_AUTHOR_EMAIL="+email,
 		"GIT_COMMITTER_NAME="+author,
@@ -1117,14 +1116,14 @@ func (h *GitHandler) CommitFiles(c *gin.Context) {
 		return
 	}
 
-	parentCmd := exec.Command("git", "rev-parse", req.Commit+"^")
+	parentCmd := newGitCommand("rev-parse", req.Commit+"^")
 	parentCmd.Dir = repoRoot
 	hasParent := parentCmd.Run() == nil
 
 	var files []CommitFileInfo
 
 	if !hasParent {
-		cmd := exec.Command("git", "diff-tree", "--no-commit-id", "-r", "--name-status", "--root", req.Commit)
+		cmd := newGitCommand("diff-tree", "--no-commit-id", "-r", "--name-status", "--root", req.Commit)
 		cmd.Dir = repoRoot
 		output, err := cmd.Output()
 		if err != nil {
@@ -1142,7 +1141,7 @@ func (h *GitHandler) CommitFiles(c *gin.Context) {
 			files = append(files, CommitFileInfo{Path: parts[1], Status: parts[0]})
 		}
 	} else {
-		cmd := exec.Command("git", "diff-tree", "--no-commit-id", "-r", "--name-status", req.Commit)
+		cmd := newGitCommand("diff-tree", "--no-commit-id", "-r", "--name-status", req.Commit)
 		cmd.Dir = repoRoot
 		output, err := cmd.Output()
 		if err != nil {
@@ -1198,14 +1197,14 @@ func (h *GitHandler) CommitDiff(c *gin.Context) {
 
 	var oldContent, newContent string
 
-	newCmd := exec.Command("git", "show", req.Commit+":"+req.FilePath)
+	newCmd := newGitCommand("show", req.Commit+":"+req.FilePath)
 	newCmd.Dir = repoRoot
 	newOut, err := newCmd.Output()
 	if err == nil {
 		newContent = string(newOut)
 	}
 
-	parentCmd := exec.Command("git", "show", req.Commit+"^:"+req.FilePath)
+	parentCmd := newGitCommand("show", req.Commit+"^:"+req.FilePath)
 	parentCmd.Dir = repoRoot
 	oldOut, err := parentCmd.Output()
 	if err == nil {
@@ -1283,7 +1282,7 @@ func (h *GitHandler) Fetch(c *gin.Context) {
 		remoteName = "origin"
 	}
 
-	cmd := exec.Command("git", "fetch", remoteName)
+	cmd := newGitCommand("fetch", remoteName)
 	cmd.Dir = repoRoot
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -1334,7 +1333,7 @@ func (h *GitHandler) Pull(c *gin.Context) {
 		args = append(args, req.Branch)
 	}
 
-	cmd := exec.Command("git", args...)
+	cmd := newGitCommand(args...)
 	cmd.Dir = repoRoot
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -1389,7 +1388,7 @@ func (h *GitHandler) Push(c *gin.Context) {
 		remoteName = "origin"
 	}
 
-	branchCmd := exec.Command("git", "branch", "--show-current")
+	branchCmd := newGitCommand("branch", "--show-current")
 	branchCmd.Dir = repoRoot
 	branchOutput, err := branchCmd.Output()
 	if err != nil {
@@ -1404,7 +1403,7 @@ func (h *GitHandler) Push(c *gin.Context) {
 	}
 
 	upstreamBranch := ""
-	upstreamCmd := exec.Command("git", "rev-parse", "--abbrev-ref", currentBranch+"@{upstream}")
+	upstreamCmd := newGitCommand("rev-parse", "--abbrev-ref", currentBranch+"@{upstream}")
 	upstreamCmd.Dir = repoRoot
 	if upstreamOutput, upstreamErr := upstreamCmd.Output(); upstreamErr == nil {
 		upstreamBranch = strings.TrimSpace(string(upstreamOutput))
@@ -1424,7 +1423,7 @@ func (h *GitHandler) Push(c *gin.Context) {
 	}
 	args = append(args, remoteName, "HEAD:refs/heads/"+targetBranch)
 
-	cmd := exec.Command("git", args...)
+	cmd := newGitCommand(args...)
 	cmd.Dir = repoRoot
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -1478,7 +1477,7 @@ func (h *GitHandler) Stash(c *gin.Context) {
 		args = append(args, req.Files...)
 	}
 
-	cmd := exec.Command("git", args...)
+	cmd := newGitCommand(args...)
 	cmd.Dir = repoRoot
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -1519,7 +1518,7 @@ func (h *GitHandler) StashList(c *gin.Context) {
 		return
 	}
 
-	cmd := exec.Command("git", "stash", "list")
+	cmd := newGitCommand("stash", "list")
 	cmd.Dir = repoRoot
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -1575,7 +1574,7 @@ func (h *GitHandler) StashPop(c *gin.Context) {
 		args = append(args, fmt.Sprintf("stash@{%d}", req.Index))
 	}
 
-	cmd := exec.Command("git", args...)
+	cmd := newGitCommand(args...)
 	cmd.Dir = repoRoot
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -1616,7 +1615,7 @@ func (h *GitHandler) StashDrop(c *gin.Context) {
 		args = append(args, fmt.Sprintf("stash@{%d}", req.Index))
 	}
 
-	cmd := exec.Command("git", args...)
+	cmd := newGitCommand(args...)
 	cmd.Dir = repoRoot
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -1689,7 +1688,7 @@ func (h *GitHandler) ResolveConflict(c *gin.Context) {
 		return
 	}
 
-	addCmd := exec.Command("git", "add", "--", req.FilePath)
+	addCmd := newGitCommand("add", "--", req.FilePath)
 	addCmd.Dir = repoRoot
 	output, err := addCmd.CombinedOutput()
 	if err != nil {
@@ -1721,7 +1720,7 @@ func applyGitPatch(repoRoot string, patch string, cached bool, reverse bool) err
 	}
 	args = append(args, "--unidiff-zero", "--whitespace=nowarn", "-")
 
-	cmd := exec.Command("git", args...)
+	cmd := newGitCommand(args...)
 	cmd.Dir = repoRoot
 	cmd.Stdin = strings.NewReader(patch)
 	output, err := cmd.CombinedOutput()

@@ -2,7 +2,6 @@ package handler
 
 import (
 	"net/http"
-	"os/exec"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -36,7 +35,7 @@ func (h *GitHandler) Branches(c *gin.Context) {
 		return
 	}
 
-	cmd := exec.Command("git", "branch", "--show-current")
+	cmd := newGitCommand("branch", "--show-current")
 	cmd.Dir = repoRoot
 	out, err := cmd.Output()
 	if err != nil {
@@ -45,7 +44,7 @@ func (h *GitHandler) Branches(c *gin.Context) {
 	}
 	currentBranch := strings.TrimSpace(string(out))
 
-	cmd = exec.Command("git", "branch", "--format=%(refname:short)")
+	cmd = newGitCommand("branch", "--format=%(refname:short)")
 	cmd.Dir = repoRoot
 	out, err = cmd.Output()
 	if err != nil {
@@ -101,14 +100,14 @@ func (h *GitHandler) SwitchBranch(c *gin.Context) {
 		return
 	}
 
-	verifyCmd := exec.Command("git", "rev-parse", "--verify", "refs/heads/"+req.Branch)
+	verifyCmd := newGitCommand("rev-parse", "--verify", "refs/heads/"+req.Branch)
 	verifyCmd.Dir = repoRoot
 	if err := verifyCmd.Run(); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "branch not found: " + req.Branch})
 		return
 	}
 
-	cmd := exec.Command("git", "checkout", req.Branch)
+	cmd := newGitCommand("checkout", req.Branch)
 	cmd.Dir = repoRoot
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -150,7 +149,7 @@ func (h *GitHandler) SmartSwitchBranch(c *gin.Context) {
 		return
 	}
 
-	statusCmd := exec.Command("git", "status", "--porcelain")
+	statusCmd := newGitCommand("status", "--porcelain")
 	statusCmd.Dir = repoRoot
 	statusOut, _ := statusCmd.Output()
 	hasChanges := len(strings.TrimSpace(string(statusOut))) > 0
@@ -158,7 +157,7 @@ func (h *GitHandler) SmartSwitchBranch(c *gin.Context) {
 	stashConflict := false
 
 	if hasChanges {
-		cmd := exec.Command("git", "stash", "push", "-m", "auto-stash: switching to "+req.Branch)
+		cmd := newGitCommand("stash", "push", "-m", "auto-stash: switching to "+req.Branch)
 		cmd.Dir = repoRoot
 		output, err := cmd.CombinedOutput()
 		if err != nil {
@@ -168,11 +167,11 @@ func (h *GitHandler) SmartSwitchBranch(c *gin.Context) {
 		stashed = true
 	}
 
-	verifyCmd := exec.Command("git", "rev-parse", "--verify", "refs/heads/"+req.Branch)
+	verifyCmd := newGitCommand("rev-parse", "--verify", "refs/heads/"+req.Branch)
 	verifyCmd.Dir = repoRoot
 	if err := verifyCmd.Run(); err != nil {
 		if stashed {
-			popCmd := exec.Command("git", "stash", "pop")
+			popCmd := newGitCommand("stash", "pop")
 			popCmd.Dir = repoRoot
 			popCmd.CombinedOutput()
 		}
@@ -180,12 +179,12 @@ func (h *GitHandler) SmartSwitchBranch(c *gin.Context) {
 		return
 	}
 
-	cmd := exec.Command("git", "checkout", req.Branch)
+	cmd := newGitCommand("checkout", req.Branch)
 	cmd.Dir = repoRoot
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		if stashed {
-			popCmd := exec.Command("git", "stash", "pop")
+			popCmd := newGitCommand("stash", "pop")
 			popCmd.Dir = repoRoot
 			popCmd.CombinedOutput()
 		}
@@ -198,7 +197,7 @@ func (h *GitHandler) SmartSwitchBranch(c *gin.Context) {
 	}
 
 	if stashed {
-		popCmd := exec.Command("git", "stash", "pop")
+		popCmd := newGitCommand("stash", "pop")
 		popCmd.Dir = repoRoot
 		popOutput, err := popCmd.CombinedOutput()
 		if err != nil {
@@ -276,7 +275,7 @@ func (h *GitHandler) CreateBranch(c *gin.Context) {
 		args = append(args, req.From)
 	}
 
-	cmd := exec.Command("git", args...)
+	cmd := newGitCommand(args...)
 	cmd.Dir = repoRoot
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -319,7 +318,7 @@ func (h *GitHandler) DeleteBranch(c *gin.Context) {
 		return
 	}
 
-	currentCmd := exec.Command("git", "branch", "--show-current")
+	currentCmd := newGitCommand("branch", "--show-current")
 	currentCmd.Dir = repoRoot
 	out, _ := currentCmd.Output()
 	if strings.TrimSpace(string(out)) == req.Branch {
@@ -327,7 +326,7 @@ func (h *GitHandler) DeleteBranch(c *gin.Context) {
 		return
 	}
 
-	cmd := exec.Command("git", "branch", "-d", req.Branch)
+	cmd := newGitCommand("branch", "-d", req.Branch)
 	cmd.Dir = repoRoot
 	output, err := cmd.CombinedOutput()
 	if err != nil {

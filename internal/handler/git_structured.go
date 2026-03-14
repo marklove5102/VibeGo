@@ -192,7 +192,7 @@ func (h *GitHandler) collectStructuredStatus(repoRoot string) ([]StructuredFile,
 }
 
 func (h *GitHandler) collectStructuredStatusWithScope(repoRoot string, scopeKey string) ([]StructuredFile, StatusSummary) {
-	cmd := exec.Command("git", "status", "--porcelain=v1", "-z")
+	cmd := newGitCommand("status", "--porcelain=v1", "-z")
 	cmd.Dir = repoRoot
 	output, err := cmd.Output()
 	if err != nil {
@@ -719,12 +719,12 @@ func getGitDiff(repoRoot, filePath, mode string) (*InteractiveDiff, error) {
 		args = []string{"diff", "HEAD", "--", filePath}
 	}
 
-	cmd := exec.Command("git", args...)
+	cmd := newGitCommand(args...)
 	cmd.Dir = repoRoot
 	output, err := cmd.Output()
 	headErr := error(nil)
 	if mode == "working" {
-		headCmd := exec.Command("git", "show", "HEAD:"+filePath)
+		headCmd := newGitCommand("show", "HEAD:"+filePath)
 		headCmd.Dir = repoRoot
 		_, headErr = headCmd.Output()
 	}
@@ -739,7 +739,7 @@ func getGitDiff(repoRoot, filePath, mode string) (*InteractiveDiff, error) {
 	}
 
 	if mode == "working" && len(output) == 0 && headErr != nil {
-		noIndexCmd := exec.Command("git", "diff", "--no-index", "--", "/dev/null", filePath)
+		noIndexCmd := newGitCommand("diff", "--no-index", "--", "/dev/null", filePath)
 		noIndexCmd.Dir = repoRoot
 		noIndexOutput, noIndexErr := noIndexCmd.CombinedOutput()
 		if noIndexErr == nil {
@@ -769,15 +769,15 @@ func getGitDiff(repoRoot, filePath, mode string) (*InteractiveDiff, error) {
 
 	switch mode {
 	case "staged":
-		oldCmd := exec.Command("git", "show", "HEAD:"+filePath)
+		oldCmd := newGitCommand("show", "HEAD:"+filePath)
 		oldCmd.Dir = repoRoot
 		oldOutput, _ = oldCmd.Output()
 
-		newCmd := exec.Command("git", "show", ":"+filePath)
+		newCmd := newGitCommand("show", ":"+filePath)
 		newCmd.Dir = repoRoot
 		newOutput, _ = newCmd.Output()
 	default:
-		oldCmd := exec.Command("git", "show", "HEAD:"+filePath)
+		oldCmd := newGitCommand("show", "HEAD:"+filePath)
 		oldCmd.Dir = repoRoot
 		oldOutput, _ = oldCmd.Output()
 
@@ -876,7 +876,7 @@ func (h *GitHandler) ApplySelection(c *gin.Context) {
 		switch req.Action {
 		case "include":
 			if req.Target == "file" {
-				cmd := exec.Command("git", "add", "--", req.FilePath)
+				cmd := newGitCommand("add", "--", req.FilePath)
 				cmd.Dir = repoRoot
 				if out, cmdErr := cmd.CombinedOutput(); cmdErr != nil {
 					c.JSON(http.StatusInternalServerError, gin.H{"error": gitCommandError(cmdErr, out).Error()})
@@ -919,7 +919,7 @@ func (h *GitHandler) ApplySelection(c *gin.Context) {
 			}
 
 			if req.Target == "file" {
-				cmd := exec.Command("git", "reset", "HEAD", "--", req.FilePath)
+				cmd := newGitCommand("reset", "HEAD", "--", req.FilePath)
 				cmd.Dir = repoRoot
 				if out, cmdErr := cmd.CombinedOutput(); cmdErr != nil {
 					c.JSON(http.StatusInternalServerError, gin.H{"error": gitCommandError(cmdErr, out).Error()})
@@ -944,14 +944,14 @@ func (h *GitHandler) ApplySelection(c *gin.Context) {
 				return
 			}
 
-			resetCmd := exec.Command("git", "reset", "HEAD", "--", req.FilePath)
+			resetCmd := newGitCommand("reset", "HEAD", "--", req.FilePath)
 			resetCmd.Dir = repoRoot
 			if out, cmdErr := resetCmd.CombinedOutput(); cmdErr != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": gitCommandError(cmdErr, out).Error()})
 				return
 			}
 
-			checkoutCmd := exec.Command("git", "checkout", "--", req.FilePath)
+			checkoutCmd := newGitCommand("checkout", "--", req.FilePath)
 			checkoutCmd.Dir = repoRoot
 			if out, cmdErr := checkoutCmd.CombinedOutput(); cmdErr != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": gitCommandError(cmdErr, out).Error()})
@@ -993,7 +993,7 @@ func (h *GitHandler) ApplySelection(c *gin.Context) {
 		persistSelectionState(h.selectionStore, scopeKey, req.FilePath, nextState)
 	case "discard":
 		if req.Target == "file" {
-			cmd := exec.Command("git", "checkout", "--", req.FilePath)
+			cmd := newGitCommand("checkout", "--", req.FilePath)
 			cmd.Dir = repoRoot
 			if out, cmdErr := cmd.CombinedOutput(); cmdErr != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": gitCommandError(cmdErr, out).Error()})
@@ -1095,7 +1095,7 @@ func (h *GitHandler) StashFiles(c *gin.Context) {
 		return
 	}
 
-	cmd := exec.Command("git", "stash", "show", "--name-status", fmt.Sprintf("stash@{%d}", req.Index))
+	cmd := newGitCommand("stash", "show", "--name-status", fmt.Sprintf("stash@{%d}", req.Index))
 	cmd.Dir = repoRoot
 	output, err := cmd.Output()
 	if err != nil {
@@ -1150,7 +1150,7 @@ func (h *GitHandler) StashDiff(c *gin.Context) {
 
 	stashRef := fmt.Sprintf("stash@{%d}", req.Index)
 
-	cmd := exec.Command("git", "diff", stashRef+"^.."+stashRef, "--", req.FilePath)
+	cmd := newGitCommand("diff", stashRef+"^.."+stashRef, "--", req.FilePath)
 	cmd.Dir = repoRoot
 	output, err := cmd.Output()
 	if err != nil {
@@ -1173,11 +1173,11 @@ func (h *GitHandler) StashDiff(c *gin.Context) {
 		}
 	}
 
-	parentCmd := exec.Command("git", "show", stashRef+"^:"+req.FilePath)
+	parentCmd := newGitCommand("show", stashRef+"^:"+req.FilePath)
 	parentCmd.Dir = repoRoot
 	oldContent, _ := parentCmd.Output()
 
-	stashCmd := exec.Command("git", "show", stashRef+":"+req.FilePath)
+	stashCmd := newGitCommand("show", stashRef+":"+req.FilePath)
 	stashCmd.Dir = repoRoot
 	newContent, _ := stashCmd.Output()
 
@@ -1335,7 +1335,7 @@ func (h *GitHandler) ConflictResolve(c *gin.Context) {
 	var resolvedContent string
 	switch req.Mode {
 	case "ours":
-		cmd := exec.Command("git", "show", ":2:"+req.FilePath)
+		cmd := newGitCommand("show", ":2:"+req.FilePath)
 		cmd.Dir = repoRoot
 		out, err := cmd.Output()
 		if err != nil {
@@ -1344,7 +1344,7 @@ func (h *GitHandler) ConflictResolve(c *gin.Context) {
 		}
 		resolvedContent = string(out)
 	case "theirs":
-		cmd := exec.Command("git", "show", ":3:"+req.FilePath)
+		cmd := newGitCommand("show", ":3:"+req.FilePath)
 		cmd.Dir = repoRoot
 		out, err := cmd.Output()
 		if err != nil {
@@ -1373,7 +1373,7 @@ func (h *GitHandler) ConflictResolve(c *gin.Context) {
 		return
 	}
 
-	addCmd := exec.Command("git", "add", "--", req.FilePath)
+	addCmd := newGitCommand("add", "--", req.FilePath)
 	addCmd.Dir = repoRoot
 	if out, err := addCmd.CombinedOutput(); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": gitCommandError(err, out).Error()})
