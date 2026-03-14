@@ -21,7 +21,12 @@ import { useDialog } from "@/components/common";
 import { useFrameController } from "@/framework/frame/controller";
 import { getIntlLocale, type Locale, useTranslation } from "@/lib/i18n";
 import { useSettingsStore } from "@/lib/settings";
-import { type FileItem, type FileManagerStoreApi, fileManagerStore } from "@/stores/file-manager-store";
+import {
+  type FileItem,
+  type FileManagerStoreApi,
+  fileManagerStore,
+  getOrCreateFileManagerStore,
+} from "@/stores/file-manager-store";
 import FileDetailSheet from "./file-detail-sheet";
 import FileManagerBreadcrumb from "./file-manager-breadcrumb";
 import FileManagerToolbar from "./file-manager-toolbar";
@@ -99,14 +104,21 @@ function getFileIcon(file: FileItem) {
 }
 
 interface FileManagerProps {
+  groupId?: string;
   initialPath?: string;
   onFileOpen?: (file: FileItem) => void;
   mode?: "default" | "directory-picker";
   store?: FileManagerStoreApi;
 }
 
-const FileManager: React.FC<FileManagerProps> = ({ initialPath = ".", onFileOpen, mode = "default", store }) => {
-  const storeApi = store ?? fileManagerStore;
+const FileManager: React.FC<FileManagerProps> = ({
+  groupId,
+  initialPath = ".",
+  onFileOpen,
+  mode = "default",
+  store,
+}) => {
+  const storeApi = store ?? (groupId ? getOrCreateFileManagerStore(groupId) : fileManagerStore);
   const {
     currentPath,
     initialized,

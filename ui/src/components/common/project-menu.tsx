@@ -1,5 +1,6 @@
 import {
   FilePlus,
+  FolderOpen,
   Globe,
   Home,
   Monitor,
@@ -28,6 +29,7 @@ interface ProjectMenuProps {
   onClose: () => void;
   locale: Locale;
   onOpenSettings: () => void;
+  onOpenDirectory: () => void;
   onShowHomePage: () => void;
   onNewPage: () => void;
 }
@@ -37,6 +39,7 @@ const ProjectMenu: React.FC<ProjectMenuProps> = ({
   onClose,
   locale,
   onOpenSettings,
+  onOpenDirectory,
   onShowHomePage,
   onNewPage,
 }) => {
@@ -54,8 +57,7 @@ const ProjectMenu: React.FC<ProjectMenuProps> = ({
   const groups = useFrameStore((s) => s.groups);
   const pageMenuItems = useFrameStore((s) => s.pageMenuItems);
   const removeGroup = useFrameStore((s) => s.removeGroup);
-  const deleteSession = useSessionStore((s) => s.deleteSession);
-  const currentSessionId = useSessionStore((s) => s.currentSessionId);
+  const closeFolderGroup = useSessionStore((s) => s.closeFolderGroup);
 
   const editMode = usePreviewStore((s) => s.editMode);
   const isDirty = usePreviewStore((s) => s.isDirty);
@@ -79,6 +81,11 @@ const ProjectMenu: React.FC<ProjectMenuProps> = ({
     onClose();
   };
 
+  const handleOpenFolder = () => {
+    onOpenDirectory();
+    onClose();
+  };
+
   const handleThemeToggle = () => {
     const currentIndex = themeOrder.indexOf(themeValue);
     const nextValue = themeOrder[(currentIndex + 1) % themeOrder.length] || themeOrder[0];
@@ -93,11 +100,7 @@ const ProjectMenu: React.FC<ProjectMenuProps> = ({
 
   const handleCloseFolder = async () => {
     if (activeGroup?.type === "group") {
-      if (currentSessionId) {
-        await deleteSession(currentSessionId);
-      } else {
-        removeGroup(activeGroup.id);
-      }
+      await closeFolderGroup(activeGroup.id);
     }
     onClose();
   };
@@ -176,6 +179,12 @@ const ProjectMenu: React.FC<ProjectMenuProps> = ({
       onClick: handleNewPage,
     },
     {
+      id: "open-folder",
+      icon: <FolderOpen size={20} />,
+      label: t("common.openFolder"),
+      onClick: handleOpenFolder,
+    },
+    {
       id: "settings",
       icon: <Settings size={20} />,
       label: t("common.settings"),
@@ -206,7 +215,7 @@ const ProjectMenu: React.FC<ProjectMenuProps> = ({
     title?: string;
   }> = [];
 
-  if (activeGroup?.type === "group") {
+  if (activeGroup?.type === "group" && activeGroup.pages.some((p) => p.path)) {
     contextItems.push({
       id: "close-folder",
       icon: <XCircle size={20} />,

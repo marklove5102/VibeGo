@@ -1,4 +1,4 @@
-import { FolderOpen, X } from "lucide-react";
+import { FolderOpen, Terminal, X } from "lucide-react";
 import React from "react";
 import { type Locale, useTranslation } from "@/lib/i18n";
 import { pageRegistry } from "@/pages/registry";
@@ -8,10 +8,11 @@ interface NewPageMenuProps {
   onClose: () => void;
   locale: Locale;
   onOpenDirectory: () => void;
+  onNewTerminal: () => void;
   onNewTool: (pageId: string) => void;
 }
 
-const NewPageMenu: React.FC<NewPageMenuProps> = ({ isOpen, onClose, locale, onOpenDirectory, onNewTool }) => {
+const NewPageMenu: React.FC<NewPageMenuProps> = ({ isOpen, onClose, locale, onOpenDirectory, onNewTerminal, onNewTool }) => {
   const t = useTranslation(locale);
   const tools = pageRegistry.getAll().filter((p) => p.category === "tool");
 
@@ -50,34 +51,40 @@ const NewPageMenu: React.FC<NewPageMenuProps> = ({ isOpen, onClose, locale, onOp
               <div className="text-sm font-medium text-ide-text">{t("common.openFolder")}</div>
             </div>
           </button>
-          {tools.length > 0 && (
-            <>
-              <div className="h-px bg-ide-border my-2" />
-              <div className="px-4 py-2">
-                <span className="text-xs font-bold text-ide-mute uppercase">{t("newPage.plugins")}</span>
-              </div>
-              {tools.map((tool) => {
-                const IconComponent = tool.icon;
-                return (
-                  <button
-                    key={tool.id}
-                    onClick={() => {
-                      onNewTool(tool.id);
-                      onClose();
-                    }}
-                    className="w-full px-4 py-3 flex items-center gap-4 hover:bg-ide-bg rounded-lg transition-colors"
-                  >
-                    <div className="w-10 h-10 rounded-full bg-ide-accent/10 flex items-center justify-center">
-                      <IconComponent size={20} className="text-ide-accent" />
-                    </div>
-                    <div className="text-left">
-                      <div className="text-sm font-medium text-ide-text">{getToolName(tool)}</div>
-                    </div>
-                  </button>
-                );
-              })}
-            </>
-          )}
+          <button
+            onClick={() => {
+              onNewTerminal();
+              onClose();
+            }}
+            className="w-full px-4 py-3 flex items-center gap-4 hover:bg-ide-bg rounded-lg transition-colors"
+          >
+            <div className="w-10 h-10 rounded-full bg-ide-accent/10 flex items-center justify-center">
+              <Terminal size={20} className="text-ide-accent" />
+            </div>
+            <div className="text-left">
+              <div className="text-sm font-medium text-ide-text">{t("sidebar.terminal")}</div>
+            </div>
+          </button>
+          {tools.map((tool) => {
+            const IconComponent = tool.icon;
+            return (
+              <button
+                key={tool.id}
+                onClick={() => {
+                  onNewTool(tool.id);
+                  onClose();
+                }}
+                className="w-full px-4 py-3 flex items-center gap-4 hover:bg-ide-bg rounded-lg transition-colors"
+              >
+                <div className="w-10 h-10 rounded-full bg-ide-accent/10 flex items-center justify-center">
+                  <IconComponent size={20} className="text-ide-accent" />
+                </div>
+                <div className="text-left">
+                  <div className="text-sm font-medium text-ide-text">{getToolName(tool)}</div>
+                </div>
+              </button>
+            );
+          })}
         </div>
       </div>
     </>

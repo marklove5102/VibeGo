@@ -5,6 +5,7 @@ import { type GitDiffHunk, type GitDiffRow, type GitSelectionType, parseGitDiff 
 import { useGitStore } from "@/stores";
 
 interface DiffViewProps {
+  groupId: string;
   original: string;
   modified: string;
   filename?: string;
@@ -119,6 +120,7 @@ const getSelectionClassName = (row: GitDiffRow, selected: boolean, interactive: 
 };
 
 const DiffView: React.FC<DiffViewProps> = ({
+  groupId,
   original,
   modified,
   filename,
@@ -126,10 +128,10 @@ const DiffView: React.FC<DiffViewProps> = ({
   language,
   allowSelection = false,
 }) => {
-  const checkedFiles = useGitStore((state) => state.checkedFiles);
-  const partialSelection = useGitStore((state) => (filePath ? state.partialSelections[filePath] : undefined));
-  const setPartialSelection = useGitStore((state) => state.setPartialSelection);
-  const toggleFile = useGitStore((state) => state.toggleFile);
+  const checkedFiles = useGitStore(groupId, (state) => state.checkedFiles);
+  const partialSelection = useGitStore(groupId, (state) => (filePath ? state.partialSelections[filePath] : undefined));
+  const setPartialSelection = useGitStore(groupId, (state) => state.setPartialSelection);
+  const toggleFile = useGitStore(groupId, (state) => state.toggleFile);
   const isMobile = useIsMobile();
 
   const detectedLanguage = useMemo(() => language || getLanguageFromFilename(filename), [language, filename]);

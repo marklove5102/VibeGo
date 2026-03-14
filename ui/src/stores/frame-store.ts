@@ -127,6 +127,7 @@ interface FrameState {
     }
   ) => void;
   addToolGroup: (pageId: string, name?: string, id?: string) => void;
+  addTerminalGroup: () => void;
   addSettingsGroup: () => void;
   removeGroup: (id: string) => void;
   setActiveGroup: (id: string) => void;
@@ -291,6 +292,20 @@ export const useFrameStore = create<FrameState>((set, get) => ({
 
   addToolGroup: (pageId, name, id) => {
     const group = createToolGroup(pageId, name, id);
+    set((s) => ({ groups: [...s.groups, group], activeGroupId: group.id }));
+  },
+
+  addTerminalGroup: () => {
+    const groupId = `terminal-${Date.now()}`;
+    const group: GenericGroup = {
+      type: "group",
+      id: groupId,
+      name: "Terminal",
+      pages: [
+        { id: `${groupId}-terminal`, type: "terminal", label: "Terminal", tabs: [], activeTabId: null },
+      ],
+      activePageId: `${groupId}-terminal`,
+    };
     set((s) => ({ groups: [...s.groups, group], activeGroupId: group.id }));
   },
 

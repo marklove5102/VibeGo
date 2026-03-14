@@ -19,6 +19,7 @@ import { useGitStore } from "@/stores";
 type FileSelectionType = "all" | "partial" | "none";
 
 interface GitChangesViewProps {
+  groupId: string;
   allFiles: GitFileNode[];
   checkedFiles: Set<string>;
   partialSelections: Record<string, GitPartialSelection>;
@@ -143,6 +144,7 @@ const getFilePathClassName = (selectionType: FileSelectionType) => {
 };
 
 const GitChangesView: React.FC<GitChangesViewProps> = ({
+  groupId,
   allFiles,
   checkedFiles,
   partialSelections,
@@ -162,7 +164,7 @@ const GitChangesView: React.FC<GitChangesViewProps> = ({
 }) => {
   const t = useCallback((key: string) => getTranslation(locale, key), [locale]);
   const { summary, description, isAmend, setSummary, setDescription, setIsAmend, commitSelected, amendCommit } =
-    useGitStore();
+    useGitStore(groupId);
 
   const [showStashes, setShowStashes] = useState(false);
   const [showDescription, setShowDescription] = useState(false);

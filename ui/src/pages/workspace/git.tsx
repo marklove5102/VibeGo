@@ -1,7 +1,7 @@
 import { GitGraph } from "lucide-react";
 import React, { useCallback } from "react";
 import { ConflictView, DiffView, GitView } from "@/components/git";
-import { useFrameStore, useGitStore } from "@/stores";
+import { getOrCreateGitStore, useFrameStore } from "@/stores";
 import { useAppStore } from "@/stores/app-store";
 import { registerPage } from "../registry";
 import type { PageViewProps } from "../types";
@@ -65,13 +65,21 @@ const GitViewPage: React.FC<PageViewProps> = ({ context }) => {
 
   if (activeTabId === null) {
     return (
-      <GitView path={pagePath} locale={locale} onFileDiff={handleGitDiff} onConflict={handleConflict} isActive={true} />
+      <GitView
+        groupId={context.groupId}
+        path={pagePath}
+        locale={locale}
+        onFileDiff={handleGitDiff}
+        onConflict={handleConflict}
+        isActive={true}
+      />
     );
   }
 
   if (activeTab?.data?.type === "diff") {
     return (
       <DiffView
+        groupId={context.groupId}
         original={(activeTab.data.original as string) || ""}
         modified={(activeTab.data.modified as string) || ""}
         filename={(activeTab.data.filename as string) || undefined}
@@ -89,7 +97,7 @@ const GitViewPage: React.FC<PageViewProps> = ({ context }) => {
         filePath={(activeTab.data.filePath as string) || ""}
         locale={locale}
         onResolve={async (content) => {
-          const { resolveConflict } = useGitStore.getState();
+          const { resolveConflict } = getOrCreateGitStore(context.groupId).getState();
           await resolveConflict(activeTab.data?.filePath as string, content);
         }}
         onCancel={() => {

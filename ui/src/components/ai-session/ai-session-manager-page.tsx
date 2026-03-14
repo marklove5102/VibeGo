@@ -1,8 +1,11 @@
 import {
+  AlertTriangle,
+  ChevronDown,
   ChevronLeft,
   Clock3,
   Database,
   Folder,
+  FolderSearch,
   History,
   ListTree,
   RefreshCw,
@@ -222,6 +225,7 @@ const AISessionManagerPage: React.FC = () => {
   const [outlineOpen, setOutlineOpen] = React.useState(false);
   const [configDraft, setConfigDraft] = React.useState<AISessionConfig>(config);
   const [savingConfig, setSavingConfig] = React.useState(false);
+  const [collapsedProviders, setCollapsedProviders] = React.useState<Set<string>>(new Set());
 
   React.useEffect(() => {
     setConfigDraft(config);
@@ -667,149 +671,243 @@ const AISessionManagerPage: React.FC = () => {
     );
   };
 
+  const toggleCollapsed = (providerId: string) => {
+    setCollapsedProviders((prev) => {
+      const next = new Set(prev);
+      if (next.has(providerId)) {
+        next.delete(providerId);
+      } else {
+        next.add(providerId);
+      }
+      return next;
+    });
+  };
+
+  const allEnabled = providerOrder.every(
+    (id) => (configDraft.providers[id] || { enabled: true }).enabled
+  );
+
   const renderSettings = () => (
     <div className="flex h-full min-h-0 flex-col bg-ide-bg">
       <div className="min-h-0 flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-3xl space-y-4 px-4 py-4">
+        <div className="mx-auto max-w-3xl space-y-5 px-4 py-4">
+          <div className="text-xs font-semibold uppercase tracking-wider text-ide-mute">
+            {t("plugin.aiSessionManager.generalSettings")}
+          </div>
           <div className="rounded-lg border border-ide-border bg-ide-panel">
             {[
-              ["autoRescanOnOpen", "plugin.aiSessionManager.autoRescanOnOpen"],
-              ["cacheEnabled", "plugin.aiSessionManager.cacheEnabled"],
-              ["showParseErrors", "plugin.aiSessionManager.showParseErrors"],
-            ].map(([key, label], index, arr) => {
+              ["autoRescanOnOpen", "plugin.aiSessionManager.autoRescanOnOpen", "plugin.aiSessionManager.autoRescanOnOpenDesc"],
+              ["cacheEnabled", "plugin.aiSessionManager.cacheEnabled", "plugin.aiSessionManager.cacheEnabledDesc"],
+              ["showParseErrors", "plugin.aiSessionManager.showParseErrors", "plugin.aiSessionManager.showParseErrorsDesc"],
+            ].map(([key, label, desc], index, arr) => {
               const checked = configDraft[key as keyof AISessionConfig] as boolean;
               return (
-                <button
+                <div
                   key={key}
-                  type="button"
-                  onClick={() =>
-                    setConfigDraft((current) => ({
-                      ...current,
-                      [key]: !checked,
-                    }))
-                  }
                   className={cn(
-                    "flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition-colors",
-                    checked ? "bg-ide-accent/5" : "hover:bg-ide-bg",
+                    "flex items-center justify-between gap-4 px-4 py-3",
                     index < arr.length - 1 ? "border-b border-ide-border" : ""
                   )}
                 >
-                  <span className="text-sm text-ide-text">{t(label)}</span>
-                  <span
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium text-ide-text">{t(label)}</div>
+                    <div className="mt-0.5 text-xs leading-5 text-ide-mute">{t(desc)}</div>
+                  </div>
+                  <button
+                    type="button"
+                    aria-pressed={checked}
+                    onClick={() =>
+                      setConfigDraft((current) => ({
+                        ...current,
+                        [key]: !checked,
+                      }))
+                    }
                     className={cn(
-                      "shrink-0 rounded-md border px-1.5 py-0.5 text-[11px]",
+                      "relative inline-flex h-7 w-12 shrink-0 rounded-full border transition-colors duration-200 focus:outline-none focus:border-ide-accent",
                       checked
-                        ? "border-ide-accent/40 bg-ide-accent/10 text-ide-accent"
-                        : "border-ide-border bg-ide-panel text-ide-mute"
+                        ? "border-ide-accent bg-ide-accent/12"
+                        : "border-ide-border bg-ide-panel hover:border-ide-mute/40"
                     )}
                   >
-                    {checked ? t("plugin.aiSessionManager.enabled") : t("plugin.aiSessionManager.disabled")}
-                  </span>
-                </button>
+                    <span
+                      className={cn(
+                        "absolute left-0.5 top-1/2 h-5 w-5 -translate-y-1/2 rounded-full border shadow-sm transition-all duration-200",
+                        checked
+                          ? "translate-x-5 border-ide-accent bg-ide-accent"
+                          : "translate-x-0 border-ide-border bg-white"
+                      )}
+                    />
+                  </button>
+                </div>
               );
             })}
+          </div>
+
+          <div className="flex items-center justify-between">
+            <div className="text-xs font-semibold uppercase tracking-wider text-ide-mute">
+              {t("plugin.aiSessionManager.providerSettings")}
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                const nextEnabled = !allEnabled;
+                setConfigDraft((current) => {
+                  const next = { ...current, providers: { ...current.providers } };
+                  for (const id of providerOrder) {
+                    next.providers[id] = {
+                      ...(next.providers[id] || { enabled: true, paths: [] }),
+                      enabled: nextEnabled,
+                    };
+                  }
+                  return next;
+                });
+              }}
+              className="rounded-md border border-ide-border bg-ide-panel px-2.5 py-1 text-[11px] text-ide-mute transition-colors hover:bg-ide-bg hover:text-ide-text"
+            >
+              {allEnabled ? t("plugin.aiSessionManager.disableAll") : t("plugin.aiSessionManager.enableAll")}
+            </button>
           </div>
 
           <div className="space-y-3">
             {providerOrder.map((providerId) => {
               const providerConfig = configDraft.providers[providerId] || { enabled: true, paths: [] };
               const status = providerLookup.get(providerId);
+              const collapsed = collapsedProviders.has(providerId);
+              const hasErrors = (status?.errorCount || 0) > 0;
               return (
                 <div key={providerId} className="rounded-lg border border-ide-border bg-ide-panel">
-                  <div className="flex flex-col gap-3 border-b border-ide-border px-4 py-3 md:flex-row md:items-start md:justify-between">
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <div className="truncate text-sm font-semibold text-ide-text">{providerLabels[providerId]}</div>
-                        <span
-                          className={cn(
-                            "shrink-0 rounded-md border px-1.5 py-0.5 text-[11px]",
-                            providerConfig.enabled
-                              ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-500"
-                              : "border-ide-border bg-ide-bg text-ide-mute"
-                          )}
-                        >
-                          {providerConfig.enabled ? t("plugin.aiSessionManager.enabled") : t("plugin.aiSessionManager.disabled")}
+                  <button
+                    type="button"
+                    onClick={() => toggleCollapsed(providerId)}
+                    className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div className="truncate text-sm font-semibold text-ide-text">{providerLabels[providerId]}</div>
+                      <span
+                        className={cn(
+                          "shrink-0 rounded-md border px-1.5 py-0.5 text-[11px]",
+                          providerConfig.enabled
+                            ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-500"
+                            : "border-ide-border bg-ide-bg text-ide-mute"
+                        )}
+                      >
+                        {providerConfig.enabled ? t("plugin.aiSessionManager.enabled") : t("plugin.aiSessionManager.disabled")}
+                      </span>
+                      {hasErrors ? (
+                        <span className="shrink-0 rounded-md border border-red-500/30 bg-red-500/10 px-1.5 py-0.5 text-[11px] text-red-400">
+                          {formatCount(t("plugin.aiSessionManager.errorCount"), status?.errorCount || 0)}
                         </span>
-                      </div>
-                      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ide-mute">
-                        <span>{formatCount(t("plugin.aiSessionManager.sessionCount"), status?.sessionCount || 0)}</span>
-                        <span>{formatCount(t("plugin.aiSessionManager.errorCount"), status?.errorCount || 0)}</span>
-                        <span>
-                          {status?.available ? t("plugin.aiSessionManager.pathAvailable") : t("plugin.aiSessionManager.pathUnavailable")}
-                        </span>
-                      </div>
+                      ) : null}
                     </div>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        updateProviderConfig(providerId, (current) => ({
-                          ...current,
-                          enabled: !current.enabled,
-                        }))
-                      }
-                      className={cn(
-                        "h-8 shrink-0 rounded-md border px-3 text-xs transition-colors",
-                        providerConfig.enabled
-                          ? "border-ide-accent/50 bg-ide-accent/10 text-ide-accent"
-                          : "border-ide-border bg-ide-bg text-ide-mute hover:text-ide-text"
-                      )}
-                    >
-                      {providerConfig.enabled ? t("plugin.aiSessionManager.disableProvider") : t("plugin.aiSessionManager.enableProvider")}
-                    </button>
-                  </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-ide-mute">
+                        {formatCount(t("plugin.aiSessionManager.sessionCount"), status?.sessionCount || 0)}
+                      </span>
+                      <ChevronDown
+                        size={16}
+                        className={cn(
+                          "text-ide-mute transition-transform duration-200",
+                          collapsed ? "-rotate-90" : ""
+                        )}
+                      />
+                    </div>
+                  </button>
 
-                  <div className="space-y-2 px-4 py-3">
-                    {(providerConfig.paths.length > 0 ? providerConfig.paths : [""]).map((path, index) => (
-                      <div key={`${providerId}-${index}`} className="flex gap-2">
-                        <input
-                          value={path}
-                          onChange={(event) =>
-                            updateProviderConfig(providerId, (current) => ({
-                              ...current,
-                              paths:
-                                current.paths.length === 0
-                                  ? [event.target.value]
-                                  : current.paths.map((item, itemIndex) =>
-                                      itemIndex === index ? event.target.value : item
-                                    ),
-                            }))
-                          }
-                          placeholder={status?.paths?.[0] || t("plugin.aiSessionManager.pathPlaceholder")}
-                          className="h-9 min-w-0 flex-1 rounded-md border border-ide-border bg-ide-bg px-3 text-sm text-ide-text placeholder:text-ide-mute outline-none transition-colors focus:border-ide-accent"
-                        />
-                        {providerConfig.paths.length > 0 ? (
+                  {!collapsed ? (
+                    <>
+                      <div className="border-t border-ide-border px-4 py-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ide-mute">
+                            <span
+                              className={cn(
+                                "inline-flex items-center gap-1",
+                                !status?.available ? "text-red-400" : ""
+                              )}
+                            >
+                              {!status?.available ? <AlertTriangle size={12} /> : null}
+                              {status?.available
+                                ? t("plugin.aiSessionManager.pathAvailable")
+                                : t("plugin.aiSessionManager.pathUnavailable")}
+                            </span>
+                          </div>
                           <button
                             type="button"
-                            onClick={() =>
+                            onClick={(e) => {
+                              e.stopPropagation();
                               updateProviderConfig(providerId, (current) => ({
                                 ...current,
-                                paths: current.paths.filter((_, itemIndex) => itemIndex !== index),
-                              }))
-                            }
-                            className="h-9 shrink-0 rounded-md border border-red-500/30 bg-red-500/10 px-3 text-xs text-red-400"
+                                enabled: !current.enabled,
+                              }));
+                            }}
+                            className={cn(
+                              "h-8 shrink-0 rounded-md border px-3 text-xs transition-colors",
+                              providerConfig.enabled
+                                ? "border-ide-accent/50 bg-ide-accent/10 text-ide-accent"
+                                : "border-ide-border bg-ide-bg text-ide-mute hover:text-ide-text"
+                            )}
                           >
-                            {t("common.delete")}
+                            {providerConfig.enabled
+                              ? t("plugin.aiSessionManager.disableProvider")
+                              : t("plugin.aiSessionManager.enableProvider")}
                           </button>
-                        ) : null}
+                        </div>
                       </div>
-                    ))}
-                    <div className="flex flex-wrap items-center gap-2 text-xs">
-                      <button
-                        type="button"
-                        onClick={() =>
-                          updateProviderConfig(providerId, (current) => ({
-                            ...current,
-                            paths: [...current.paths, ""],
-                          }))
-                        }
-                        className="h-8 rounded-md border border-ide-border bg-ide-bg px-3 text-ide-text transition-colors hover:bg-ide-panel"
-                      >
-                        {t("plugin.aiSessionManager.addPath")}
-                      </button>
-                      <span className="text-ide-mute">{t("plugin.aiSessionManager.currentResolvedPath")}</span>
-                      <span className="min-w-0 flex-1 truncate text-ide-text">{status?.paths?.[0] || "-"}</span>
-                    </div>
-                  </div>
+
+                      <div className="space-y-2 border-t border-ide-border px-4 py-3">
+                        {(providerConfig.paths.length > 0 ? providerConfig.paths : [""]).map((path, index) => (
+                          <div key={`${providerId}-${index}`} className="flex gap-2">
+                            <input
+                              value={path}
+                              onChange={(event) =>
+                                updateProviderConfig(providerId, (current) => ({
+                                  ...current,
+                                  paths:
+                                    current.paths.length === 0
+                                      ? [event.target.value]
+                                      : current.paths.map((item, itemIndex) =>
+                                          itemIndex === index ? event.target.value : item
+                                        ),
+                                }))
+                              }
+                              placeholder={status?.paths?.[0] || t("plugin.aiSessionManager.pathPlaceholder")}
+                              className="h-9 min-w-0 flex-1 rounded-md border border-ide-border bg-ide-bg px-3 text-sm text-ide-text placeholder:text-ide-mute outline-none transition-colors focus:border-ide-accent"
+                            />
+                            {providerConfig.paths.length > 0 ? (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  updateProviderConfig(providerId, (current) => ({
+                                    ...current,
+                                    paths: current.paths.filter((_, itemIndex) => itemIndex !== index),
+                                  }))
+                                }
+                                className="h-9 shrink-0 rounded-md border border-red-500/30 bg-red-500/10 px-3 text-xs text-red-400"
+                              >
+                                {t("common.delete")}
+                              </button>
+                            ) : null}
+                          </div>
+                        ))}
+                        <button
+                          type="button"
+                          onClick={() =>
+                            updateProviderConfig(providerId, (current) => ({
+                              ...current,
+                              paths: [...current.paths, ""],
+                            }))
+                          }
+                          className="h-8 rounded-md border border-ide-border bg-ide-bg px-3 text-xs text-ide-text transition-colors hover:bg-ide-panel"
+                        >
+                          {t("plugin.aiSessionManager.addPath")}
+                        </button>
+                        <div className="mt-1 flex items-center gap-2 rounded-md border border-ide-border bg-ide-bg px-3 py-2 text-xs">
+                          <FolderSearch size={14} className="shrink-0 text-ide-accent" />
+                          <span className="text-ide-mute">{t("plugin.aiSessionManager.currentResolvedPath")}</span>
+                          <span className="min-w-0 flex-1 truncate font-mono text-ide-text">{status?.paths?.[0] || "-"}</span>
+                        </div>
+                      </div>
+                    </>
+                  ) : null}
                 </div>
               );
             })}
@@ -817,7 +915,7 @@ const AISessionManagerPage: React.FC = () => {
         </div>
       </div>
 
-      <div className="border-t border-ide-border bg-ide-bg/95 px-4 py-3 backdrop-blur">
+      <div className="border-t border-ide-border bg-ide-bg/95 px-4 py-3 shadow-[0_-4px_12px_rgba(0,0,0,0.08)] backdrop-blur">
         <div className="mx-auto flex max-w-3xl items-center justify-end gap-2">
           <button
             type="button"

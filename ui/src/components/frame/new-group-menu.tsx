@@ -2,6 +2,7 @@ import { Box, FolderOpen, X } from "lucide-react";
 import React from "react";
 import { type Locale, useTranslation } from "@/lib/i18n";
 import { useFrameStore } from "@/stores/frame-store";
+import { useSessionStore } from "@/stores/session-store";
 
 interface NewGroupMenuProps {
   isOpen: boolean;
@@ -24,6 +25,7 @@ const NewGroupMenu: React.FC<NewGroupMenuProps> = ({
   const groups = useFrameStore((s) => s.groups);
   const activeGroupId = useFrameStore((s) => s.activeGroupId);
   const removeGroup = useFrameStore((s) => s.removeGroup);
+  const closeFolderGroup = useSessionStore((s) => s.closeFolderGroup);
   const activeGroup = groups.find((group) => group.id === activeGroupId);
   if (!isOpen) return null;
 
@@ -55,7 +57,13 @@ const NewGroupMenu: React.FC<NewGroupMenuProps> = ({
           </button>
           <button
             onClick={() => {
-              if (activeGroupId) removeGroup(activeGroupId);
+              if (activeGroupId) {
+                if (activeGroup?.type === "group") {
+                  void closeFolderGroup(activeGroupId);
+                } else {
+                  removeGroup(activeGroupId);
+                }
+              }
               onClose();
             }}
             className={`w-full px-4 py-3 flex items-center gap-4 rounded-lg transition-colors ${

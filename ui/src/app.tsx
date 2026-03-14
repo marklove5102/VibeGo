@@ -8,11 +8,10 @@ import { useSettingsStore } from "@/lib/settings";
 import { pageRegistry } from "@/pages/registry";
 import { initTerminalCleanup } from "@/services/terminal-cleanup-service";
 import {
-  fileManagerStore,
+  getOrCreateFileManagerStore,
   type Locale,
   type Theme,
   useAppStore,
-  useFileManagerStore,
   useFrameStore,
   usePreviewStore,
   useSessionStore,
@@ -26,7 +25,6 @@ const App: React.FC = () => {
   const t = useTranslation(locale);
 
   const resetPreview = usePreviewStore((s) => s.reset);
-  const currentPath = useFileManagerStore((s) => s.currentPath);
   const initSettings = useSettingsStore((s) => s.init);
   const themeSetting = useSettingsStore((s) => s.settings.theme);
   const localeSetting = useSettingsStore((s) => s.settings.locale);
@@ -38,10 +36,12 @@ const App: React.FC = () => {
   const tabs = useFrameStore((s) => s.getCurrentTabs());
   const addCurrentTab = useFrameStore((s) => s.addCurrentTab);
   const addToolGroup = useFrameStore((s) => s.addToolGroup);
+  const addTerminalGroup = useFrameStore((s) => s.addTerminalGroup);
   const addSettingsGroup = useFrameStore((s) => s.addSettingsGroup);
   const initDefaultGroups = useFrameStore((s) => s.initDefaultGroups);
   const showHomePage = useFrameStore((s) => s.showHomePage);
 
+  const openFolder = useSessionStore((s) => s.openFolder);
   const saveCurrentSession = useSessionStore((s) => s.saveCurrentSession);
 
   const [isNewGroupMenuOpen, setNewGroupMenuOpen] = useState(false);
@@ -120,8 +120,9 @@ const App: React.FC = () => {
       switch (pageType) {
         case "files":
           if (activeTabId === null) {
-            fileManagerStore.getState().setLoading(true);
-            const path = fileManagerStore.getState().currentPath;
+            const storeApi = getOrCreateFileManagerStore(activeGroup.id);
+            storeApi.getState().setLoading(true);
+            const path = storeApi.getState().currentPath;
             try {
               const res = await fileApi.list(path);
               const files = res.files.map((f) => ({
@@ -136,11 +137,13 @@ const App: React.FC = () => {
                 modTime: f.modTime,
                 extension: f.extension,
               }));
-              fileManagerStore.getState().setFiles(files);
+              storeApi.getState().setFiles(files);
             } finally {
-              fileManagerStore.getState().setLoading(false);
+              storeApi.getState().setLoading(false);
             }
           } else {
+            const storeApi = getOrCreateFileManagerStore(activeGroup.id);
+            const currentPath = storeApi.getState().currentPath;
             const newPath = await dialog.prompt(t("dialog.newFileName"), { placeholder: t("dialog.enterFileName") });
             if (newPath) {
               await fileApi.create({
@@ -164,20 +167,18 @@ const App: React.FC = () => {
         data: { type: "page", pageId: activeGroup.pageId },
       });
     }
-  }, [activeGroup, currentPage, currentPath, addCurrentTab, tabs.length, activeTabId, dialog, t]);
+  }, [activeGroup, currentPage, addCurrentTab, tabs.length, activeTabId, dialog, t]);
 
   const handleOpenDirectory = useCallback(() => {
     setDirectoryPickerOpen(true);
   }, []);
 
-  const createSessionFromFolder = useSessionStore((s) => s.createSessionFromFolder);
-
   const handleDirectorySelect = useCallback(
     async (path: string) => {
-      await createSessionFromFolder(path);
+      await openFolder(path);
       setDirectoryPickerOpen(false);
     },
-    [createSessionFromFolder]
+    [openFolder]
   );
 
   const handleNewTool = useCallback(
@@ -254,6 +255,7 @@ const App: React.FC = () => {
         isOpen={isMenuOpen}
         onClose={() => setMenuOpen(false)}
         locale={locale}
+        onOpenDirectory={handleOpenDirectory}
         onOpenSettings={addSettingsGroup}
         onShowHomePage={showHomePage}
         onNewPage={() => setNewPageMenuOpen(true)}
@@ -263,6 +265,7 @@ const App: React.FC = () => {
         onClose={() => setNewPageMenuOpen(false)}
         locale={locale}
         onOpenDirectory={handleOpenDirectory}
+        onNewTerminal={addTerminalGroup}
         onNewTool={handleNewTool}
       />
       <NewGroupMenu

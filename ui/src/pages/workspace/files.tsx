@@ -47,7 +47,7 @@ const FilesView: React.FC<PageViewProps> = ({ context }) => {
     );
   }
 
-  return <FileManager initialPath={pagePath} onFileOpen={handleFileOpen} />;
+  return <FileManager groupId={context.groupId} initialPath={pagePath} onFileOpen={handleFileOpen} />;
 };
 
 registerPage({

@@ -18,7 +18,7 @@ export type SortField = "name" | "size" | "modTime" | "type";
 export type SortOrder = "asc" | "desc";
 export type ViewMode = "list" | "grid";
 
-interface FileManagerState {
+export interface FileManagerState {
   currentPath: string;
   rootPath: string;
   initialized: boolean;
@@ -262,6 +262,26 @@ export type FileManagerStoreApi = ReturnType<typeof createFileManagerStore>;
 
 export const fileManagerStore = createFileManagerStore();
 
-export function useFileManagerStore<T>(selector: (state: FileManagerState) => T) {
-  return useStore(fileManagerStore, selector);
+const fileManagerStoreRegistry = new Map<string, FileManagerStoreApi>();
+
+export function getOrCreateFileManagerStore(groupId: string): FileManagerStoreApi {
+  const existing = fileManagerStoreRegistry.get(groupId);
+  if (existing) {
+    return existing;
+  }
+  const store = createFileManagerStore();
+  fileManagerStoreRegistry.set(groupId, store);
+  return store;
+}
+
+export function removeFileManagerStore(groupId: string): void {
+  fileManagerStoreRegistry.delete(groupId);
+}
+
+export function resetFileManagerStores(): void {
+  fileManagerStoreRegistry.clear();
+}
+
+export function useFileManagerStore<T>(selector: (state: FileManagerState) => T, groupId?: string) {
+  return useStore(groupId ? getOrCreateFileManagerStore(groupId) : fileManagerStore, selector);
 }

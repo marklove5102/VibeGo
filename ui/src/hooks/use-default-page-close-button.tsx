@@ -10,8 +10,7 @@ export function useDefaultPageCloseButton(): TopBarButton | null {
   const groups = useFrameStore((s) => s.groups);
   const activeGroup = useFrameStore((s) => s.getActiveGroup());
   const removeGroup = useFrameStore((s) => s.removeGroup);
-  const currentSessionId = useSessionStore((s) => s.currentSessionId);
-  const deleteSession = useSessionStore((s) => s.deleteSession);
+  const closeFolderGroup = useSessionStore((s) => s.closeFolderGroup);
 
   return useMemo(() => {
     if (!activeGroup) {
@@ -21,16 +20,19 @@ export function useDefaultPageCloseButton(): TopBarButton | null {
       return null;
     }
 
+    const isFolderGroup =
+      activeGroup.type === "group" && activeGroup.pages.some((p) => p.path);
+
     return {
       icon: <X size={18} />,
-      title: activeGroup.type === "group" ? t("common.closeFolder") : t("common.closePage"),
+      title: isFolderGroup ? t("common.closeFolder") : t("common.closePage"),
       onClick: async () => {
-        if (activeGroup.type === "group" && currentSessionId) {
-          await deleteSession(currentSessionId);
+        if (isFolderGroup) {
+          await closeFolderGroup(activeGroup.id);
           return;
         }
         removeGroup(activeGroup.id);
       },
     };
-  }, [activeGroup, currentSessionId, deleteSession, groups.length, removeGroup, t]);
+  }, [activeGroup, closeFolderGroup, groups.length, removeGroup, t]);
 }

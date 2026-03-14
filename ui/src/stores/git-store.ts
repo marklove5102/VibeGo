@@ -1,4 +1,5 @@
-import { create } from "zustand";
+import { useStore } from "zustand";
+import { createStore, type StateCreator } from "zustand/vanilla";
 import {
   type BranchStatusInfo,
   type CommitFileInfo,
@@ -21,7 +22,7 @@ export interface GitPartialSelection {
   selectedRowIds: string[];
 }
 
-interface GitState {
+export interface GitState {
   currentPath: string | null;
   allFiles: GitFileNode[];
   checkedFiles: Set<string>;
@@ -87,6 +88,10 @@ interface GitState {
   applyStatusUpdate: (files: GitFileStatus[]) => void;
   applyBranchStatus: (bs: BranchStatusInfo) => void;
 }
+
+type GitSelector<T> = (state: GitState) => T;
+
+const DEFAULT_GIT_STORE_ID = "__default__";
 
 const mapStatus = (status: string): GitFileNode["status"] => {
   switch (status) {
@@ -177,33 +182,40 @@ const buildPartialPatches = async (
   return patches;
 };
 
-export const useGitStore = create<GitState>((set, get) => ({
-  currentPath: null,
-  allFiles: [],
+const createInitialGitSnapshot = () => ({
+  currentPath: null as string | null,
+  allFiles: [] as GitFileNode[],
   checkedFiles: new Set<string>(),
-  partialSelections: {},
-  workingDiffs: {},
+  partialSelections: {} as Record<string, GitPartialSelection>,
+  workingDiffs: {} as Record<string, GitDiff>,
   summary: getDefaultCommitSummary(),
   description: "",
   isAmend: false,
   currentBranch: "main",
-  branches: [],
-  remoteBranches: [],
+  branches: [] as string[],
+  remoteBranches: [] as string[],
   aheadCount: 0,
   behindCount: 0,
-  upstreamBranch: null,
+  upstreamBranch: null as string | null,
   hasRemote: false,
-  commits: [],
-  selectedCommit: null,
-  selectedCommitFiles: [],
-  activeTab: "changes",
-  stashes: [],
-  conflicts: [],
+  commits: [] as GitCommit[],
+  selectedCommit: null as GitCommit | null,
+  selectedCommitFiles: [] as CommitFileInfo[],
+  activeTab: "changes" as const,
+  stashes: [] as StashEntry[],
+  conflicts: [] as string[],
   isLoading: false,
-  error: null,
+  error: null as string | null,
+});
+
+const createGitState: StateCreator<GitState> = (set, get) => ({
+  ...createInitialGitSnapshot(),
 
   setCurrentPath: (path) =>
-    set((state) => ({ currentPath: path, summary: state.summary || getDefaultCommitSummary() })),
+    set((state) => ({
+      currentPath: path,
+      summary: state.summary || getDefaultCommitSummary(),
+    })),
   setSummary: (summary) => set({ summary }),
   setDescription: (description) => set({ description }),
   setIsAmend: (isAmend) => set({ isAmend }),
@@ -263,27 +275,7 @@ export const useGitStore = create<GitState>((set, get) => ({
     set({ checkedFiles: nextCheckedFiles, partialSelections: nextPartialSelections });
   },
 
-  reset: () =>
-    set({
-      allFiles: [],
-      checkedFiles: new Set<string>(),
-      partialSelections: {},
-      workingDiffs: {},
-      summary: getDefaultCommitSummary(),
-      description: "",
-      isAmend: false,
-      commits: [],
-      selectedCommit: null,
-      selectedCommitFiles: [],
-      isLoading: false,
-      error: null,
-      aheadCount: 0,
-      behindCount: 0,
-      upstreamBranch: null,
-      hasRemote: false,
-      stashes: [],
-      conflicts: [],
-    }),
+  reset: () => set(createInitialGitSnapshot()),
 
   applyStatusUpdate: (files) => {
     const nodes = statusFilesToNodes(files);
@@ -975,4 +967,45 @@ export const useGitStore = create<GitState>((set, get) => ({
       set({ isLoading: false });
     }
   },
-}));
+});
+
+export const createGitStore = () => createStore<GitState>(createGitState);
+
+export type GitStoreApi = ReturnType<typeof createGitStore>;
+
+const gitStores = new Map<string, GitStoreApi>();
+
+const normalizeGitStoreId = (groupId?: string) => groupId || DEFAULT_GIT_STORE_ID;
+
+export function getOrCreateGitStore(groupId: string): GitStoreApi {
+  const storeId = normalizeGitStoreId(groupId);
+  const existing = gitStores.get(storeId);
+  if (existing) {
+    return existing;
+  }
+  const store = createGitStore();
+  gitStores.set(storeId, store);
+  return store;
+}
+
+export function removeGitStore(groupId: string): void {
+  gitStores.delete(normalizeGitStoreId(groupId));
+}
+
+export function resetGitStores(): void {
+  gitStores.clear();
+}
+
+export function useGitStore(): GitState;
+export function useGitStore<T>(selector: GitSelector<T>): T;
+export function useGitStore(groupId: string): GitState;
+export function useGitStore<T>(groupId: string, selector: GitSelector<T>): T;
+export function useGitStore<T>(
+  groupIdOrSelector?: string | GitSelector<T>,
+  maybeSelector?: GitSelector<T>
+): T | GitState {
+  const storeId = typeof groupIdOrSelector === "string" ? groupIdOrSelector : DEFAULT_GIT_STORE_ID;
+  const selector =
+    typeof groupIdOrSelector === "function" ? groupIdOrSelector : (maybeSelector ?? ((state: GitState) => state as T));
+  return useStore(getOrCreateGitStore(storeId), selector);
+}

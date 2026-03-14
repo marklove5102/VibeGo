@@ -21,6 +21,7 @@ interface GitDiffRequest {
 }
 
 interface GitViewProps {
+  groupId: string;
   path: string;
   locale: Locale;
   onFileDiff: (payload: GitDiffRequest) => void;
@@ -28,11 +29,10 @@ interface GitViewProps {
   isActive?: boolean;
 }
 
-const GitView: React.FC<GitViewProps> = ({ path, locale, onFileDiff, onConflict, isActive = true }) => {
+const GitView: React.FC<GitViewProps> = ({ groupId, path, locale, onFileDiff, onConflict, isActive = true }) => {
   const t = (key: string) => getTranslation(locale, key);
   const dialog = useDialog();
   const [showBranchSelector, setShowBranchSelector] = useState(false);
-
   const {
     currentPath: currentRepoPath,
     allFiles,
@@ -51,6 +51,7 @@ const GitView: React.FC<GitViewProps> = ({ path, locale, onFileDiff, onConflict,
     behindCount,
     stashes,
     conflicts,
+    error,
     setCurrentPath,
     setActiveTab,
     reset,
@@ -80,7 +81,7 @@ const GitView: React.FC<GitViewProps> = ({ path, locale, onFileDiff, onConflict,
     undoLastCommit,
     applyStatusUpdate,
     applyBranchStatus,
-  } = useGitStore();
+  } = useGitStore(groupId);
 
   const initializedRef = useRef(false);
   const wsCleanupRef = useRef<(() => void) | null>(null);
@@ -260,13 +261,13 @@ const GitView: React.FC<GitViewProps> = ({ path, locale, onFileDiff, onConflict,
 
       const ok = await undoLastCommit();
       if (!ok) {
-        await dialog.alert(t("git.undoCommitFailed"), useGitStore.getState().error || undefined);
+        await dialog.alert(t("git.undoCommitFailed"), error || undefined);
         return;
       }
 
       setActiveTab("changes");
     },
-    [allFiles.length, commits, conflicts.length, dialog, isLoading, setActiveTab, t, undoLastCommit]
+    [allFiles.length, commits, conflicts.length, dialog, error, isLoading, setActiveTab, t, undoLastCommit]
   );
 
   const handleConflictClick = useCallback(
@@ -320,6 +321,7 @@ const GitView: React.FC<GitViewProps> = ({ path, locale, onFileDiff, onConflict,
         <div className="flex-1 overflow-hidden">
           {activeTab === "changes" ? (
             <GitChangesView
+              groupId={groupId}
               allFiles={allFiles}
               checkedFiles={checkedFiles}
               partialSelections={partialSelections}

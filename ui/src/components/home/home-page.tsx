@@ -2,36 +2,32 @@ import { FolderOpen, Terminal } from "lucide-react";
 import React, { useCallback, useState } from "react";
 import DirectoryPicker from "@/components/common/directory-picker";
 import { type Locale, useTranslation } from "@/lib/i18n";
-import { useSessionStore } from "@/stores/session-store";
-import AiSessionEntry from "./ai-session-entry";
 import RecentSessionList from "./recent-session-list";
 
 interface HomePageProps {
   onOpenFolder: (path: string) => void;
-  onOpenAISessions: () => void;
   locale: Locale;
 }
 
-const HomePage: React.FC<HomePageProps> = ({ locale, onOpenAISessions }) => {
+const HomePage: React.FC<HomePageProps> = ({ onOpenFolder, locale }) => {
   const t = useTranslation(locale);
   const [isPickerOpen, setPickerOpen] = useState(false);
   const [pathInput, setPathInput] = useState("");
-  const createSessionFromFolder = useSessionStore((s) => s.createSessionFromFolder);
 
   const handleSwitchSession = useCallback(() => {}, []);
 
   const handlePickerSelect = useCallback(
     async (path: string) => {
-      await createSessionFromFolder(path);
+      await onOpenFolder(path);
       setPickerOpen(false);
     },
-    [createSessionFromFolder]
+    [onOpenFolder]
   );
 
   const handlePathSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (pathInput.trim()) {
-      await createSessionFromFolder(pathInput.trim());
+      await onOpenFolder(pathInput.trim());
       setPathInput("");
     }
   };
@@ -76,10 +72,6 @@ const HomePage: React.FC<HomePageProps> = ({ locale, onOpenAISessions }) => {
                 </button>
               </form>
             </div>
-          </div>
-
-          <div className="space-y-3">
-            <AiSessionEntry locale={locale} onOpen={onOpenAISessions} />
           </div>
 
           <div className="space-y-3">

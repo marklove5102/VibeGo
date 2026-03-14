@@ -33,9 +33,9 @@ export function useGitDiff(path: string | null, filePath: string) {
   });
 }
 
-export function useGitAdd() {
+export function useGitAdd(groupId: string) {
   const queryClient = useQueryClient();
-  const currentPath = useGitStore((s) => s.currentPath);
+  const currentPath = useGitStore(groupId, (s) => s.currentPath);
   return useMutation({
     mutationFn: (files: string[]) => gitApi.add(currentPath!, files),
     onSuccess: () => {
@@ -44,9 +44,9 @@ export function useGitAdd() {
   });
 }
 
-export function useGitReset() {
+export function useGitReset(groupId: string) {
   const queryClient = useQueryClient();
-  const currentPath = useGitStore((s) => s.currentPath);
+  const currentPath = useGitStore(groupId, (s) => s.currentPath);
   return useMutation({
     mutationFn: (files?: string[]) => gitApi.reset(currentPath!, files),
     onSuccess: () => {
@@ -55,9 +55,9 @@ export function useGitReset() {
   });
 }
 
-export function useGitCommit() {
+export function useGitCommit(groupId: string) {
   const queryClient = useQueryClient();
-  const currentPath = useGitStore((s) => s.currentPath);
+  const currentPath = useGitStore(groupId, (s) => s.currentPath);
   return useMutation({
     mutationFn: ({ message, author, email }: { message: string; author?: string; email?: string }) =>
       gitApi.commit(currentPath!, message, author, email),
@@ -68,9 +68,9 @@ export function useGitCommit() {
   });
 }
 
-export function useGitCheckout() {
+export function useGitCheckout(groupId: string) {
   const queryClient = useQueryClient();
-  const currentPath = useGitStore((s) => s.currentPath);
+  const currentPath = useGitStore(groupId, (s) => s.currentPath);
   return useMutation({
     mutationFn: (files: string[]) => gitApi.checkout(currentPath!, files),
     onSuccess: () => {
@@ -79,9 +79,9 @@ export function useGitCheckout() {
   });
 }
 
-export function useGitUndo() {
+export function useGitUndo(groupId: string) {
   const queryClient = useQueryClient();
-  const currentPath = useGitStore((s) => s.currentPath);
+  const currentPath = useGitStore(groupId, (s) => s.currentPath);
   return useMutation({
     mutationFn: () => gitApi.undo(currentPath!),
     onSuccess: () => {

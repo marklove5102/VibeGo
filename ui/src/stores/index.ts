@@ -3,8 +3,12 @@ export { type EditorTab, useEditorStore } from "./editor-store";
 export {
   createFileManagerStore,
   type FileItem,
+  type FileManagerState,
   type FileManagerStoreApi,
   fileManagerStore,
+  getOrCreateFileManagerStore,
+  removeFileManagerStore,
+  resetFileManagerStores,
   type SortField,
   type SortOrder,
   useFileManagerStore,
@@ -25,7 +29,17 @@ export {
   useFrameStore,
   type ViewType,
 } from "./frame-store";
-export { type GitFileNode, type GitPartialSelection, useGitStore } from "./git-store";
+export {
+  createGitStore,
+  type GitFileNode,
+  type GitPartialSelection,
+  type GitState,
+  type GitStoreApi,
+  getOrCreateGitStore,
+  removeGitStore,
+  resetGitStores,
+  useGitStore,
+} from "./git-store";
 export {
   getLanguageFromExtension,
   getPreviewType,

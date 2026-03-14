@@ -1,9 +1,16 @@
 import { create } from "zustand";
+import { fileApi } from "../api/file";
 import { type SessionInfo, sessionApi } from "../api/session";
 import { terminalApi } from "../api/terminal";
 import { cleanupAllTerminals } from "../services/terminal-cleanup-service";
-import { fileManagerStore } from "./file-manager-store";
+import {
+  type FileManagerState,
+  getOrCreateFileManagerStore,
+  removeFileManagerStore,
+  resetFileManagerStores,
+} from "./file-manager-store";
 import { type GenericGroup, type GroupPage, type ToolGroup, useFrameStore } from "./frame-store";
+import * as gitStoreModule from "./git-store";
 import { type TerminalSession, useTerminalStore } from "./terminal-store";
 
 const CURRENT_SESSION_KEY = "current_session_id";
@@ -49,7 +56,9 @@ interface SessionStoreState {
   loadSessions: () => Promise<void>;
   initSession: () => Promise<boolean>;
   createSession: (name: string) => Promise<string>;
+  openFolder: (folderPath: string) => Promise<string>;
   createSessionFromFolder: (folderPath: string) => Promise<string>;
+  closeFolderGroup: (groupId: string) => Promise<void>;
   switchSession: (id: string) => Promise<void>;
   saveCurrentSession: () => Promise<void>;
   deleteSession: (id: string) => Promise<void>;
@@ -120,6 +129,29 @@ function removeStoredSessionStateBackup(id: string): void {
   localStorage.removeItem(getSessionStateBackupKey(id));
 }
 
+function getFilesPagePath(group: { pages: GroupPage[] }): string {
+  return group.pages.find((page) => page.type === "files")?.path || ".";
+}
+
+function getFolderName(path: string): string {
+  const normalized = path.replace(/\/+$/, "");
+  if (!normalized) {
+    return path || "/";
+  }
+  return normalized.split("/").pop() || normalized;
+}
+
+function getAutoSessionName(groups: Array<{ name: string }>): string {
+  if (groups.length === 0) {
+    return "Untitled Session";
+  }
+  const firstName = groups[0]?.name || "Untitled Session";
+  if (groups.length === 1) {
+    return firstName;
+  }
+  return `${firstName} +${groups.length - 1}`;
+}
+
 function normalizeFileManagerSnapshot(
   snapshot: Partial<SessionState["fileManagerByGroup"][string]> | undefined,
   fallbackPath: string
@@ -147,55 +179,107 @@ function normalizeFileManagerSnapshot(
   };
 }
 
+function isDefaultFileManagerState(state: FileManagerState): boolean {
+  return (
+    !state.initialized &&
+    state.currentPath === "." &&
+    state.rootPath === "." &&
+    state.pathHistory.length === 1 &&
+    state.pathHistory[0] === "." &&
+    state.historyIndex === 0
+  );
+}
+
+function readFileManagerSnapshot(groupId: string, fallbackPath: string) {
+  const store = getOrCreateFileManagerStore(groupId);
+  const state = store.getState();
+  if (isDefaultFileManagerState(state)) {
+    return normalizeFileManagerSnapshot(undefined, fallbackPath);
+  }
+  return normalizeFileManagerSnapshot(
+    {
+      currentPath: state.currentPath,
+      rootPath: state.rootPath,
+      pathHistory: state.pathHistory,
+      historyIndex: state.historyIndex,
+    },
+    fallbackPath
+  );
+}
+
+function applyFileManagerSnapshot(
+  groupId: string,
+  snapshot: Partial<SessionState["fileManagerByGroup"][string]> | undefined,
+  fallbackPath: string
+): void {
+  const store = getOrCreateFileManagerStore(groupId);
+  const restored = normalizeFileManagerSnapshot(snapshot, fallbackPath);
+  store.getState().reset();
+  store.setState({
+    currentPath: restored.currentPath,
+    rootPath: restored.rootPath,
+    pathHistory: restored.pathHistory,
+    historyIndex: restored.historyIndex,
+    initialized: false,
+    files: [],
+    selectedFiles: new Set(),
+    focusIndex: 0,
+    searchQuery: "",
+    searchActive: false,
+    loading: false,
+    error: null,
+    detailFile: null,
+  });
+}
+
+function removeGitStore(groupId: string): void {
+  const fn = (gitStoreModule as Record<string, unknown>).removeGitStore;
+  if (typeof fn === "function") {
+    (fn as (value: string) => void)(groupId);
+  }
+}
+
+function resetGitStores(): void {
+  const fn = (gitStoreModule as Record<string, unknown>).resetGitStores;
+  if (typeof fn === "function") {
+    (fn as () => void)();
+  }
+}
+
+function clearGroupRuntimeState(groupId: string): void {
+  removeFileManagerStore(groupId);
+  removeGitStore(groupId);
+}
+
+function resetWorkspaceRuntimeState(): void {
+  resetFileManagerStores();
+  resetGitStores();
+}
+
 function buildSessionState(): SessionState {
   const frameState = useFrameStore.getState();
-  const fileManagerState = fileManagerStore.getState();
   const terminalState = useTerminalStore.getState();
-  const genericGroups = frameState.groups.filter((g): g is GenericGroup => g.type === "group");
-  const toolGroups = frameState.groups.filter((g): g is ToolGroup => g.type === "tool");
-  const settingsGroup = frameState.groups.find((g) => g.type === "settings");
+  const genericGroups = frameState.groups.filter((group): group is GenericGroup => group.type === "group");
+  const toolGroups = frameState.groups.filter((group): group is ToolGroup => group.type === "tool");
+  const settingsGroup = frameState.groups.find((group) => group.type === "settings");
   const fileManagerByGroup: SessionState["fileManagerByGroup"] = {};
 
   genericGroups.forEach((group) => {
-    const filesPagePath = group.pages.find((page) => page.type === "files")?.path || ".";
-    fileManagerByGroup[group.id] = normalizeFileManagerSnapshot(
-      {
-        currentPath: filesPagePath,
-        rootPath: filesPagePath,
-        pathHistory: [filesPagePath],
-        historyIndex: 0,
-      },
-      filesPagePath
-    );
+    const filesPagePath = getFilesPagePath(group);
+    fileManagerByGroup[group.id] = readFileManagerSnapshot(group.id, filesPagePath);
   });
 
-  const activeGroup = frameState.groups.find(
-    (group): group is GenericGroup => group.type === "group" && group.id === frameState.activeGroupId
-  );
-  if (activeGroup) {
-    const activeFilesPagePath = activeGroup.pages.find((page) => page.type === "files")?.path || ".";
-    fileManagerByGroup[activeGroup.id] = normalizeFileManagerSnapshot(
-      {
-        currentPath: fileManagerState.currentPath,
-        rootPath: fileManagerState.rootPath,
-        pathHistory: fileManagerState.pathHistory,
-        historyIndex: fileManagerState.historyIndex,
-      },
-      activeFilesPagePath
-    );
-  }
-
   return {
-    openGroups: genericGroups.map((g) => ({
-      id: g.id,
-      name: g.name,
-      pages: g.pages,
-      activePageId: g.activePageId,
+    openGroups: genericGroups.map((group) => ({
+      id: group.id,
+      name: group.name,
+      pages: group.pages,
+      activePageId: group.activePageId,
     })),
-    openTools: toolGroups.map((g) => ({
-      id: g.id,
-      pageId: g.pageId,
-      name: g.name,
+    openTools: toolGroups.map((group) => ({
+      id: group.id,
+      pageId: group.pageId,
+      name: group.name,
     })),
     terminalsByGroup: terminalState.terminalsByGroup,
     activeTerminalByGroup: terminalState.activeIdByGroup,
@@ -210,6 +294,7 @@ function parseSessionState(rawState: string): SessionState {
   if (!rawState || rawState === "{}") {
     return createEmptySessionState();
   }
+
   const parsed = JSON.parse(rawState) as Partial<SessionState>;
   return {
     openGroups: Array.isArray(parsed.openGroups) ? parsed.openGroups : [],
@@ -234,13 +319,11 @@ function parseSessionState(rawState: string): SessionState {
 function restoreSessionState(state: SessionState): void {
   const frameStore = useFrameStore.getState();
   frameStore.initDefaultGroups();
-  fileManagerStore.getState().reset();
+  resetWorkspaceRuntimeState();
   useTerminalStore.getState().reset();
 
   state.openGroups.forEach((group) => {
-    const firstFilesPage = group.pages.find((p) => p.type === "files");
-    const path = firstFilesPage?.path || ".";
-    frameStore.addFolderGroup(path, group.name, group.id);
+    frameStore.addFolderGroup(getFilesPagePath(group), group.name, group.id);
   });
 
   state.openGroups.forEach((group) => {
@@ -249,6 +332,7 @@ function restoreSessionState(state: SessionState): void {
       pages: group.pages,
       activePageId: group.activePageId,
     });
+    applyFileManagerSnapshot(group.id, state.fileManagerByGroup?.[group.id], getFilesPagePath(group));
   });
 
   state.openTools.forEach((tool) => {
@@ -280,30 +364,10 @@ function restoreSessionState(state: SessionState): void {
   if (activeGroupId) {
     frameStore.setActiveGroup(activeGroupId);
   }
+}
 
-  const activeGroup = useFrameStore.getState().groups.find((group) => group.id === activeGroupId);
-  if (activeGroup?.type === "group") {
-    const filesPagePath = activeGroup.pages.find((page) => page.type === "files")?.path || ".";
-    const restoredFileManagerState = normalizeFileManagerSnapshot(
-      state.fileManagerByGroup?.[activeGroup.id],
-      filesPagePath
-    );
-    fileManagerStore.setState({
-      currentPath: restoredFileManagerState.currentPath,
-      rootPath: restoredFileManagerState.rootPath,
-      pathHistory: restoredFileManagerState.pathHistory,
-      historyIndex: restoredFileManagerState.historyIndex,
-      initialized: false,
-      files: [],
-      selectedFiles: new Set(),
-      focusIndex: 0,
-      searchQuery: "",
-      searchActive: false,
-      loading: false,
-      error: null,
-      detailFile: null,
-    });
-  }
+function updateSessionNameInList(sessions: SessionInfo[], sessionId: string, name: string): SessionInfo[] {
+  return sessions.map((session) => (session.id === sessionId ? { ...session, name } : session));
 }
 
 export const useSessionStore = create<SessionStoreState>((set, get) => ({
@@ -345,7 +409,7 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
     get().initAutoSave();
     await get().loadSessions();
     const { currentSessionId, sessions, switchSession } = get();
-    if (currentSessionId && sessions.some((s) => s.id === currentSessionId)) {
+    if (currentSessionId && sessions.some((session) => session.id === currentSessionId)) {
       await switchSession(currentSessionId);
       return true;
     }
@@ -365,70 +429,123 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
     }
   },
 
-  createSessionFromFolder: async (folderPath: string) => {
-    const folderName = folderPath.split("/").pop() || folderPath;
-    const frameStore = useFrameStore.getState();
-    const fileManagerState = fileManagerStore.getState();
-
+  openFolder: async (folderPath: string) => {
     try {
-      const res = await sessionApi.create(folderName);
+      const folder = await fileApi.list(folderPath);
+      const resolvedPath = folder.path || folderPath;
+      const folderName = getFolderName(resolvedPath);
+      const frameStore = useFrameStore.getState();
+      const existingGroup = frameStore.groups.find(
+        (group): group is GenericGroup => group.type === "group" && getFilesPagePath(group) === resolvedPath
+      );
+
+      if (existingGroup) {
+        frameStore.setActiveGroup(existingGroup.id);
+        return get().currentSessionId || "";
+      }
+
+      let sessionId = get().currentSessionId;
+      if (!sessionId) {
+        const created = await sessionApi.create(folderName);
+        sessionId = created.id;
+        set({ currentSessionId: sessionId });
+        setStoredSessionId(sessionId);
+      }
+
+      const groupId = frameStore.addFolderGroup(resolvedPath, folderName);
+      applyFileManagerSnapshot(groupId, undefined, resolvedPath);
+
+      const state = buildSessionState();
+      const sessionName = getAutoSessionName(state.openGroups);
+
+      setStoredSessionStateBackup(sessionId, state);
+      await sessionApi.update(sessionId, {
+        name: sessionName,
+        state: JSON.stringify(state),
+      });
+
+      set((store) => ({
+        currentSessionId: sessionId,
+        sessions: updateSessionNameInList(store.sessions, sessionId, sessionName),
+      }));
+      setStoredSessionId(sessionId);
       await get().loadSessions();
-
-      frameStore.initDefaultGroups();
-      fileManagerState.reset();
-      const groupId = frameStore.addFolderGroup(folderPath, folderName);
-
-      const state: SessionState = {
-        openGroups: [
-          {
-            id: groupId,
-            name: folderName,
-            pages: [
-              { id: `${groupId}-files`, type: "files", label: "Files", path: folderPath, tabs: [], activeTabId: null },
-              { id: `${groupId}-git`, type: "git", label: "Git", path: folderPath, tabs: [], activeTabId: null },
-              {
-                id: `${groupId}-terminal`,
-                type: "terminal",
-                label: "Terminal",
-                path: folderPath,
-                tabs: [],
-                activeTabId: null,
-              },
-            ],
-            activePageId: `${groupId}-files`,
-          },
-        ],
-        openTools: [],
-        terminalsByGroup: {},
-        activeTerminalByGroup: {},
-        listManagerOpenByGroup: {},
-        settingsOpen: false,
-        activeGroupId: groupId,
-        fileManagerByGroup: {
-          [groupId]: {
-            currentPath: folderPath,
-            rootPath: folderPath,
-            pathHistory: [folderPath],
-            historyIndex: 0,
-          },
-        },
-      };
-
-      await sessionApi.update(res.id, { state: JSON.stringify(state) });
-      setStoredSessionStateBackup(res.id, state);
-
-      set({ currentSessionId: res.id });
-      setStoredSessionId(res.id);
-      return res.id;
+      return sessionId;
     } catch (e) {
       set({ error: (e as Error).message });
       throw e;
     }
   },
 
+  createSessionFromFolder: async (folderPath: string) => {
+    return get().openFolder(folderPath);
+  },
+
+  closeFolderGroup: async (groupId: string) => {
+    const frameStore = useFrameStore.getState();
+    const targetGroup = frameStore.groups.find(
+      (group): group is GenericGroup => group.type === "group" && group.id === groupId
+    );
+
+    if (!targetGroup) {
+      frameStore.removeGroup(groupId);
+      return;
+    }
+
+    const folderGroups = frameStore.groups.filter((group): group is GenericGroup => group.type === "group");
+    const { currentSessionId } = get();
+
+    try {
+      if (!currentSessionId || folderGroups.length <= 1) {
+        frameStore.removeGroup(groupId);
+        clearGroupRuntimeState(groupId);
+
+        if (currentSessionId) {
+          await sessionApi.delete(currentSessionId);
+          removeStoredSessionStateBackup(currentSessionId);
+        }
+
+        set((store) => ({
+          currentSessionId: null,
+          sessions: currentSessionId
+            ? store.sessions.filter((session) => session.id !== currentSessionId)
+            : store.sessions,
+        }));
+        setStoredSessionId(null);
+        resetWorkspaceRuntimeState();
+        await get().loadSessions();
+        return;
+      }
+
+      frameStore.removeGroup(groupId);
+      clearGroupRuntimeState(groupId);
+
+      const state = buildSessionState();
+      const sessionName = getAutoSessionName(state.openGroups);
+
+      setStoredSessionStateBackup(currentSessionId, state);
+      await sessionApi.update(currentSessionId, {
+        name: sessionName,
+        state: JSON.stringify(state),
+      });
+
+      set((store) => ({
+        sessions: updateSessionNameInList(store.sessions, currentSessionId, sessionName),
+      }));
+      await get().loadSessions();
+    } catch (e) {
+      set({ error: (e as Error).message });
+    }
+  },
+
   switchSession: async (id: string) => {
     set({ loading: true, error: null });
     try {
+      const previousSessionId = get().currentSessionId;
+      if (previousSessionId && previousSessionId !== id) {
+        await get().saveCurrentSession();
+      }
+
       await cleanupAllTerminals();
 
       const detail = await sessionApi.get(id);
@@ -505,6 +622,8 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
     if (!currentSessionId) return;
 
     const state = buildSessionState();
+    const sessionName = state.openGroups.length > 0 ? getAutoSessionName(state.openGroups) : undefined;
+
     try {
       if (!hasRestorableSessionContent(state)) {
         const backupState = getStoredSessionStateBackup(currentSessionId);
@@ -527,8 +646,15 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
       }
 
       await sessionApi.update(currentSessionId, {
+        name: sessionName,
         state: JSON.stringify(state),
       });
+
+      if (sessionName) {
+        set((store) => ({
+          sessions: updateSessionNameInList(store.sessions, currentSessionId, sessionName),
+        }));
+      }
     } catch (e) {
       set({ error: (e as Error).message });
     }
@@ -540,14 +666,15 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
       removeStoredSessionStateBackup(id);
       const { currentSessionId, sessions } = get();
       if (currentSessionId === id) {
-        const remaining = sessions.filter((s) => s.id !== id);
-        const newCurrentId = remaining.length > 0 ? remaining[0].id : null;
-        set({ currentSessionId: newCurrentId });
-        setStoredSessionId(newCurrentId);
-        if (newCurrentId) {
-          await get().switchSession(newCurrentId);
+        const remaining = sessions.filter((session) => session.id !== id);
+        const nextSessionId = remaining[0]?.id || null;
+        set({ currentSessionId: nextSessionId });
+        setStoredSessionId(nextSessionId);
+        if (nextSessionId) {
+          await get().switchSession(nextSessionId);
         } else {
           useFrameStore.getState().initDefaultGroups();
+          resetWorkspaceRuntimeState();
         }
       }
       await get().loadSessions();
@@ -566,6 +693,7 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
       set({ currentSessionId: null, sessions: [] });
       setStoredSessionId(null);
       useFrameStore.getState().initDefaultGroups();
+      resetWorkspaceRuntimeState();
     } catch (e) {
       set({ error: (e as Error).message });
     }
