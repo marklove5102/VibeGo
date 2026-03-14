@@ -29,7 +29,7 @@ const RemoteControlView: React.FC<PageViewProps> = () => {
   const [loading, setLoading] = useState<string | null>(null);
 
   const volumeSliderRef = useRef<HTMLInputElement>(null);
-  const pollRef = useRef<ReturnType<typeof setInterval>>();
+  const pollRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
 
   const fetchState = useCallback(async () => {
     try {
