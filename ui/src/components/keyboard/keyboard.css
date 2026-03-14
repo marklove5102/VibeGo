@@ -82,18 +82,19 @@
 }
 
 .tk-key--latched {
-  background: var(--tk-mod-latched-bg) !important;
-  color: var(--tk-mod-latched-text);
+  background: var(--tk-key-bg) !important;
+  color: var(--tk-text);
 }
 
 .tk-key--locked {
-  background: var(--tk-mod-locked-bg) !important;
-  color: var(--tk-mod-locked-text);
+  background: var(--tk-key-bg) !important;
+  color: var(--tk-text);
 }
+
 
 .tk-key--latched .tk-sub,
 .tk-key--locked .tk-sub {
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--tk-text-sub);
 }
 
 .tk-label {
@@ -210,19 +211,19 @@
   position: relative;
 }
 
-.tk-key--space::after {
-  content: '';
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  width: 36px;
-  height: 4px;
-  border-radius: 2px;
-  background: var(--tk-text-sub);
-  opacity: 0.4;
+.tk-key--space .tk-sub {
+  grid-area: 1 / 1 / -1 / -1;
+  align-self: center;
+  justify-self: center;
+  font-size: 0;
+  color: var(--tk-text-sub);
+  padding: 0;
 }
 
+.tk-key--space .tk-sub svg {
+  width: 18px;
+  height: 18px;
+}
 .tk-row--short {
   height: calc(var(--tk-row-height) * 0.85);
 }

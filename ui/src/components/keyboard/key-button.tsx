@@ -233,6 +233,8 @@ const KeyButton: React.FC<KeyButtonProps> = ({ keyDef, modState, shiftActive, on
   const swipeSubVal = swipeDir && keyDef.sub?.[swipeDir]
 
   const displayLabel = (() => {
+    if (keyDef.value === 'Shift' && modState === 'locked') return '⇪'
+    if (keyDef.value === 'Shift' && modState === 'latched') return '⬆'
     if (keyDef.type === 'char' && shiftActive && keyDef.value.length === 1 && /^[a-z]$/.test(keyDef.value)) {
       return keyDef.value.toUpperCase()
     }
