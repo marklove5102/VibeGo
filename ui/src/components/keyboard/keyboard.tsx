@@ -1,20 +1,20 @@
 import React, { useState, useCallback, useMemo } from 'react'
-import type { TerminalKeyEvent, ModifiersState, LayoutDef } from '@/components/terminal-keyboard/core/types'
-import { MODIFIER_KEYS } from '@/components/terminal-keyboard/core/types'
-import { TERMINAL_QWERTY } from '@/components/terminal-keyboard/core/layouts'
-import KeyButton from '@/components/terminal-keyboard/key-button'
-import '@/components/terminal-keyboard/terminal-keyboard.css'
+import type { KeyEvent, ModifiersState, LayoutDef } from '@/components/keyboard/core/types'
+import { MODIFIER_KEYS } from '@/components/keyboard/core/types'
+import { KEYBOARD_QWERTY } from '@/components/keyboard/core/layouts'
+import KeyButton from '@/components/keyboard/key-button'
+import '@/components/keyboard/keyboard.css'
 
-interface TerminalKeyboardProps {
-  onKeyEvent: (event: TerminalKeyEvent) => void
+interface KeyboardProps {
+  onKeyEvent: (event: KeyEvent) => void
   layout?: LayoutDef
 }
 
 const INITIAL_MOD = { active: false, locked: false }
 
-const TerminalKeyboard: React.FC<TerminalKeyboardProps> = ({
+const Keyboard: React.FC<KeyboardProps> = ({
   onKeyEvent,
-  layout = TERMINAL_QWERTY,
+  layout = KEYBOARD_QWERTY,
 }) => {
   const [modifiers, setModifiers] = useState<ModifiersState>({
     ctrl: { ...INITIAL_MOD },
@@ -63,7 +63,7 @@ const TerminalKeyboard: React.FC<TerminalKeyboardProps> = ({
       return
     }
 
-    const event: TerminalKeyEvent = {
+    const event: KeyEvent = {
       type: special ? 'key' : 'char',
       value,
       ctrl: modifiers.ctrl.active,
@@ -76,7 +76,7 @@ const TerminalKeyboard: React.FC<TerminalKeyboardProps> = ({
   }, [modifiers, onKeyEvent, clearLatched, modName])
 
   const handleSlide = useCallback((dir: 'left' | 'right') => {
-    const event: TerminalKeyEvent = {
+    const event: KeyEvent = {
       type: 'key',
       value: dir === 'left' ? 'ArrowLeft' : 'ArrowRight',
       ctrl: modifiers.ctrl.active,
@@ -134,4 +134,4 @@ const TerminalKeyboard: React.FC<TerminalKeyboardProps> = ({
   )
 }
 
-export default TerminalKeyboard
+export default Keyboard

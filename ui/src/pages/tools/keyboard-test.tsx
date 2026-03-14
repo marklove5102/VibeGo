@@ -1,17 +1,17 @@
-import { Keyboard } from "lucide-react";
+import { Keyboard as KeyboardIcon } from "lucide-react";
 import React, { useState, useRef, useCallback } from "react";
-import { TerminalKeyboard } from "@/components/terminal-keyboard";
-import type { TerminalKeyEvent } from "@/components/terminal-keyboard";
+import { Keyboard } from "@/components/keyboard";
+import type { KeyEvent } from "@/components/keyboard";
 import { registerPage } from "@/pages/registry";
 import type { PageViewProps } from "@/pages/types";
 
 interface EventLogEntry {
   id: number;
-  event: TerminalKeyEvent;
+  event: KeyEvent;
   formatted: string;
 }
 
-function formatEvent(e: TerminalKeyEvent): string {
+function formatEvent(e: KeyEvent): string {
   const mods: string[] = [];
   if (e.ctrl) mods.push("Ctrl");
   if (e.alt) mods.push("Alt");
@@ -41,7 +41,7 @@ const KeyboardTestView: React.FC<PageViewProps> = () => {
   }, []);
 
   const handleKeyEvent = useCallback(
-    (e: TerminalKeyEvent) => {
+    (e: KeyEvent) => {
       const entry: EventLogEntry = {
         id: nextId.current++,
         event: e,
@@ -103,7 +103,7 @@ const KeyboardTestView: React.FC<PageViewProps> = () => {
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-          <Keyboard size={18} style={{ color: "var(--ide-accent)" }} />
+          <KeyboardIcon size={18} style={{ color: "var(--ide-accent)" }} />
           <span
             style={{
               fontWeight: 600,
@@ -111,7 +111,7 @@ const KeyboardTestView: React.FC<PageViewProps> = () => {
               color: "var(--ide-text)",
             }}
           >
-            Terminal Keyboard Test
+            Keyboard Test
           </span>
         </div>
         <button
@@ -215,7 +215,7 @@ const KeyboardTestView: React.FC<PageViewProps> = () => {
         </div>
 
         <div style={{ flexShrink: 0 }}>
-          <TerminalKeyboard onKeyEvent={handleKeyEvent} />
+          <Keyboard onKeyEvent={handleKeyEvent} />
         </div>
       </div>
 
@@ -231,7 +231,7 @@ const KeyboardTestView: React.FC<PageViewProps> = () => {
 registerPage({
   id: "keyboard-test",
   name: "Keyboard Test",
-  icon: Keyboard,
+  icon: KeyboardIcon,
   order: 20,
   category: "tool",
   View: KeyboardTestView,

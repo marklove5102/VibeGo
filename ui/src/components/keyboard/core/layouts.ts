@@ -1,7 +1,7 @@
-import type { LayoutDef } from '@/components/terminal-keyboard/core/types'
+import type { LayoutDef } from '@/components/keyboard/core/types'
 
-export const TERMINAL_QWERTY: LayoutDef = {
-  name: 'Terminal QWERTY',
+export const KEYBOARD_QWERTY: LayoutDef = {
+  name: 'Keyboard QWERTY',
   rows: [
     {
       keys: [

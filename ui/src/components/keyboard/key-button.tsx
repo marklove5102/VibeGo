@@ -20,8 +20,8 @@ import {
   Mic,
   BoxSelect
 } from 'lucide-react'
-import type { KeyDef, SwipeDir } from '@/components/terminal-keyboard/core/types'
-import { getSwipeDirection, SWIPE_DIRS, isSpecialKey, MODIFIER_KEYS } from '@/components/terminal-keyboard/core/types'
+import type { KeyDef, SwipeDir } from '@/components/keyboard/core/types'
+import { getSwipeDirection, isSpecialKey, MODIFIER_KEYS, SWIPE_DIRS } from '@/components/keyboard/core/types'
 
 const SWIPE_THRESHOLD = 18
 const SLIDE_STEP = 18

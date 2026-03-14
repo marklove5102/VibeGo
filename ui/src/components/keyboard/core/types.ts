@@ -31,7 +31,7 @@ export interface LayoutDef {
   rows: RowDef[]
 }
 
-export interface TerminalKeyEvent {
+export interface KeyEvent {
   type: 'char' | 'key'
   value: string
   ctrl: boolean
@@ -82,7 +82,7 @@ export function getSwipeDirection(dx: number, dy: number, threshold: number, ava
     se: Math.PI / 4,
     s: Math.PI / 2,
     sw: 3 * Math.PI / 4,
-    w: Math.PI, // or -Math.PI
+    w: Math.PI,
     nw: -3 * Math.PI / 4,
     n: -Math.PI / 2,
     ne: -Math.PI / 4
