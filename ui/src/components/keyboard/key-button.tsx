@@ -72,7 +72,7 @@ interface KeyButtonProps {
   keyDef: KeyDef;
   modState?: "inactive" | "latched" | "locked";
   shiftActive?: boolean;
-  onKeyOutput: (value: string, special: boolean) => void;
+  onKeyOutput: (value: string, special: boolean, action?: "start" | "stop") => void;
   onSlide: (dir: "left" | "right") => void;
   edge?: "left" | "right";
 }
@@ -151,6 +151,9 @@ const KeyButton: React.FC<KeyButtonProps> = ({ keyDef, modState, shiftActive, on
         stateRef.current.firedByRepeat = true;
         if (REQUIRES_GESTURE.has(resolved.value)) {
           navigator.vibrate?.(50);
+          if (resolved.value === "Mic") {
+            onKeyOutput("Mic", true, "start");
+          }
           return;
         }
         onKeyOutput(resolved.value, resolved.special);
@@ -193,6 +196,9 @@ const KeyButton: React.FC<KeyButtonProps> = ({ keyDef, modState, shiftActive, on
             stateRef.current.firedByRepeat = true;
             if (REQUIRES_GESTURE.has(subVal)) {
               navigator.vibrate?.(50);
+              if (subVal === "Mic") {
+                onKeyOutput("Mic", true, "start");
+              }
               return;
             }
             onKeyOutput(subVal, isSpecialKey(subVal) || true);
@@ -264,7 +270,11 @@ const KeyButton: React.FC<KeyButtonProps> = ({ keyDef, modState, shiftActive, on
         } else if (s.firedByRepeat && !s.didSlide) {
           const subVal = keyDef.sub?.s;
           if (subVal && REQUIRES_GESTURE.has(subVal)) {
-            onKeyOutput(subVal, isSpecialKey(subVal) || true);
+            if (subVal === "Mic") {
+              onKeyOutput("Mic", true, "stop");
+            } else {
+              onKeyOutput(subVal, isSpecialKey(subVal) || true);
+            }
           }
         }
         setSliding(false);
@@ -277,7 +287,11 @@ const KeyButton: React.FC<KeyButtonProps> = ({ keyDef, modState, shiftActive, on
       } else {
         const resolved = resolveValue(s.swiped);
         if (resolved && REQUIRES_GESTURE.has(resolved.value)) {
-          onKeyOutput(resolved.value, resolved.special);
+          if (resolved.value === "Mic") {
+            onKeyOutput("Mic", true, "stop");
+          } else {
+            onKeyOutput(resolved.value, resolved.special);
+          }
         }
       }
 

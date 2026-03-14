@@ -281,3 +281,9 @@
   0%, 100% { opacity: 1; transform: scale(1); }
   50% { opacity: 0.4; transform: scale(0.8); }
 }
+
+/* Voice recording state overrides */
+.tk-keyboard--recording .tk-key .tk-label,
+.tk-keyboard--recording .tk-key .tk-sub {
+  opacity: 0;
+}

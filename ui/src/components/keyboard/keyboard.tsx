@@ -51,24 +51,48 @@ const KeyboardCore: React.FC<KeyboardProps> = ({ onKeyEvent, layout = KEYBOARD_Q
     [onKeyEvent]
   );
 
-  const handleMicToggle = useCallback(() => {
-    if (recordingRef.current) {
-      recordingRef.current = false;
-      const text = stopAndRecognize();
-      setAsrStatus("idle");
-      setAsrProgress("");
-      if (text) emitText(text);
-    } else {
-      recordingRef.current = true;
-      setAsrProgress("");
-      startRecording((status, progress) => {
-        setAsrStatus(status);
-        if (typeof progress === "string") setAsrProgress(progress);
-        else if (status !== "loading") setAsrProgress("");
-        if (status === "error") recordingRef.current = false;
-      });
-    }
-  }, [emitText]);
+  const handleMicToggle = useCallback(
+    (action?: "start" | "stop") => {
+      if (action === "start") {
+        if (!recordingRef.current) {
+          recordingRef.current = true;
+          setAsrProgress("");
+          startRecording((status, progress) => {
+            setAsrStatus(status);
+            if (typeof progress === "string") setAsrProgress(progress);
+            else if (status !== "loading") setAsrProgress("");
+            if (status === "error") recordingRef.current = false;
+          });
+        }
+      } else if (action === "stop") {
+        if (recordingRef.current) {
+          recordingRef.current = false;
+          const text = stopAndRecognize();
+          setAsrStatus("idle");
+          setAsrProgress("");
+          if (text) emitText(text);
+        }
+      } else {
+        if (recordingRef.current) {
+          recordingRef.current = false;
+          const text = stopAndRecognize();
+          setAsrStatus("idle");
+          setAsrProgress("");
+          if (text) emitText(text);
+        } else {
+          recordingRef.current = true;
+          setAsrProgress("");
+          startRecording((status, progress) => {
+            setAsrStatus(status);
+            if (typeof progress === "string") setAsrProgress(progress);
+            else if (status !== "loading") setAsrProgress("");
+            if (status === "error") recordingRef.current = false;
+          });
+        }
+      }
+    },
+    [emitText]
+  );
 
   const modName = useCallback((value: string): keyof ModifiersState | null => {
     const map: Record<string, keyof ModifiersState> = {
@@ -97,7 +121,7 @@ const KeyboardCore: React.FC<KeyboardProps> = ({ onKeyEvent, layout = KEYBOARD_Q
   }, []);
 
   const handleKeyOutput = useCallback(
-    (value: string, special: boolean) => {
+    (value: string, special: boolean, action?: "start" | "stop") => {
       keyFeedback(value, special ? "modifier" : "char");
       if (MODIFIER_KEYS.has(value)) {
         const name = modName(value);
@@ -118,7 +142,7 @@ const KeyboardCore: React.FC<KeyboardProps> = ({ onKeyEvent, layout = KEYBOARD_Q
       }
 
       if (value === "Mic") {
-        handleMicToggle();
+        handleMicToggle(action);
         return;
       }
 
@@ -191,7 +215,7 @@ const KeyboardCore: React.FC<KeyboardProps> = ({ onKeyEvent, layout = KEYBOARD_Q
 
   return (
     <div
-      className="tk-keyboard"
+      className={`tk-keyboard${asrStatus === "recording" ? " tk-keyboard--recording" : ""}`}
       onPointerDown={(e) => e.preventDefault()}
       onMouseDown={(e) => e.preventDefault()}
       onContextMenu={(e) => e.preventDefault()}
