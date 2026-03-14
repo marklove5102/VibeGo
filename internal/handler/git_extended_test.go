@@ -1,0 +1,434 @@
+package handler
+
+import (
+	"bytes"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/gin-gonic/gin"
+	"github.com/go-git/go-git/v6"
+	"github.com/go-git/go-git/v6/plumbing/object"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+func setupRouter() (*gin.Engine, *GitHandler) {
+	gin.SetMode(gin.TestMode)
+	h := NewGitHandler(nil)
+	r := gin.New()
+	h.Register(r.Group("/"))
+	return r, h
+}
+
+func postJSON(r *gin.Engine, path string, body interface{}) *httptest.ResponseRecorder {
+	b, _ := json.Marshal(body)
+	req, _ := http.NewRequest("POST", path, bytes.NewBuffer(b))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	return w
+}
+
+func setupGitRepoWithMultipleCommits(t *testing.T) string {
+	dir, err := os.MkdirTemp("", "git-ext-test")
+	require.NoError(t, err)
+	repo, err := git.PlainInit(dir, false)
+	require.NoError(t, err)
+	wt, err := repo.Worktree()
+	require.NoError(t, err)
+
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "file1.txt"), []byte("one"), 0644))
+	_, err = wt.Add("file1.txt")
+	require.NoError(t, err)
+	_, err = wt.Commit("commit 1", &git.CommitOptions{
+		Author: &object.Signature{Name: "Test", Email: "test@test.com", When: time.Now()},
+	})
+	require.NoError(t, err)
+
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "file2.txt"), []byte("two"), 0644))
+	_, err = wt.Add("file2.txt")
+	require.NoError(t, err)
+	_, err = wt.Commit("commit 2", &git.CommitOptions{
+		Author: &object.Signature{Name: "Test", Email: "test@test.com", When: time.Now()},
+	})
+	require.NoError(t, err)
+
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "file3.txt"), []byte("three"), 0644))
+	_, err = wt.Add("file3.txt")
+	require.NoError(t, err)
+	_, err = wt.Commit("commit 3", &git.CommitOptions{
+		Author: &object.Signature{Name: "Test", Email: "test@test.com", When: time.Now()},
+	})
+	require.NoError(t, err)
+
+	return dir
+}
+
+func TestGitShow(t *testing.T) {
+	dir := setupGitRepoWithMultipleCommits(t)
+	defer os.RemoveAll(dir)
+	r, _ := setupRouter()
+
+	w := postJSON(r, "/git/show", map[string]string{"path": dir, "filePath": "file1.txt"})
+	assert.Equal(t, http.StatusOK, w.Code)
+	var resp map[string]string
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	assert.Equal(t, "one", resp["content"])
+}
+
+func TestGitShowNotFound(t *testing.T) {
+	dir := setupGitRepoWithMultipleCommits(t)
+	defer os.RemoveAll(dir)
+	r, _ := setupRouter()
+
+	w := postJSON(r, "/git/show", map[string]string{"path": dir, "filePath": "nonexistent.txt"})
+	assert.Equal(t, http.StatusNotFound, w.Code)
+}
+
+func TestGitCheckout(t *testing.T) {
+	dir := setupGitRepoWithMultipleCommits(t)
+	defer os.RemoveAll(dir)
+	r, _ := setupRouter()
+
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "file1.txt"), []byte("dirty"), 0644))
+
+	w := postJSON(r, "/git/checkout", map[string]interface{}{"path": dir, "files": []string{"file1.txt"}})
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	content, _ := os.ReadFile(filepath.Join(dir, "file1.txt"))
+	assert.Equal(t, "one", string(content))
+}
+
+func TestGitBranches(t *testing.T) {
+	dir := setupGitRepoWithMultipleCommits(t)
+	defer os.RemoveAll(dir)
+	r, _ := setupRouter()
+
+	cmd := exec.Command("git", "checkout", "-b", "dev")
+	cmd.Dir = dir
+	require.NoError(t, cmd.Run())
+	cmd = exec.Command("git", "checkout", "master")
+	cmd.Dir = dir
+	if cmd.Run() != nil {
+		cmd = exec.Command("git", "checkout", "main")
+		cmd.Dir = dir
+		cmd.Run()
+	}
+
+	w := postJSON(r, "/git/branches", map[string]string{"path": dir})
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var resp struct {
+		Branches      []BranchInfo `json:"branches"`
+		CurrentBranch string           `json:"currentBranch"`
+	}
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	assert.GreaterOrEqual(t, len(resp.Branches), 2)
+	assert.NotEmpty(t, resp.CurrentBranch)
+}
+
+func TestGitCreateAndDeleteBranch(t *testing.T) {
+	dir := setupGitRepoWithMultipleCommits(t)
+	defer os.RemoveAll(dir)
+	r, _ := setupRouter()
+
+	w := postJSON(r, "/git/create-branch", map[string]string{"path": dir, "branch": "new-feature"})
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	w = postJSON(r, "/git/branches", map[string]string{"path": dir})
+	var resp struct {
+		Branches []BranchInfo `json:"branches"`
+	}
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	found := false
+	for _, b := range resp.Branches {
+		if b.Name == "new-feature" {
+			found = true
+		}
+	}
+	assert.True(t, found, "new-feature branch should exist")
+
+	w = postJSON(r, "/git/delete-branch", map[string]string{"path": dir, "branch": "new-feature"})
+	assert.Equal(t, http.StatusOK, w.Code)
+}
+
+func TestGitSwitchBranch(t *testing.T) {
+	dir := setupGitRepoWithMultipleCommits(t)
+	defer os.RemoveAll(dir)
+	r, _ := setupRouter()
+
+	postJSON(r, "/git/create-branch", map[string]string{"path": dir, "branch": "switch-test"})
+
+	w := postJSON(r, "/git/switch-branch", map[string]string{"path": dir, "branch": "switch-test"})
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var resp struct {
+		Branch string `json:"branch"`
+	}
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	assert.Equal(t, "switch-test", resp.Branch)
+}
+
+func TestGitCommitFiles(t *testing.T) {
+	dir := setupGitRepoWithMultipleCommits(t)
+	defer os.RemoveAll(dir)
+	r, _ := setupRouter()
+
+	w := postJSON(r, "/git/log", map[string]interface{}{"path": dir, "limit": 1})
+	assert.Equal(t, http.StatusOK, w.Code)
+	var logResp struct {
+		Commits []CommitInfo `json:"commits"`
+	}
+	json.Unmarshal(w.Body.Bytes(), &logResp)
+	require.NotEmpty(t, logResp.Commits)
+	hash := logResp.Commits[0].Hash
+
+	w = postJSON(r, "/git/commit-files", map[string]string{"path": dir, "commit": hash})
+	assert.Equal(t, http.StatusOK, w.Code)
+	var filesResp struct {
+		Files []CommitFileInfo `json:"files"`
+	}
+	json.Unmarshal(w.Body.Bytes(), &filesResp)
+	assert.NotEmpty(t, filesResp.Files)
+}
+
+func TestGitCommitDiff(t *testing.T) {
+	dir := setupGitRepoWithMultipleCommits(t)
+	defer os.RemoveAll(dir)
+	r, _ := setupRouter()
+
+	w := postJSON(r, "/git/log", map[string]interface{}{"path": dir, "limit": 1})
+	var logResp struct {
+		Commits []CommitInfo `json:"commits"`
+	}
+	json.Unmarshal(w.Body.Bytes(), &logResp)
+	hash := logResp.Commits[0].Hash
+
+	w = postJSON(r, "/git/commit-diff", map[string]interface{}{
+		"path": dir, "commit": hash, "filePath": "file3.txt",
+	})
+	assert.Equal(t, http.StatusOK, w.Code)
+}
+
+func TestGitRemotes(t *testing.T) {
+	dir := setupGitRepoWithMultipleCommits(t)
+	defer os.RemoveAll(dir)
+	r, _ := setupRouter()
+
+	w := postJSON(r, "/git/remotes", map[string]string{"path": dir})
+	assert.Equal(t, http.StatusOK, w.Code)
+	var resp struct {
+		Remotes []interface{} `json:"remotes"`
+	}
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	assert.Empty(t, resp.Remotes)
+}
+
+func TestGitStashCycle(t *testing.T) {
+	dir := setupGitRepoWithMultipleCommits(t)
+	defer os.RemoveAll(dir)
+	r, _ := setupRouter()
+
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "file1.txt"), []byte("stash me"), 0644))
+
+	cmd := exec.Command("git", "stash", "push", "-m", "test stash")
+	cmd.Dir = dir
+	require.NoError(t, cmd.Run())
+
+	w := postJSON(r, "/git/stash-list", map[string]string{"path": dir})
+	assert.Equal(t, http.StatusOK, w.Code)
+	var listResp struct {
+		Stashes []StashEntry `json:"stashes"`
+	}
+	json.Unmarshal(w.Body.Bytes(), &listResp)
+	assert.NotEmpty(t, listResp.Stashes)
+
+	w = postJSON(r, "/git/stash-pop", map[string]interface{}{"path": dir, "index": 0})
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	content, _ := os.ReadFile(filepath.Join(dir, "file1.txt"))
+	assert.Equal(t, "stash me", string(content))
+}
+
+func TestGitStashDrop(t *testing.T) {
+	dir := setupGitRepoWithMultipleCommits(t)
+	defer os.RemoveAll(dir)
+	r, _ := setupRouter()
+
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "file1.txt"), []byte("drop me"), 0644))
+	cmd := exec.Command("git", "stash", "push", "-m", "drop stash")
+	cmd.Dir = dir
+	require.NoError(t, cmd.Run())
+
+	w := postJSON(r, "/git/stash-drop", map[string]interface{}{"path": dir, "index": 0})
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	w = postJSON(r, "/git/stash-list", map[string]string{"path": dir})
+	var listResp struct {
+		Stashes []StashEntry `json:"stashes"`
+	}
+	json.Unmarshal(w.Body.Bytes(), &listResp)
+	assert.Empty(t, listResp.Stashes)
+}
+
+func TestGitAmend(t *testing.T) {
+	dir := setupGitRepoWithMultipleCommits(t)
+	defer os.RemoveAll(dir)
+	r, _ := setupRouter()
+
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "amend.txt"), []byte("amend content"), 0644))
+
+	w := postJSON(r, "/git/amend", map[string]interface{}{
+		"path":    dir,
+		"files":   []string{"amend.txt"},
+		"patches": []interface{}{},
+		"summary": "amended commit",
+	})
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	repo, _ := git.PlainOpen(dir)
+	head, _ := repo.Head()
+	commit, _ := repo.CommitObject(head.Hash())
+	assert.Equal(t, "amended commit", strings.TrimSpace(commit.Message))
+}
+
+func TestGitLogWithSkip(t *testing.T) {
+	dir := setupGitRepoWithMultipleCommits(t)
+	defer os.RemoveAll(dir)
+	r, _ := setupRouter()
+
+	w := postJSON(r, "/git/log", map[string]interface{}{"path": dir, "limit": 10})
+	var fullResp struct {
+		Commits []CommitInfo `json:"commits"`
+	}
+	json.Unmarshal(w.Body.Bytes(), &fullResp)
+	totalCount := len(fullResp.Commits)
+	require.GreaterOrEqual(t, totalCount, 3)
+
+	w = postJSON(r, "/git/log", map[string]interface{}{"path": dir, "limit": 1, "skip": 0})
+	var firstResp struct {
+		Commits []CommitInfo `json:"commits"`
+	}
+	json.Unmarshal(w.Body.Bytes(), &firstResp)
+	assert.Len(t, firstResp.Commits, 1)
+	assert.Equal(t, fullResp.Commits[0].Hash, firstResp.Commits[0].Hash)
+
+	w = postJSON(r, "/git/log", map[string]interface{}{"path": dir, "limit": 1, "skip": 1})
+	var secondResp struct {
+		Commits []CommitInfo `json:"commits"`
+	}
+	json.Unmarshal(w.Body.Bytes(), &secondResp)
+	assert.Len(t, secondResp.Commits, 1)
+	assert.Equal(t, fullResp.Commits[1].Hash, secondResp.Commits[0].Hash)
+
+	w = postJSON(r, "/git/log", map[string]interface{}{"path": dir, "limit": 10, "skip": totalCount})
+	var emptyResp struct {
+		Commits []CommitInfo `json:"commits"`
+	}
+	json.Unmarshal(w.Body.Bytes(), &emptyResp)
+	assert.Empty(t, emptyResp.Commits)
+}
+
+func TestGitBranchStatus(t *testing.T) {
+	dir := setupGitRepoWithMultipleCommits(t)
+	defer os.RemoveAll(dir)
+	r, _ := setupRouter()
+
+	w := postJSON(r, "/git/branch-status", map[string]string{"path": dir})
+	assert.Equal(t, http.StatusOK, w.Code)
+	var resp struct {
+		Branch string `json:"branch"`
+	}
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	assert.NotEmpty(t, resp.Branch)
+}
+
+func TestGitConflicts(t *testing.T) {
+	dir := setupGitRepoWithMultipleCommits(t)
+	defer os.RemoveAll(dir)
+	r, _ := setupRouter()
+
+	w := postJSON(r, "/git/conflicts", map[string]string{"path": dir})
+	assert.Equal(t, http.StatusOK, w.Code)
+	var resp struct {
+		Conflicts []string `json:"conflicts"`
+	}
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	assert.Empty(t, resp.Conflicts)
+}
+
+func TestGitSmartSwitchBranch(t *testing.T) {
+	dir := setupGitRepoWithMultipleCommits(t)
+	defer os.RemoveAll(dir)
+	r, _ := setupRouter()
+
+	postJSON(r, "/git/create-branch", map[string]string{"path": dir, "branch": "smart-test"})
+
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "file1.txt"), []byte("dirty"), 0644))
+
+	w := postJSON(r, "/git/smart-switch-branch", map[string]string{"path": dir, "branch": "smart-test"})
+	assert.Equal(t, http.StatusOK, w.Code)
+	var resp struct {
+		Branch  string `json:"branch"`
+		Stashed bool   `json:"stashed"`
+	}
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	assert.Equal(t, "smart-test", resp.Branch)
+}
+
+func TestGitStatusEmptyRepo(t *testing.T) {
+	dir, _ := os.MkdirTemp("", "git-empty-test")
+	defer os.RemoveAll(dir)
+	git.PlainInit(dir, false)
+
+	r, _ := setupRouter()
+	w := postJSON(r, "/git/status", map[string]string{"path": dir})
+	assert.Equal(t, http.StatusOK, w.Code)
+}
+
+func TestGitLogEmptyRepo(t *testing.T) {
+	dir, _ := os.MkdirTemp("", "git-empty-log-test")
+	defer os.RemoveAll(dir)
+	git.PlainInit(dir, false)
+
+	r, _ := setupRouter()
+	w := postJSON(r, "/git/log", map[string]string{"path": dir})
+	assert.Equal(t, http.StatusOK, w.Code)
+	var resp struct {
+		Commits []CommitInfo `json:"commits"`
+	}
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	assert.Empty(t, resp.Commits)
+}
+
+func TestGitInvalidPath(t *testing.T) {
+	r, _ := setupRouter()
+	w := postJSON(r, "/git/status", map[string]string{"path": "/nonexistent/path"})
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestGitDiffNewFile(t *testing.T) {
+	dir := setupGitRepoWithMultipleCommits(t)
+	defer os.RemoveAll(dir)
+	r, _ := setupRouter()
+
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "brand-new.txt"), []byte("new content"), 0644))
+
+	w := postJSON(r, "/git/diff", map[string]string{"path": dir, "filePath": "brand-new.txt"})
+	assert.Equal(t, http.StatusOK, w.Code)
+	var resp struct {
+		Path string `json:"path"`
+		Old  string `json:"old"`
+		New  string `json:"new"`
+	}
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	assert.Empty(t, resp.Old)
+	assert.Equal(t, "new content", resp.New)
+}

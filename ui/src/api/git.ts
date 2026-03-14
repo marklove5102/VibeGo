@@ -120,10 +120,10 @@ export const gitApi = {
       body: JSON.stringify({ path }),
     }),
 
-  log: (path: string, limit = 20) =>
+  log: (path: string, limit = 20, skip = 0) =>
     request<{ commits: GitCommit[] }>("/git/log", {
       method: "POST",
-      body: JSON.stringify({ path, limit }),
+      body: JSON.stringify({ path, limit, skip }),
     }),
 
   diff: (path: string, filePath: string) =>

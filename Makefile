@@ -1,4 +1,4 @@
-.PHONY: generate-docs clean-code format dev-server dev-ui build build-frontend build-backend package-backend build-release
+.PHONY: generate-docs clean-code format dev-server dev-ui build build-frontend build-backend package-backend build-release prepare-test test
 
 VERSION ?= v0.0.1-dev
 DIST_DIR ?= dist
@@ -64,3 +64,29 @@ build-release: build-frontend
 		$(MAKE) build-backend GOOS=$${goos} GOARCH=$${goarch} VERSION=$(VERSION); \
 		$(MAKE) package-backend GOOS=$${goos} GOARCH=$${goarch} VERSION=$(VERSION); \
 	done
+
+TEST_REPO_DIR ?= testdata/repo
+
+prepare-test:
+	@echo "Creating test git repository at $(TEST_REPO_DIR)..."
+	@rm -rf $(TEST_REPO_DIR)
+	@mkdir -p $(TEST_REPO_DIR)
+	@cd $(TEST_REPO_DIR) && git init
+	@cd $(TEST_REPO_DIR) && git config user.name "Test User"
+	@cd $(TEST_REPO_DIR) && git config user.email "test@vibego.local"
+	@cd $(TEST_REPO_DIR) && echo "# Test Repo" > README.md && git add README.md && git commit -m "initial commit"
+	@cd $(TEST_REPO_DIR) && echo "package main" > main.go && git add main.go && git commit -m "add main.go"
+	@cd $(TEST_REPO_DIR) && echo "hello" > hello.txt && git add hello.txt && git commit -m "add hello.txt"
+	@cd $(TEST_REPO_DIR) && git checkout -b feature-a
+	@cd $(TEST_REPO_DIR) && echo "feature a" > feature.txt && git add feature.txt && git commit -m "feature a work"
+	@cd $(TEST_REPO_DIR) && git checkout main
+	@cd $(TEST_REPO_DIR) && git checkout -b feature-b
+	@cd $(TEST_REPO_DIR) && echo "feature b" > other.txt && git add other.txt && git commit -m "feature b work"
+	@cd $(TEST_REPO_DIR) && git checkout main
+	@cd $(TEST_REPO_DIR) && echo "modified" >> hello.txt
+	@echo "Test repo ready at $(TEST_REPO_DIR)"
+	@echo "  Branches: main, feature-a, feature-b"
+	@echo "  Uncommitted change: hello.txt"
+
+test:
+	go test -v -count=1 ./internal/handler/ -run TestGit -timeout 120s

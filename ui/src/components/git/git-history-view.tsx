@@ -1,5 +1,5 @@
-import { ChevronDown, ChevronRight, Clock, GitCommit as GitCommitIcon, Undo2 } from "lucide-react";
-import React, { useCallback, useState } from "react";
+import { Check, ChevronDown, ChevronRight, Clock, Copy, GitCommit as GitCommitIcon, Loader2, Undo2 } from "lucide-react";
+import React, { useCallback, useRef, useState } from "react";
 import type { CommitFileInfo, GitCommit } from "@/api/git";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { getIntlLocale, getTranslation, type Locale } from "@/lib/i18n";
@@ -13,6 +13,7 @@ interface GitHistoryViewProps {
   onFileClick: (commit: GitCommit, filePath: string) => void;
   selectedCommitFiles: CommitFileInfo[];
   selectedCommitHash: string | null;
+  onLoadMore?: () => void;
 }
 
 const formatRelativeTime = (dateStr: string, locale: Locale, t: (key: string) => string): string => {
@@ -63,6 +64,28 @@ const getAuthorAvatarUrl = (email: string) => {
   const trimmedEmail = email.trim();
   if (!trimmedEmail) return undefined;
   return `https://avatars.githubusercontent.com/u/e?email=${encodeURIComponent(trimmedEmail)}&s=64`;
+};
+
+const CopyHashButton: React.FC<{ hash: string; locale: Locale }> = ({ hash, locale }) => {
+  const [copied, setCopied] = useState(false);
+  const t = (key: string) => getTranslation(locale, key);
+  const shortHash = hash.substring(0, 7);
+  return (
+    <button
+      className="flex items-center gap-0.5 font-mono px-1 py-0.5 rounded hover:bg-ide-accent/10 text-ide-mute hover:text-ide-accent transition-colors"
+      onClick={(e) => {
+        e.stopPropagation();
+        navigator.clipboard.writeText(hash);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+      }}
+      title={copied ? t("common.copied") : hash}
+    >
+      <GitCommitIcon size={9} />
+      <span>{shortHash}</span>
+      {copied ? <Check size={9} className="text-green-400" /> : <Copy size={9} />}
+    </button>
+  );
 };
 
 interface CommitItemProps {
@@ -130,12 +153,20 @@ const CommitItem: React.FC<CommitItemProps> = ({
         </div>
       </div>
 
-      {isExpanded && (files.length > 0 || canUndoCommit) && (
+      {isExpanded && (
         <div className="bg-ide-panel/30 border-t border-ide-border/30">
+          {commit.message.includes("\n") && (
+            <div className="px-3 py-1.5 text-[11px] text-ide-mute/80 whitespace-pre-wrap break-words border-b border-ide-border/20">
+              {commit.message.split("\n").slice(1).join("\n").trim()}
+            </div>
+          )}
           <div className="px-3 py-1 flex items-center justify-between gap-2 text-[10px] text-ide-mute">
-            <span>
-              {files.length} {t("git.filesChanged")}
-            </span>
+            <div className="flex items-center gap-2">
+              <span>
+                {files.length} {t("git.filesChanged")}
+              </span>
+              <CopyHashButton hash={commit.hash} locale={locale} />
+            </div>
             {canUndoCommit && (
               <button
                 className="px-2 py-0.5 rounded flex items-center gap-1 text-ide-accent hover:bg-ide-accent/10 disabled:opacity-50"
@@ -180,9 +211,11 @@ const GitHistoryView: React.FC<GitHistoryViewProps> = ({
   onFileClick,
   selectedCommitFiles,
   selectedCommitHash,
+  onLoadMore,
 }) => {
   const t = useCallback((key: string) => getTranslation(locale, key), [locale]);
   const [expandedHash, setExpandedHash] = useState<string | null>(null);
+  const loadingMoreRef = useRef(false);
 
   const handleToggle = useCallback(
     (commit: GitCommit) => {
@@ -196,6 +229,21 @@ const GitHistoryView: React.FC<GitHistoryViewProps> = ({
     [expandedHash, onCommitSelect]
   );
 
+  const handleScroll = useCallback(
+    (e: React.UIEvent<HTMLDivElement>) => {
+      if (!onLoadMore || loadingMoreRef.current || isLoading) return;
+      const el = e.currentTarget;
+      if (el.scrollHeight - el.scrollTop - el.clientHeight < 200) {
+        loadingMoreRef.current = true;
+        onLoadMore();
+        setTimeout(() => {
+          loadingMoreRef.current = false;
+        }, 500);
+      }
+    },
+    [onLoadMore, isLoading]
+  );
+
   if (isLoading && commits.length === 0) {
     return <div className="flex items-center justify-center h-32 text-ide-mute text-sm">{t("git.loading")}</div>;
   }
@@ -205,7 +253,7 @@ const GitHistoryView: React.FC<GitHistoryViewProps> = ({
   }
 
   return (
-    <div className="h-full overflow-y-auto bg-ide-bg">
+    <div className="h-full overflow-y-auto bg-ide-bg" onScroll={handleScroll}>
       {commits.map((commit, index) => (
         <CommitItem
           key={commit.hash}
@@ -221,6 +269,11 @@ const GitHistoryView: React.FC<GitHistoryViewProps> = ({
           files={expandedHash === commit.hash ? selectedCommitFiles : []}
         />
       ))}
+      {isLoading && commits.length > 0 && (
+        <div className="flex items-center justify-center py-3">
+          <Loader2 size={14} className="animate-spin text-ide-mute" />
+        </div>
+      )}
     </div>
   );
 };

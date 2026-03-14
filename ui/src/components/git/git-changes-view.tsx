@@ -1,16 +1,22 @@
 import {
   AlertTriangle,
   Archive,
+  ArrowDown,
+  ArrowUp,
   Check,
   ChevronDown,
   ChevronRight,
+  CloudUpload,
   Loader2,
+  RefreshCw,
+  Search,
   Square,
   SquareCheck,
   SquareMinus,
+  Undo2,
   X,
 } from "lucide-react";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { StashEntry } from "@/api/git";
 import { getTranslation, type Locale } from "@/lib/i18n";
 import type { GitFileNode, GitPartialSelection } from "@/stores";
@@ -28,6 +34,9 @@ interface GitChangesViewProps {
   currentBranch: string;
   stashes: StashEntry[];
   conflicts: string[];
+  hasRemote: boolean;
+  aheadCount: number;
+  behindCount: number;
   onFileClick: (path: string) => void;
   onToggleFile: (path: string) => void;
   onToggleAll: () => void;
@@ -36,6 +45,10 @@ interface GitChangesViewProps {
   onStash: (message?: string, files?: string[]) => void;
   onStashPop: (index: number) => void;
   onStashDrop: (index: number) => void;
+  onPull: () => void;
+  onPush: () => void;
+  onFetch: () => void;
+  onUndoLastCommit: () => Promise<boolean>;
 }
 
 const getStatusColor = (status: string) => {
@@ -153,6 +166,9 @@ const GitChangesView: React.FC<GitChangesViewProps> = ({
   currentBranch,
   stashes,
   conflicts,
+  hasRemote,
+  aheadCount,
+  behindCount,
   onFileClick,
   onToggleFile,
   onToggleAll,
@@ -161,6 +177,10 @@ const GitChangesView: React.FC<GitChangesViewProps> = ({
   onStash,
   onStashPop,
   onStashDrop,
+  onPull,
+  onPush,
+  onFetch,
+  onUndoLastCommit,
 }) => {
   const t = useCallback((key: string) => getTranslation(locale, key), [locale]);
   const { summary, description, isAmend, setSummary, setDescription, setIsAmend, commitSelected, amendCommit } =
@@ -169,11 +189,20 @@ const GitChangesView: React.FC<GitChangesViewProps> = ({
   const [showStashes, setShowStashes] = useState(false);
   const [showDescription, setShowDescription] = useState(false);
   const [discardConfirm, setDiscardConfirm] = useState<string | null>(null);
+  const [filterText, setFilterText] = useState("");
+  const [undoToast, setUndoToast] = useState(false);
+  const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const summaryRef = useRef<HTMLInputElement>(null);
 
   const safeStashes = stashes ?? [];
   const safeConflicts = conflicts ?? [];
   const hasChanges = allFiles.length > 0;
+  const showFilter = allFiles.length > 5;
+  const filteredFiles = useMemo(() => {
+    if (!filterText.trim()) return allFiles;
+    const lower = filterText.toLowerCase();
+    return allFiles.filter((f) => f.path.toLowerCase().includes(lower) || f.name.toLowerCase().includes(lower));
+  }, [allFiles, filterText]);
   const checkedCount = checkedFiles.size;
   const allSelectionType = getAggregateSelectionType(allFiles, checkedFiles, partialSelections);
   const canCommit = checkedCount > 0 && summary.trim().length > 0 && safeConflicts.length === 0;
@@ -190,10 +219,20 @@ const GitChangesView: React.FC<GitChangesViewProps> = ({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [canCommit, isLoading, isAmend, commitSelected, amendCommit]);
 
-  const handleCommit = useCallback(() => {
-    if (isAmend) amendCommit();
-    else commitSelected();
+  const handleCommit = useCallback(async () => {
+    const ok = isAmend ? await amendCommit() : await commitSelected();
+    if (ok) {
+      if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+      setUndoToast(true);
+      undoTimerRef.current = setTimeout(() => setUndoToast(false), 5000);
+    }
   }, [isAmend, amendCommit, commitSelected]);
+
+  const handleUndoFromToast = useCallback(async () => {
+    setUndoToast(false);
+    if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+    await onUndoLastCommit();
+  }, [onUndoLastCommit]);
 
   const handleDiscardClick = useCallback((path: string) => setDiscardConfirm(path), []);
   const handleConfirmDiscard = useCallback(() => {
@@ -232,11 +271,86 @@ const GitChangesView: React.FC<GitChangesViewProps> = ({
         )}
 
         {!hasChanges && safeConflicts.length === 0 && (
-          <div className="flex items-center justify-center h-32 text-ide-mute text-sm">{t("git.noChanges")}</div>
+          <div className="flex flex-col gap-2 p-3">
+            <div className="text-center text-ide-mute text-sm py-4">{t("git.noChanges")}</div>
+            {!hasRemote && (
+              <button
+                onClick={onPush}
+                disabled={isLoading}
+                className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-ide-accent/10 border border-ide-accent/20 hover:bg-ide-accent/15 transition-colors disabled:opacity-50 text-left"
+              >
+                <CloudUpload size={16} className="text-ide-accent shrink-0" />
+                <span className="text-xs text-ide-accent font-medium">{t("git.publish")}</span>
+              </button>
+            )}
+            {hasRemote && behindCount > 0 && (
+              <button
+                onClick={onPull}
+                disabled={isLoading}
+                className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-orange-500/10 border border-orange-500/20 hover:bg-orange-500/15 transition-colors disabled:opacity-50 text-left"
+              >
+                <ArrowDown size={16} className="text-orange-400 shrink-0" />
+                <span className="text-xs text-orange-400 font-medium">{t("git.pull")} ({behindCount})</span>
+              </button>
+            )}
+            {hasRemote && aheadCount > 0 && (
+              <button
+                onClick={onPush}
+                disabled={isLoading}
+                className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-blue-500/10 border border-blue-500/20 hover:bg-blue-500/15 transition-colors disabled:opacity-50 text-left"
+              >
+                <ArrowUp size={16} className="text-blue-400 shrink-0" />
+                <span className="text-xs text-blue-400 font-medium">{t("git.push")} ({aheadCount})</span>
+              </button>
+            )}
+            {hasRemote && aheadCount === 0 && behindCount === 0 && (
+              <button
+                onClick={onFetch}
+                disabled={isLoading}
+                className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-ide-panel border border-ide-border hover:bg-ide-accent/10 transition-colors disabled:opacity-50 text-left"
+              >
+                <RefreshCw size={16} className="text-ide-mute shrink-0" />
+                <span className="text-xs text-ide-text font-medium">{t("git.fetch")}</span>
+              </button>
+            )}
+            {safeStashes.length > 0 && (
+              <button
+                onClick={() => onStashPop(safeStashes[0].index)}
+                disabled={isLoading}
+                className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-purple-500/10 border border-purple-500/20 hover:bg-purple-500/15 transition-colors disabled:opacity-50 text-left"
+              >
+                <Archive size={16} className="text-purple-400 shrink-0" />
+                <div className="flex flex-col min-w-0">
+                  <span className="text-xs text-purple-400 font-medium">{t("git.stashes")} ({safeStashes.length})</span>
+                  <span className="text-[10px] text-purple-400/70 truncate">{safeStashes[0].message}</span>
+                </div>
+              </button>
+            )}
+          </div>
         )}
 
         {hasChanges && (
           <>
+            {showFilter && (
+              <div className="px-3 py-1.5 border-b border-ide-border bg-ide-panel/30">
+                <div className="flex items-center gap-1.5 bg-ide-bg border border-ide-border rounded px-2 py-1">
+                  <Search size={12} className="text-ide-mute shrink-0" />
+                  <input
+                    type="text"
+                    value={filterText}
+                    onChange={(e) => setFilterText(e.target.value)}
+                    placeholder={t("git.searchFiles")}
+                    className="flex-1 bg-transparent text-xs text-ide-text placeholder-ide-mute/50 focus:outline-none min-w-0"
+                  />
+                  {filterText && (
+                    <button onClick={() => setFilterText("")} className="text-ide-mute hover:text-ide-text">
+                      <X size={12} />
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+
             <div className="flex items-center gap-2 px-3 py-2 border-b border-ide-border bg-ide-panel/30">
               <div className="flex items-center gap-2 flex-1 cursor-pointer" onClick={onToggleAll}>
                 {renderSelectionIcon(
@@ -259,7 +373,7 @@ const GitChangesView: React.FC<GitChangesViewProps> = ({
             </div>
 
             <div>
-              {allFiles.map((file) => {
+              {filteredFiles.map((file) => {
                 const selectionType = getFileSelectionType(file.path, checkedFiles, partialSelections);
                 return (
                   <div
@@ -312,6 +426,11 @@ const GitChangesView: React.FC<GitChangesViewProps> = ({
                   </div>
                 );
               })}
+              {filterText && filteredFiles.length === 0 && (
+                <div className="flex items-center justify-center py-6 text-ide-mute text-xs">
+                  {t("git.noChanges")}
+                </div>
+              )}
             </div>
           </>
         )}
@@ -363,14 +482,29 @@ const GitChangesView: React.FC<GitChangesViewProps> = ({
       )}
 
       <div className="shrink-0 border-t border-ide-border bg-ide-panel/30 p-3 space-y-2">
-        <input
-          ref={summaryRef}
-          type="text"
-          placeholder={t("git.summaryPlaceholder")}
-          value={summary}
-          onChange={(e) => setSummary(e.target.value)}
-          className="w-full bg-ide-bg border border-ide-border rounded px-3 py-2 text-sm text-ide-text focus:outline-none focus:border-ide-accent placeholder-ide-mute/50"
-        />
+        <div className="relative">
+          <input
+            ref={summaryRef}
+            type="text"
+            placeholder={t("git.summaryPlaceholder")}
+            value={summary}
+            onChange={(e) => setSummary(e.target.value)}
+            className={`w-full bg-ide-bg border rounded px-3 py-2 text-sm text-ide-text focus:outline-none placeholder-ide-mute/50 ${
+              summary.length > 72
+                ? "border-yellow-500/50 focus:border-yellow-500"
+                : "border-ide-border focus:border-ide-accent"
+            }`}
+          />
+          {summary.length > 0 && (
+            <span
+              className={`absolute right-2 top-1/2 -translate-y-1/2 text-[10px] ${
+                summary.length > 72 ? "text-yellow-500" : "text-ide-mute/50"
+              }`}
+            >
+              {summary.length}
+            </span>
+          )}
+        </div>
 
         {showDescription ? (
           <textarea
@@ -447,6 +581,25 @@ const GitChangesView: React.FC<GitChangesViewProps> = ({
                 {t("git.confirm")}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {undoToast && (
+        <div className="absolute bottom-20 left-3 right-3 z-50 animate-in slide-in-from-bottom-4 fade-in duration-300">
+          <div className="flex items-center gap-2 bg-green-500/15 border border-green-500/30 rounded-lg px-3 py-2 shadow-lg backdrop-blur-sm">
+            <Check size={14} className="text-green-400 shrink-0" />
+            <span className="flex-1 text-xs text-green-400 font-medium">{t("git.commit")}</span>
+            <button
+              onClick={handleUndoFromToast}
+              className="flex items-center gap-1 px-2 py-0.5 rounded text-xs text-ide-accent hover:bg-ide-accent/10 font-medium"
+            >
+              <Undo2 size={10} />
+              {t("git.undo")}
+            </button>
+            <button onClick={() => setUndoToast(false)} className="text-ide-mute hover:text-ide-text">
+              <X size={12} />
+            </button>
           </div>
         </div>
       )}

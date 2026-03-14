@@ -57,6 +57,7 @@ const GitView: React.FC<GitViewProps> = ({ groupId, path, locale, onFileDiff, on
     reset,
     fetchStatus,
     fetchLog,
+    fetchMoreLog,
     fetchBranches,
     fetchRemotes,
     fetchBranchStatus,
@@ -330,6 +331,9 @@ const GitView: React.FC<GitViewProps> = ({ groupId, path, locale, onFileDiff, on
               currentBranch={currentBranch}
               stashes={stashes}
               conflicts={conflicts}
+              hasRemote={hasRemote}
+              aheadCount={aheadCount}
+              behindCount={behindCount}
               onFileClick={handleFileClick}
               onToggleFile={toggleFile}
               onToggleAll={toggleAllFiles}
@@ -338,6 +342,10 @@ const GitView: React.FC<GitViewProps> = ({ groupId, path, locale, onFileDiff, on
               onStash={stash}
               onStashPop={stashPop}
               onStashDrop={stashDrop}
+              onPull={gitPull}
+              onPush={gitPush}
+              onFetch={gitFetch}
+              onUndoLastCommit={undoLastCommit}
             />
           ) : (
             <GitHistoryView
@@ -349,6 +357,7 @@ const GitView: React.FC<GitViewProps> = ({ groupId, path, locale, onFileDiff, on
               onFileClick={handleHistoryFileClick}
               selectedCommitFiles={selectedCommitFiles}
               selectedCommitHash={selectedCommit?.hash || null}
+              onLoadMore={fetchMoreLog}
             />
           )}
         </div>

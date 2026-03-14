@@ -6,3 +6,4 @@ ui/CLAUDE.md
 /ui/.vite
 /dist
 /artifacts
+/testdata

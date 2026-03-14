@@ -60,6 +60,7 @@ export interface GitState {
 
   fetchStatus: () => Promise<void>;
   fetchLog: (limit?: number) => Promise<void>;
+  fetchMoreLog: (limit?: number) => Promise<void>;
   fetchBranches: () => Promise<void>;
   fetchRemotes: () => Promise<void>;
   fetchBranchStatus: () => Promise<void>;
@@ -341,6 +342,22 @@ const createGitState: StateCreator<GitState> = (set, get) => ({
     try {
       const res = await gitApi.log(currentPath, limit);
       set({ commits: res.commits });
+    } catch (err) {
+      set({ error: err instanceof Error ? err.message : "Failed to fetch log" });
+    }
+  },
+
+  fetchMoreLog: async (limit = 50) => {
+    const { currentPath, commits } = get();
+    if (!currentPath) {
+      return;
+    }
+
+    try {
+      const res = await gitApi.log(currentPath, limit, commits.length);
+      if (res.commits.length > 0) {
+        set({ commits: [...commits, ...res.commits] });
+      }
     } catch (err) {
       set({ error: err instanceof Error ? err.message : "Failed to fetch log" });
     }

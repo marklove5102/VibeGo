@@ -248,6 +248,7 @@ func (h *GitHandler) Status(c *gin.Context) {
 type GitLogRequest struct {
 	Path  string `json:"path" binding:"required"`
 	Limit int    `json:"limit"`
+	Skip  int    `json:"skip"`
 }
 
 type CommitInfo struct {
@@ -300,9 +301,18 @@ func (h *GitHandler) Log(c *gin.Context) {
 	if limit <= 0 {
 		limit = 20
 	}
+	skip := req.Skip
+	if skip < 0 {
+		skip = 0
+	}
 	count := 0
+	skipped := 0
 
 	err = cIter.ForEach(func(commit *object.Commit) error {
+		if skipped < skip {
+			skipped++
+			return nil
+		}
 		if count >= limit {
 			return io.EOF
 		}
