@@ -11,13 +11,14 @@ import {
   RefreshCw,
 } from "lucide-react";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useShallow } from "zustand/react/shallow";
 import type { GitCommit } from "@/api/git";
 import { gitApi } from "@/api/git";
 import { useDialog } from "@/components/common";
 import { usePageTopBar } from "@/hooks/use-page-top-bar";
 import { getTranslation, type Locale } from "@/lib/i18n";
+import { type GitSyncOptions, getOrCreateGitStore, useGitStore } from "@/stores";
 import { useSessionStore } from "@/stores/session-store";
-import { getOrCreateGitStore, type GitSyncOptions, useGitStore } from "@/stores";
 import BranchSelector from "./branch-selector";
 import GitChangesView from "./git-changes-view";
 import GitHistoryView from "./git-history-view";
@@ -105,7 +106,55 @@ const GitView: React.FC<GitViewProps> = ({ groupId, path, locale, onFileDiff, on
     undoLastCommit,
     applyStatusUpdate,
     applyBranchStatus,
-  } = useGitStore(groupId);
+  } = useGitStore(
+    groupId,
+    useShallow((state) => ({
+      currentPath: state.currentPath,
+      isRepo: state.isRepo,
+      allFiles: state.allFiles,
+      commits: state.commits,
+      isLoading: state.isLoading,
+      selectedCommit: state.selectedCommit,
+      selectedCommitFiles: state.selectedCommitFiles,
+      currentBranch: state.currentBranch,
+      branches: state.branches,
+      remoteBranches: state.remoteBranches,
+      activeTab: state.activeTab,
+      hasRemote: state.hasRemote,
+      remoteUrls: state.remoteUrls,
+      aheadCount: state.aheadCount,
+      behindCount: state.behindCount,
+      stashes: state.stashes,
+      conflicts: state.conflicts,
+      error: state.error,
+      setCurrentPath: state.setCurrentPath,
+      setScope: state.setScope,
+      setActiveTab: state.setActiveTab,
+      reset: state.reset,
+      checkRepo: state.checkRepo,
+      initRepo: state.initRepo,
+      fetchMoreLog: state.fetchMoreLog,
+      syncRepo: state.syncRepo,
+      smartSwitchBranch: state.smartSwitchBranch,
+      gitPull: state.gitPull,
+      gitPush: state.gitPush,
+      gitFetch: state.gitFetch,
+      stash: state.stash,
+      stashPop: state.stashPop,
+      stashDrop: state.stashDrop,
+      createBranch: state.createBranch,
+      deleteBranch: state.deleteBranch,
+      setSelectedCommit: state.setSelectedCommit,
+      getCommitFiles: state.getCommitFiles,
+      getCommitDiff: state.getCommitDiff,
+      toggleFile: state.toggleFile,
+      toggleAllFiles: state.toggleAllFiles,
+      discardFile: state.discardFile,
+      undoLastCommit: state.undoLastCommit,
+      applyStatusUpdate: state.applyStatusUpdate,
+      applyBranchStatus: state.applyBranchStatus,
+    }))
+  );
 
   const wsCleanupRef = useRef<(() => void) | null>(null);
   const autoSyncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
