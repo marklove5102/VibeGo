@@ -5,8 +5,11 @@ import { terminalApi } from "@/api/terminal";
 import { useDialog } from "@/components/common";
 import TerminalHistoryPage from "@/components/terminal/terminal-history-page";
 import TerminalInstance from "@/components/terminal/terminal-instance";
+import type { TerminalInstanceHandle } from "@/components/terminal/terminal-instance";
 import TerminalListManager from "@/components/terminal/terminal-list-manager";
 import TerminalSplitView from "@/components/terminal/terminal-split-view";
+import { Keyboard, translateKeyEvent } from "@/components/keyboard";
+import type { KeyEvent } from "@/components/keyboard";
 import { usePageTopBar } from "@/hooks/use-page-top-bar";
 import { terminalKeys, useTerminalCreate, useTerminalRename } from "@/hooks/use-terminal";
 import { useTranslation } from "@/lib/i18n";
@@ -48,7 +51,11 @@ const TerminalPage: React.FC<TerminalPageProps> = ({ groupId, cwd }) => {
   const listManagerOpen = useTerminalStore((s) => s.listManagerOpenByGroup[groupId] ?? true);
   const focusedId = useTerminalStore((s) => s.focusedIdByGroup[groupId] ?? null);
   const [showHistory, setShowHistory] = useState(false);
+  const [showKeyboard, setShowKeyboard] = useState(() =>
+    typeof window !== 'undefined' && (window.matchMedia('(pointer: coarse)').matches || navigator.maxTouchPoints > 0)
+  );
   const syncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const terminalRefsMap = useRef<Map<string, TerminalInstanceHandle>>(new Map());
 
   const setPageMenuItems = useFrameStore((s) => s.setPageMenuItems);
   const setActiveId = useTerminalStore((s) => s.setActiveId);
@@ -411,6 +418,54 @@ const TerminalPage: React.FC<TerminalPageProps> = ({ groupId, cwd }) => {
   const activeTopBarConfig = showHistory ? undefined : topBarConfig;
   usePageTopBar(activeTopBarConfig, [activeTopBarConfig]);
 
+  const getFocusedTerminalRef = useCallback((): TerminalInstanceHandle | null => {
+    const targetId = focusedId || activeTerminalId;
+    if (!targetId) return null;
+    return terminalRefsMap.current.get(targetId) ?? null;
+  }, [focusedId, activeTerminalId]);
+
+  const handleVirtualKeyEvent = useCallback((event: KeyEvent) => {
+    const action = translateKeyEvent(event);
+    const handle = getFocusedTerminalRef();
+    switch (action.type) {
+      case 'input':
+        handle?.sendInput(action.data);
+        break;
+      case 'copy': {
+        const text = handle?.getSelection() ?? '';
+        if (text) void navigator.clipboard.writeText(text);
+        break;
+      }
+      case 'paste':
+        void navigator.clipboard.readText().then((text) => {
+          if (text) handle?.paste(text);
+        });
+        break;
+      case 'cut': {
+        const sel = handle?.getSelection() ?? '';
+        if (sel) {
+          void navigator.clipboard.writeText(sel);
+          handle?.sendInput('\x18');
+        }
+        break;
+      }
+      case 'undo':
+        handle?.sendInput('\x1a');
+        break;
+      case 'select':
+        handle?.selectAll();
+        break;
+    }
+  }, [getFocusedTerminalRef]);
+
+  const setTerminalRef = useCallback((id: string) => (ref: TerminalInstanceHandle | null) => {
+    if (ref) {
+      terminalRefsMap.current.set(id, ref);
+    } else {
+      terminalRefsMap.current.delete(id);
+    }
+  }, []);
+
   if (showHistory) {
     return <TerminalHistoryPage onBack={() => setShowHistory(false)} />;
   }
@@ -455,6 +510,7 @@ const TerminalPage: React.FC<TerminalPageProps> = ({ groupId, cwd }) => {
             terminals.map((terminal) => (
               <TerminalInstance
                 key={terminal.id}
+                ref={setTerminalRef(terminal.id)}
                 terminalId={terminal.id}
                 terminalName={terminal.name}
                 isActive={terminal.id === activeTerminalId}
@@ -467,6 +523,7 @@ const TerminalPage: React.FC<TerminalPageProps> = ({ groupId, cwd }) => {
           terminals.map((terminal) => (
             <TerminalInstance
               key={terminal.id}
+              ref={setTerminalRef(terminal.id)}
               terminalId={terminal.id}
               terminalName={terminal.name}
               isActive={terminal.id === activeTerminalId}
@@ -476,6 +533,11 @@ const TerminalPage: React.FC<TerminalPageProps> = ({ groupId, cwd }) => {
           ))
         )}
       </div>
+      {showKeyboard && !listManagerOpen && !showHistory && (
+        <div className="flex-shrink-0">
+          <Keyboard onKeyEvent={handleVirtualKeyEvent} />
+        </div>
+      )}
     </div>
   );
 };

@@ -10,7 +10,7 @@ import { WebLinksAddon } from "@xterm/addon-web-links";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { type ITheme, Terminal } from "@xterm/xterm";
 import { Check, ChevronDown, ChevronUp, Copy, X } from "lucide-react";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
 import "@xterm/xterm/css/xterm.css";
 import { terminalApi } from "@/api/terminal";
 import TerminalSelectionMenu from "@/components/terminal/terminal-selection-menu";
@@ -21,6 +21,15 @@ import {
 } from "@/services/terminal-browser-shortcut-guard";
 import { notifyTerminal } from "@/services/terminal-notification-service";
 import { type Theme, useAppStore } from "@/stores";
+
+export interface TerminalInstanceHandle {
+  sendInput: (data: string) => void;
+  getSelection: () => string;
+  paste: (text: string) => void;
+  clearSelection: () => void;
+  selectAll: () => void;
+  focus: () => void;
+}
 
 interface TerminalInstanceProps {
   terminalId: string;
@@ -388,14 +397,14 @@ const parseOsc777Notification = (data: string): ParsedTerminalNotification | nul
   return { title: normalizedTitle, body };
 };
 
-const TerminalInstance: React.FC<TerminalInstanceProps> = ({
+const TerminalInstance = React.forwardRef<TerminalInstanceHandle, TerminalInstanceProps>(({
   terminalId,
   terminalName,
   isActive,
   isFocused = isActive,
   isExited = false,
   onExited,
-}) => {
+}, ref) => {
   const wrapperRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<Terminal | null>(null);
@@ -846,6 +855,20 @@ const TerminalInstance: React.FC<TerminalInstanceProps> = ({
     },
     [hideSelectionMenu]
   );
+
+  useImperativeHandle(ref, () => ({
+    sendInput: sendTerminalInput,
+    getSelection: () => terminalRef.current?.getSelection() ?? '',
+    paste: (text: string) => {
+      if (terminalRef.current) terminalRef.current.paste(text);
+    },
+    clearSelection: () => clearTerminalSelection(),
+    selectAll: () => {
+      const terminal = terminalRef.current;
+      if (terminal) terminal.selectAll();
+    },
+    focus: () => terminalRef.current?.focus(),
+  }), [sendTerminalInput, clearTerminalSelection]);
 
   const handleSelectionCopy = useCallback(() => {
     const text = terminalRef.current?.getSelection();
@@ -1383,6 +1406,8 @@ const TerminalInstance: React.FC<TerminalInstanceProps> = ({
       )}
     </div>
   );
-};
+});
+
+TerminalInstance.displayName = 'TerminalInstance';
 
 export default TerminalInstance;
