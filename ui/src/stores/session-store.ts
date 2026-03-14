@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { fileApi } from "../api/file";
+import { settingsApi } from "../api/settings";
 import { type SessionInfo, sessionApi } from "../api/session";
 import { terminalApi } from "../api/terminal";
 import { cleanupAllTerminals } from "../services/terminal-cleanup-service";
@@ -8,13 +9,13 @@ import {
   getOrCreateFileManagerStore,
   removeFileManagerStore,
   resetFileManagerStores,
+  subscribeFileManagerStoreChanges,
 } from "./file-manager-store";
 import { type GenericGroup, type GroupPage, type ToolGroup, useFrameStore } from "./frame-store";
 import * as gitStoreModule from "./git-store";
 import { type LayoutNode, type TerminalSession, useTerminalStore } from "./terminal-store";
 
-const CURRENT_SESSION_KEY = "current_session_id";
-const SESSION_STATE_BACKUP_KEY_PREFIX = "session_state_backup:";
+const CURRENT_SESSION_SETTING_KEY = "workspaceCurrentSessionId";
 
 let autoSaveUnsub: (() => void) | null = null;
 let autoSaveTimer: ReturnType<typeof setTimeout> | null = null;
@@ -71,16 +72,24 @@ interface SessionStoreState {
   initAutoSave: () => void;
 }
 
-function getStoredSessionId(): string | null {
-  return localStorage.getItem(CURRENT_SESSION_KEY);
+async function getStoredSessionId(): Promise<string | null> {
+  try {
+    const res = await settingsApi.get(CURRENT_SESSION_SETTING_KEY);
+    const value = res.value.trim();
+    return value || null;
+  } catch {
+    return null;
+  }
 }
 
-function setStoredSessionId(id: string | null): void {
-  if (id) {
-    localStorage.setItem(CURRENT_SESSION_KEY, id);
-  } else {
-    localStorage.removeItem(CURRENT_SESSION_KEY);
-  }
+async function setStoredSessionId(id: string | null): Promise<void> {
+  try {
+    if (id) {
+      await settingsApi.set(CURRENT_SESSION_SETTING_KEY, id);
+      return;
+    }
+    await settingsApi.delete(CURRENT_SESSION_SETTING_KEY);
+  } catch {}
 }
 
 function createEmptySessionState(): SessionState {
@@ -100,37 +109,6 @@ function createEmptySessionState(): SessionState {
 
 function hasRestorableSessionContent(state: SessionState): boolean {
   return state.openGroups.length > 0 || state.openTools.length > 0 || state.settingsOpen;
-}
-
-function getSessionStateBackupKey(id: string): string {
-  return `${SESSION_STATE_BACKUP_KEY_PREFIX}${id}`;
-}
-
-function getStoredSessionStateBackup(id: string): SessionState | null {
-  const raw = localStorage.getItem(getSessionStateBackupKey(id));
-  if (!raw) {
-    return null;
-  }
-
-  try {
-    const state = parseSessionState(raw);
-    return hasRestorableSessionContent(state) ? state : null;
-  } catch {
-    localStorage.removeItem(getSessionStateBackupKey(id));
-    return null;
-  }
-}
-
-function setStoredSessionStateBackup(id: string, state: SessionState): void {
-  if (!hasRestorableSessionContent(state)) {
-    return;
-  }
-
-  localStorage.setItem(getSessionStateBackupKey(id), JSON.stringify(state));
-}
-
-function removeStoredSessionStateBackup(id: string): void {
-  localStorage.removeItem(getSessionStateBackupKey(id));
 }
 
 function getFilesPagePath(group: { pages: GroupPage[] }): string {
@@ -383,7 +361,7 @@ function updateSessionNameInList(sessions: SessionInfo[], sessionId: string, nam
 }
 
 export const useSessionStore = create<SessionStoreState>((set, get) => ({
-  currentSessionId: getStoredSessionId(),
+  currentSessionId: null,
   sessions: [],
   loading: false,
   error: null,
@@ -400,10 +378,12 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
 
     const frameUnsub = useFrameStore.subscribe(scheduleAutoSave);
     const terminalUnsub = useTerminalStore.subscribe(scheduleAutoSave);
+    const fileManagerUnsub = subscribeFileManagerStoreChanges(scheduleAutoSave);
 
     autoSaveUnsub = () => {
       frameUnsub();
       terminalUnsub();
+      fileManagerUnsub();
     };
   },
 
@@ -420,15 +400,16 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
   initSession: async () => {
     get().initAutoSave();
     await get().loadSessions();
-    const { currentSessionId, sessions, switchSession } = get();
-    if (currentSessionId && sessions.some((session) => session.id === currentSessionId)) {
-      await switchSession(currentSessionId);
+    const storedSessionId = await getStoredSessionId();
+    const { sessions, switchSession } = get();
+    if (storedSessionId && sessions.some((session) => session.id === storedSessionId)) {
+      await switchSession(storedSessionId);
       return get().currentSessionId !== null;
     }
-    if (currentSessionId) {
-      set({ currentSessionId: null });
-      setStoredSessionId(null);
+    if (storedSessionId) {
+      await setStoredSessionId(null);
     }
+    set({ currentSessionId: null });
     return false;
   },
 
@@ -437,7 +418,7 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
       const res = await sessionApi.create(name);
       await get().loadSessions();
       set({ currentSessionId: res.id });
-      setStoredSessionId(res.id);
+      await setStoredSessionId(res.id);
       return res.id;
     } catch (e) {
       set({ error: (e as Error).message });
@@ -465,7 +446,7 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
         const created = await sessionApi.create(folderName);
         sessionId = created.id;
         set({ currentSessionId: sessionId });
-        setStoredSessionId(sessionId);
+        await setStoredSessionId(sessionId);
       }
 
       const groupId = frameStore.addFolderGroup(resolvedPath, folderName);
@@ -474,7 +455,6 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
       const state = buildSessionState();
       const sessionName = getAutoSessionName(state.openGroups);
 
-      setStoredSessionStateBackup(sessionId, state);
       await sessionApi.update(sessionId, {
         name: sessionName,
         state: JSON.stringify(state),
@@ -484,7 +464,7 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
         currentSessionId: sessionId,
         sessions: updateSessionNameInList(store.sessions, sessionId, sessionName),
       }));
-      setStoredSessionId(sessionId);
+      await setStoredSessionId(sessionId);
       await get().loadSessions();
       return sessionId;
     } catch (e) {
@@ -518,7 +498,6 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
 
         if (currentSessionId) {
           await sessionApi.delete(currentSessionId);
-          removeStoredSessionStateBackup(currentSessionId);
         }
 
         set((store) => ({
@@ -527,7 +506,7 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
             ? store.sessions.filter((session) => session.id !== currentSessionId)
             : store.sessions,
         }));
-        setStoredSessionId(null);
+        await setStoredSessionId(null);
         resetWorkspaceRuntimeState();
         await get().loadSessions();
         return;
@@ -539,7 +518,6 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
       const state = buildSessionState();
       const sessionName = getAutoSessionName(state.openGroups);
 
-      setStoredSessionStateBackup(currentSessionId, state);
       await sessionApi.update(currentSessionId, {
         name: sessionName,
         state: JSON.stringify(state),
@@ -576,34 +554,18 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
           } catch {}
         }
       } catch {
-        const backupState = getStoredSessionStateBackup(id);
-        if (backupState && hasRestorableSessionContent(backupState)) {
-          try {
-            restoreSessionState(backupState);
-            set({ currentSessionId: id, loading: false });
-            setStoredSessionId(id);
-            return;
-          } catch {}
-        }
-
-        removeStoredSessionStateBackup(id);
         set({ currentSessionId: null, loading: false });
-        setStoredSessionId(null);
+        await setStoredSessionId(null);
         useFrameStore.getState().initDefaultGroups();
         resetWorkspaceRuntimeState();
         await get().loadSessions();
         return;
       }
 
-      const backupState = getStoredSessionStateBackup(id);
       const restoreCandidates: SessionState[] = [];
 
       if (remoteState) {
         restoreCandidates.push(remoteState);
-      }
-
-      if (backupState) {
-        restoreCandidates.push(backupState);
       }
 
       if (restoreCandidates.length === 0) {
@@ -623,10 +585,6 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
 
       if (!restored) {
         restoreSessionState(restoredState);
-      }
-
-      if (hasRestorableSessionContent(restoredState)) {
-        setStoredSessionStateBackup(id, restoredState);
       }
 
       try {
@@ -652,10 +610,10 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
       } catch {}
 
       set({ currentSessionId: id, loading: false });
-      setStoredSessionId(id);
+      await setStoredSessionId(id);
     } catch (e) {
       set({ currentSessionId: null, error: (e as Error).message, loading: false });
-      setStoredSessionId(null);
+      await setStoredSessionId(null);
       useFrameStore.getState().initDefaultGroups();
       resetWorkspaceRuntimeState();
     }
@@ -669,36 +627,10 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
     const sessionName = state.openGroups.length > 0 ? getAutoSessionName(state.openGroups) : undefined;
 
     try {
-      if (!hasRestorableSessionContent(state)) {
-        const backupState = getStoredSessionStateBackup(currentSessionId);
-        if (backupState) {
-          return;
-        }
-
-        try {
-          const detail = await sessionApi.get(currentSessionId);
-          if (detail.state && detail.state !== "{}") {
-            const remoteState = parseSessionState(detail.state);
-            if (hasRestorableSessionContent(remoteState)) {
-              setStoredSessionStateBackup(currentSessionId, remoteState);
-              return;
-            }
-          }
-        } catch {
-          return;
-        }
-      } else {
-        setStoredSessionStateBackup(currentSessionId, state);
-      }
-
-      try {
-        await sessionApi.update(currentSessionId, {
-          name: sessionName,
-          state: JSON.stringify(state),
-        });
-      } catch {
-        return;
-      }
+      await sessionApi.update(currentSessionId, {
+        name: sessionName,
+        state: JSON.stringify(state),
+      });
 
       if (sessionName) {
         set((store) => ({
@@ -713,13 +645,12 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
   deleteSession: async (id: string) => {
     try {
       await sessionApi.delete(id);
-      removeStoredSessionStateBackup(id);
       const { currentSessionId, sessions } = get();
       if (currentSessionId === id) {
         const remaining = sessions.filter((session) => session.id !== id);
         const nextSessionId = remaining[0]?.id || null;
         set({ currentSessionId: nextSessionId });
-        setStoredSessionId(nextSessionId);
+        await setStoredSessionId(nextSessionId);
         if (nextSessionId) {
           await get().switchSession(nextSessionId);
         } else {
@@ -738,10 +669,9 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
     try {
       for (const session of sessions) {
         await sessionApi.delete(session.id);
-        removeStoredSessionStateBackup(session.id);
       }
       set({ currentSessionId: null, sessions: [] });
-      setStoredSessionId(null);
+      await setStoredSessionId(null);
       useFrameStore.getState().initDefaultGroups();
       resetWorkspaceRuntimeState();
     } catch (e) {
@@ -762,6 +692,6 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
 
   setCurrentSessionId: (id: string | null) => {
     set({ currentSessionId: id });
-    setStoredSessionId(id);
+    void setStoredSessionId(id);
   },
 }));

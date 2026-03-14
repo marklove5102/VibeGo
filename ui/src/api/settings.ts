@@ -11,5 +11,10 @@ export const settingsApi = {
       body: JSON.stringify({ key, value }),
     }),
 
+  delete: (key: string) =>
+    request<{ ok: boolean }>(`/settings/${encodeURIComponent(key)}`, {
+      method: "DELETE",
+    }),
+
   reset: () => request<{ ok: boolean }>("/settings/reset", { method: "POST" }),
 };
