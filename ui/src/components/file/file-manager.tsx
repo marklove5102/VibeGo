@@ -164,7 +164,7 @@ const FileManager: React.FC<FileManagerProps> = ({
             initialized: true,
           });
         }
-        const files: FileItem[] = res.files.map((f) => ({
+        const files: FileItem[] = (res.files ?? []).map((f) => ({
           path: f.path,
           name: f.name,
           size: f.size,

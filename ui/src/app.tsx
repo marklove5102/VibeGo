@@ -169,7 +169,7 @@ const App: React.FC = () => {
           const path = storeApi.getState().currentPath;
           try {
             const res = await fileApi.list(path);
-            const files = res.files.map((f) => ({
+            const files = (res.files ?? []).map((f) => ({
               path: f.path,
               name: f.name,
               size: f.size,
