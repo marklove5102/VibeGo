@@ -194,7 +194,10 @@
     "readOnly": "Read Only",
     "new": "New Terminal",
     "list": "Terminal List",
-    "backToTerminal": "Back to Terminal"
+    "backToTerminal": "Back to Terminal",
+    "tipsTitle": "Tips",
+    "tipScroll": "Use two fingers to scroll terminal content vertically.",
+    "tipSplit": "Open the main menu to split the terminal down or right."
   },
   "fileTree": {
     "projectRoot": "Project Root"

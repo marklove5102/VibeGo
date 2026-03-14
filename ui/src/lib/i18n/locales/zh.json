@@ -203,7 +203,10 @@
     "readOnly": "只读",
     "new": "新建终端",
     "list": "终端列表",
-    "backToTerminal": "返回终端"
+    "backToTerminal": "返回终端",
+    "tipsTitle": "Tips",
+    "tipScroll": "终端区域支持双指上下滑动滚动内容。",
+    "tipSplit": "可在主菜单中使用向下或向右分屏来拆分终端。"
   },
   "fileTree": {
     "projectRoot": "项目根目录"
