@@ -160,7 +160,9 @@
     "now": "刚刚",
     "dayShort": "天",
     "hourShort": "小时",
-    "minuteShort": "分钟"
+    "minuteShort": "分钟",
+    "noRemoteHint": "本地暂无配置远程仓库",
+    "upToDate": "与远程分支已同步"
   },
   "terminal": {
     "noActiveSession": "无活动终端会话",

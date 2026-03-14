@@ -312,75 +312,80 @@ const GitChangesView: React.FC<GitChangesViewProps> = ({
         )}
 
         {!hasChanges && safeConflicts.length === 0 && (
-          <div className="flex flex-col gap-2 p-3">
-            <div className="text-center text-ide-mute text-sm py-4">
-              {t("git.noChanges")}
+          <div className="flex flex-col items-center justify-center p-6 mt-10 gap-4">
+            <div className="flex flex-col items-center gap-2 text-center">
+              <Check className="text-green-500/50 mb-2" size={32} />
+              <span className="text-ide-text text-sm font-medium">
+                {t("git.noChanges")}
+              </span>
+              <span className="text-ide-mute text-xs max-w-[200px]">
+                {!hasRemote
+                  ? t("git.noRemoteHint")
+                  : behindCount > 0 && aheadCount > 0
+                    ? `${t("git.behind")} ${behindCount}, ${t("git.ahead")} ${aheadCount}`
+                    : behindCount > 0
+                      ? `${t("git.behind")} ${behindCount}`
+                      : aheadCount > 0
+                        ? `${t("git.ahead")} ${aheadCount}`
+                        : t("git.upToDate")}
+              </span>
             </div>
-            {!hasRemote && (
-              <button
-                onClick={onPush}
-                disabled={isLoading}
-                className="flex items-center gap-2.5 px-3 py-2 rounded border border-ide-border bg-ide-panel hover:bg-ide-panel/80 hover:border-ide-accent/50 transition-colors disabled:opacity-50 text-left group shadow-sm"
-              >
-                <CloudUpload
-                  size={14}
-                  className="text-ide-mute group-hover:text-ide-accent shrink-0 transition-colors"
-                />
-                <span className="text-xs text-ide-text group-hover:text-ide-accent font-medium transition-colors">
+
+            <div className="flex flex-wrap justify-center gap-2 mt-2">
+              {!hasRemote ? (
+                <button
+                  onClick={onPush}
+                  disabled={isLoading}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs text-ide-mute hover:text-ide-text hover:bg-ide-panel/80 border border-transparent hover:border-ide-border transition-all disabled:opacity-50"
+                  title={t("git.publish")}
+                >
+                  <CloudUpload size={14} className="text-ide-accent/70 shrink-0" />
                   {t("git.publish")}
-                </span>
-              </button>
-            )}
-            {hasRemote && behindCount > 0 && (
-              <button
-                onClick={onPull}
-                disabled={isLoading}
-                className="flex items-center gap-2.5 px-3 py-2 rounded border border-ide-border bg-ide-panel hover:bg-ide-panel/80 hover:border-orange-500/50 transition-colors disabled:opacity-50 text-left group shadow-sm"
-              >
-                <ArrowDown
-                  size={14}
-                  className="text-ide-mute group-hover:text-orange-400 shrink-0 transition-colors"
-                />
-                <span className="text-xs text-ide-text group-hover:text-orange-400 font-medium transition-colors">
-                  {t("git.pull")} ({behindCount})
-                </span>
-              </button>
-            )}
-            {hasRemote && aheadCount > 0 && (
-              <button
-                onClick={onPush}
-                disabled={isLoading}
-                className="flex items-center gap-2.5 px-3 py-2 rounded border border-ide-border bg-ide-panel hover:bg-ide-panel/80 hover:border-blue-500/50 transition-colors disabled:opacity-50 text-left group shadow-sm"
-              >
-                <ArrowUp
-                  size={14}
-                  className="text-ide-mute group-hover:text-blue-400 shrink-0 transition-colors"
-                />
-                <span className="text-xs text-ide-text group-hover:text-blue-400 font-medium transition-colors">
-                  {t("git.push")} ({aheadCount})
-                </span>
-              </button>
-            )}
-            {safeStashes.length > 0 && (
-              <button
-                onClick={() => onStashPop(safeStashes[0].index)}
-                disabled={isLoading}
-                className="flex items-center gap-2.5 px-3 py-2 rounded border border-ide-border bg-ide-panel hover:bg-ide-panel/80 hover:border-purple-500/50 transition-colors disabled:opacity-50 text-left group shadow-sm"
-              >
-                <Archive
-                  size={14}
-                  className="text-ide-mute group-hover:text-purple-400 shrink-0 transition-colors"
-                />
-                <div className="flex flex-col min-w-0 flex-1">
-                  <span className="text-xs text-ide-text group-hover:text-purple-400 font-medium transition-colors">
-                    {t("git.stashes")} ({safeStashes.length})
-                  </span>
-                  <span className="text-[10px] text-ide-mute truncate group-hover:text-ide-mute/80 transition-colors">
-                    {safeStashes[0].message}
-                  </span>
-                </div>
-              </button>
-            )}
+                </button>
+              ) : (
+                <>
+                  <button
+                    onClick={onFetch}
+                    disabled={isLoading}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs text-ide-mute hover:text-ide-text hover:bg-ide-panel/80 border border-transparent hover:border-ide-border transition-all disabled:opacity-50"
+                  >
+                    <RefreshCw size={14} className="text-ide-mute/70 shrink-0" />
+                    {t("git.fetch")}
+                  </button>
+                  {behindCount > 0 && (
+                    <button
+                      onClick={onPull}
+                      disabled={isLoading}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs text-ide-mute hover:text-ide-text hover:bg-ide-panel/80 border border-transparent hover:border-ide-border transition-all disabled:opacity-50"
+                    >
+                      <ArrowDown size={14} className="text-orange-400/70 shrink-0" />
+                      {t("git.pull")} {behindCount}
+                    </button>
+                  )}
+                  {aheadCount > 0 && (
+                    <button
+                      onClick={onPush}
+                      disabled={isLoading}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs text-ide-mute hover:text-ide-text hover:bg-ide-panel/80 border border-transparent hover:border-ide-border transition-all disabled:opacity-50"
+                    >
+                      <ArrowUp size={14} className="text-blue-400/70 shrink-0" />
+                      {t("git.push")} {aheadCount}
+                    </button>
+                  )}
+                </>
+              )}
+              {safeStashes.length > 0 && (
+                <button
+                  onClick={() => onStashPop(safeStashes[0].index)}
+                  disabled={isLoading}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs text-ide-mute hover:text-ide-text hover:bg-ide-panel/80 border border-transparent hover:border-ide-border transition-all disabled:opacity-50 max-w-[150px]"
+                  title={safeStashes[0].message}
+                >
+                  <Archive size={14} className="text-purple-400/70 shrink-0" />
+                  <span className="truncate">{t("git.stashes")} ({safeStashes.length})</span>
+                </button>
+              )}
+            </div>
           </div>
         )}
 

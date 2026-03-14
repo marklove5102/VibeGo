@@ -150,7 +150,9 @@
     "now": "now",
     "dayShort": "d",
     "hourShort": "h",
-    "minuteShort": "m"
+    "minuteShort": "m",
+    "noRemoteHint": "No remote configured",
+    "upToDate": "Up to date with remote"
   },
   "terminal": {
     "noActiveSession": "No terminal session active",
