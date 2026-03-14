@@ -3,6 +3,21 @@ import react from "@vitejs/plugin-react";
 import path from "path";
 import { defineConfig } from "vite";
 
+const proxyTarget = process.env.VG_DEV_PROXY_TARGET || "https://127.0.0.1:11984";
+const proxy = {
+  "/api": {
+    target: proxyTarget,
+    changeOrigin: true,
+    secure: false,
+    ws: true,
+  },
+  "/version": {
+    target: proxyTarget,
+    changeOrigin: true,
+    secure: false,
+  },
+};
+
 export default defineConfig({
   base: "/",
   plugins: [react(), tailwindcss()],
@@ -23,35 +38,11 @@ export default defineConfig({
   },
   server: {
     allowedHosts: true,
-    proxy: {
-      "/api": {
-        target: "https://127.0.0.1:1984",
-        changeOrigin: true,
-        secure: false,
-        ws: true,
-      },
-      "/version": {
-        target: "https://127.0.0.1:1984",
-        changeOrigin: true,
-        secure: false,
-      },
-    },
+    proxy,
   },
   preview: {
     allowedHosts: true,
     port: 4173,
-    proxy: {
-      "/api": {
-        target: "https://127.0.0.1:1984",
-        changeOrigin: true,
-        secure: false,
-        ws: true,
-      },
-      "/version": {
-        target: "https://127.0.0.1:1984",
-        changeOrigin: true,
-        secure: false,
-      },
-    },
+    proxy,
   },
 });
