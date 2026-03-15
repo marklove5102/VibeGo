@@ -5,7 +5,7 @@ import {
   type CommitFileInfo,
   type GitCommit,
   type GitDiff,
-  type GitFileStatus,
+  type GitStructuredFile,
   gitApi,
   type StashEntry,
 } from "@/api/git";
@@ -87,7 +87,7 @@ export interface GitState {
   getCommitDiff: (commitHash: string, filePath: string) => Promise<GitDiff | null>;
   addPatch: (filePath: string, patch: string) => Promise<boolean>;
 
-  applyStatusUpdate: (files: GitFileStatus[]) => void;
+  applyStatusUpdate: (files: GitStructuredFile[]) => void;
   applyBranchStatus: (bs: BranchStatusInfo) => void;
 }
 
@@ -120,14 +120,14 @@ const mapStatus = (status: string): GitFileNode["status"] => {
   }
 };
 
-const statusFilesToNodes = (files?: GitFileStatus[] | null): GitFileNode[] => {
+const statusFilesToNodes = (files?: GitStructuredFile[] | null): GitFileNode[] => {
   const map = new Map<string, GitFileNode>();
   for (const file of files ?? []) {
     if (!map.has(file.path)) {
       map.set(file.path, {
         path: file.path,
         name: file.path.split("/").pop() || file.path,
-        status: mapStatus(file.status),
+        status: mapStatus(file.changeType || file.worktreeStatus || file.indexStatus),
       });
     }
   }
