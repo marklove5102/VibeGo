@@ -72,7 +72,7 @@ func bindFlags(fs *flag.FlagSet, cfg *Config) (*bool, *bool) {
 	fs.StringVar(&cfg.TlsCert, "tls-cert", utils.GetEnv("VG_TLS_CERT", ""), "TLS certificate file path (uses self-signed if empty)")
 	fs.StringVar(&cfg.TlsKey, "tls-key", utils.GetEnv("VG_TLS_KEY", ""), "TLS private key file path (uses self-signed if empty)")
 	fs.BoolVar(&cfg.NoTLS, "no-tls", utils.GetBoolEnv("VG_NO_TLS", false), "Disable TLS and use plain HTTP")
-	fs.StringVar(&cfg.DevUI, "dev-ui", utils.GetEnv("VG_DEV_UI", ""), "Dev UI proxy target (e.g. http://localhost:5173)")
+	fs.StringVar(&cfg.DevUI, "dev-ui", utils.GetEnv("VG_DEV_UI", ""), "Dev UI proxy target (e.g. http://localhost:15173)")
 	fs.StringVar(&cfg.AsrVersion, "asr-version", utils.GetEnv("VG_ASR_VERSION", ""), "ASR asset version for cache busting")
 	fs.StringVar(&cfg.AsrWasmURL, "asr-wasm-url", utils.GetEnv("VG_ASR_WASM_URL", ""), "ASR wasm asset URL")
 	fs.StringVar(&cfg.AsrDataURL, "asr-data-url", utils.GetEnv("VG_ASR_DATA_URL", ""), "ASR data asset URL")
