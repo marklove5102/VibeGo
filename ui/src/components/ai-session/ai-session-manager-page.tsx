@@ -1,4 +1,3 @@
-import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   AlertTriangle,
   ChevronDown,
@@ -10,11 +9,13 @@ import {
   FolderSearch,
   History,
   ListChecks,
+  ListTree,
   RefreshCw,
   Search,
   Settings2,
   Trash2,
 } from "lucide-react";
+import { AnimatePresence, motion } from "motion/react";
 import React from "react";
 import { toast } from "sonner";
 import { aiSessionApi } from "@/api";
@@ -42,6 +43,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Spinner } from "@/components/ui/spinner";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { usePageTopBar } from "@/hooks/use-page-top-bar";
 import { useTranslation } from "@/lib/i18n";
@@ -71,7 +73,7 @@ function defaultConfigValue(): AISessionConfig {
       opencode: { enabled: true, paths: [] },
       openclaw: { enabled: true, paths: [] },
     },
-    autoRescanOnOpen: true,
+    autoRescanOnOpen: false,
     cacheEnabled: true,
     showParseErrors: true,
   };
@@ -109,26 +111,9 @@ function useAISessionData() {
     [requestList]
   );
 
-  const loadInitial = React.useCallback(async () => {
-    setLoading(true);
-    setError("");
-    try {
-      const config = await aiSessionApi.getConfig();
-      const next = await requestList(config.autoRescanOnOpen ? "rescan" : "list");
-      setResponse(next);
-      return next;
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Request failed";
-      setError(message);
-      throw err;
-    } finally {
-      setLoading(false);
-    }
-  }, [requestList]);
-
   React.useEffect(() => {
-    void loadInitial().catch(() => {});
-  }, [loadInitial]);
+    void load("list").catch(() => {});
+  }, [load]);
 
   return { loading, refreshing, error, response, load, setResponse };
 }
@@ -161,8 +146,19 @@ const AISessionManagerPage: React.FC = () => {
   const [checkedKeys, setCheckedKeys] = React.useState<Set<string>>(new Set());
   const [deleteTargets, setDeleteTargets] = React.useState<AISessionMeta[]>([]);
   const [deleting, setDeleting] = React.useState(false);
+  const [pullDistance, setPullDistance] = React.useState(0);
+  const [detailHeaderCollapsed, setDetailHeaderCollapsed] = React.useState(false);
+  const [detailHeaderHeight, setDetailHeaderHeight] = React.useState(0);
 
+  const detailHeaderRef = React.useRef<HTMLDivElement | null>(null);
+  const listScrollRef = React.useRef<HTMLDivElement | null>(null);
   const scrollContainerRef = React.useRef<HTMLDivElement | null>(null);
+  const detailTouchStateRef = React.useRef({ startY: 0, armed: false });
+  const pullStateRef = React.useRef<{ startY: number; pulling: boolean; triggered: boolean }>({
+    startY: 0,
+    pulling: false,
+    triggered: false,
+  });
   const [activeMessageIndex, setActiveMessageIndex] = React.useState<number | null>(null);
 
   React.useEffect(() => {
@@ -211,8 +207,10 @@ const AISessionManagerPage: React.FC = () => {
       setMessages([]);
       setDetailError("");
       setDetailSearch("");
+      setDetailHeaderCollapsed(false);
       return;
     }
+    setDetailHeaderCollapsed(false);
     setDetailLoading(true);
     setDetailError("");
     void aiSessionApi
@@ -271,6 +269,24 @@ const AISessionManagerPage: React.FC = () => {
     [messages]
   );
 
+  React.useLayoutEffect(() => {
+    if (!isMobile || view !== "detail") {
+      setDetailHeaderHeight(0);
+      return;
+    }
+    const element = detailHeaderRef.current;
+    if (!element) {
+      return;
+    }
+    const update = () => {
+      setDetailHeaderHeight(element.getBoundingClientRect().height);
+    };
+    update();
+    const observer = new ResizeObserver(() => update());
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [detailSearch, isMobile, outlineItems.length, selectedSession, view]);
+
   const providerLookup = React.useMemo(() => {
     const lookup = new Map<string, AIProviderStatus>();
     for (const item of providerStatus) {
@@ -287,13 +303,15 @@ const AISessionManagerPage: React.FC = () => {
   const allFilteredSelected =
     filteredSessions.length > 0 && filteredSessions.every((session) => checkedKeys.has(sessionKey(session)));
 
-  const virtualizer = useVirtualizer({
-    count: messages.length,
-    getScrollElement: () => scrollContainerRef.current,
-    estimateSize: () => 140,
-    overscan: 5,
-    gap: 12,
-  });
+  const pullReady = pullDistance >= 72;
+
+  const triggerRefresh = React.useCallback(async () => {
+    try {
+      await load("rescan");
+    } catch {
+      toast.error(t("plugin.aiSessionManager.loadFailed"));
+    }
+  }, [load, t]);
 
   const topBarTitle =
     isMobile && view === "detail" && selectedSession
@@ -321,9 +339,7 @@ const AISessionManagerPage: React.FC = () => {
           icon: refreshing ? <RefreshCw size={18} className="animate-spin" /> : <RefreshCw size={18} />,
           title: t("common.refresh"),
           onClick: () => {
-            void load("rescan").catch(() => {
-              toast.error(t("plugin.aiSessionManager.loadFailed"));
-            });
+            void triggerRefresh();
           },
         },
         {
@@ -334,8 +350,124 @@ const AISessionManagerPage: React.FC = () => {
         },
       ],
     },
-    [isMobile, topBarTitle, refreshing, view, selectedSession, load, t]
+    [isMobile, topBarTitle, refreshing, view, selectedSession, triggerRefresh, t]
   );
+
+  React.useEffect(() => {
+    if (!isMobile || view !== "list") {
+      setPullDistance(0);
+      pullStateRef.current = { startY: 0, pulling: false, triggered: false };
+      return;
+    }
+    const container = listScrollRef.current;
+    if (!container) {
+      return;
+    }
+    const onTouchStart = (event: TouchEvent) => {
+      if (container.scrollTop > 0 || refreshing || selectionMode) {
+        pullStateRef.current = { startY: 0, pulling: false, triggered: false };
+        return;
+      }
+      pullStateRef.current = {
+        startY: event.touches[0]?.clientY || 0,
+        pulling: true,
+        triggered: false,
+      };
+    };
+    const onTouchMove = (event: TouchEvent) => {
+      const state = pullStateRef.current;
+      if (!state.pulling || refreshing) {
+        return;
+      }
+      if (container.scrollTop > 0) {
+        state.pulling = false;
+        setPullDistance(0);
+        return;
+      }
+      const currentY = event.touches[0]?.clientY || 0;
+      const delta = currentY - state.startY;
+      if (delta <= 0) {
+        setPullDistance(0);
+        return;
+      }
+      event.preventDefault();
+      setPullDistance(Math.min(delta * 0.45, 96));
+    };
+    const finishPull = () => {
+      const shouldRefresh = pullReady && !refreshing && !pullStateRef.current.triggered;
+      pullStateRef.current = { startY: 0, pulling: false, triggered: shouldRefresh };
+      setPullDistance(0);
+      if (shouldRefresh) {
+        void triggerRefresh().finally(() => {
+          pullStateRef.current.triggered = false;
+        });
+      }
+    };
+    container.addEventListener("touchstart", onTouchStart, { passive: true });
+    container.addEventListener("touchmove", onTouchMove, { passive: false });
+    container.addEventListener("touchend", finishPull, { passive: true });
+    container.addEventListener("touchcancel", finishPull, { passive: true });
+    return () => {
+      container.removeEventListener("touchstart", onTouchStart);
+      container.removeEventListener("touchmove", onTouchMove);
+      container.removeEventListener("touchend", finishPull);
+      container.removeEventListener("touchcancel", finishPull);
+    };
+  }, [isMobile, view, refreshing, selectionMode, pullReady, triggerRefresh]);
+
+  React.useEffect(() => {
+    if (!isMobile || view !== "detail") {
+      setDetailHeaderCollapsed(false);
+      detailTouchStateRef.current = { startY: 0, armed: false };
+      return;
+    }
+    const container = scrollContainerRef.current;
+    if (!container) {
+      return;
+    }
+    const onTouchStart = (event: TouchEvent) => {
+      detailTouchStateRef.current = {
+        startY: event.touches[0]?.clientY || 0,
+        armed: container.scrollTop <= 0,
+      };
+    };
+    const onTouchMove = (event: TouchEvent) => {
+      if (!detailHeaderCollapsed) {
+        return;
+      }
+      const state = detailTouchStateRef.current;
+      const currentY = event.touches[0]?.clientY || 0;
+      const delta = currentY - state.startY;
+      if (container.scrollTop <= 0 && state.armed && delta > 24) {
+        setDetailHeaderCollapsed(false);
+        state.armed = false;
+      }
+    };
+    const onScroll = () => {
+      const top = container.scrollTop;
+      if (top <= 12) {
+        detailTouchStateRef.current.armed = true;
+      } else if (top > 72) {
+        setDetailHeaderCollapsed(true);
+        detailTouchStateRef.current.armed = false;
+      }
+    };
+    container.addEventListener("touchstart", onTouchStart, { passive: true });
+    container.addEventListener("touchmove", onTouchMove, { passive: true });
+    container.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      container.removeEventListener("touchstart", onTouchStart);
+      container.removeEventListener("touchmove", onTouchMove);
+      container.removeEventListener("scroll", onScroll);
+    };
+  }, [detailHeaderCollapsed, isMobile, view, selectedSession]);
+
+  const detailHeaderTransition = {
+    type: "spring",
+    stiffness: 240,
+    damping: 30,
+    mass: 0.92,
+  } as const;
 
   const updateProviderConfig = (providerId: AIProviderId, updater: (current: AIProviderConfig) => AIProviderConfig) => {
     setConfigDraft((current) => ({
@@ -474,7 +606,7 @@ const AISessionManagerPage: React.FC = () => {
   }, [deleteTargets, deleting]);
 
   const scrollToMessage = (index: number) => {
-    virtualizer.scrollToIndex(index, { align: "center", behavior: "smooth" });
+    document.getElementById(`ai-session-message-${index}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
     setActiveMessageIndex(index);
     setOutlineOpen(false);
     window.setTimeout(() => setActiveMessageIndex(null), 1500);
@@ -504,11 +636,23 @@ const AISessionManagerPage: React.FC = () => {
           </div>
           <div className="rounded-lg border border-ide-border bg-ide-panel px-3 py-2">
             <div className="text-ide-mute">{t("plugin.aiSessionManager.sourceMode")}</div>
-            <div className="mt-1 flex items-center gap-1.5 text-xs font-medium text-ide-text">
-              <Database size={14} className="text-ide-accent" />
-              <span>
-                {response?.fromCache ? t("plugin.aiSessionManager.cached") : t("plugin.aiSessionManager.live")}
-              </span>
+            <div className="mt-1 flex items-center justify-between gap-2 text-xs font-medium text-ide-text">
+              <div className="flex items-center gap-1.5">
+                <Database size={14} className="text-ide-accent" />
+                <span>
+                  {response?.fromCache ? t("plugin.aiSessionManager.cached") : t("plugin.aiSessionManager.live")}
+                </span>
+              </div>
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                onClick={() => void triggerRefresh()}
+                disabled={refreshing}
+                className="text-ide-mute hover:text-ide-text"
+                aria-label={t("common.refresh")}
+              >
+                {refreshing ? <Spinner className="size-3.5" /> : <RefreshCw size={12} />}
+              </Button>
             </div>
           </div>
         </div>
@@ -612,7 +756,32 @@ const AISessionManagerPage: React.FC = () => {
           </div>
         ) : null}
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      <div ref={listScrollRef} className="min-h-0 flex-1 overflow-y-auto">
+        {isMobile ? (
+          <div
+            className="overflow-hidden transition-[max-height,opacity,padding] duration-200"
+            style={{
+              maxHeight: pullDistance > 0 || refreshing ? 44 : 0,
+              opacity: pullDistance > 0 || refreshing ? 1 : 0,
+              paddingTop: pullDistance > 0 || refreshing ? 8 : 0,
+            }}
+          >
+            <div className="flex items-center justify-center gap-2 text-xs text-ide-mute">
+              {refreshing ? (
+                <Spinner className="size-3.5" />
+              ) : (
+                <RefreshCw size={12} className={cn(pullReady ? "text-ide-text" : "")} />
+              )}
+              <span>
+                {refreshing
+                  ? t("common.refresh")
+                  : pullReady
+                    ? t("plugin.aiSessionManager.releaseToRefresh")
+                    : t("plugin.aiSessionManager.pullToRefresh")}
+              </span>
+            </div>
+          </div>
+        ) : null}
         {loading ? (
           <div className="flex h-full items-center justify-center text-sm text-ide-mute">{t("common.loading")}</div>
         ) : error ? (
@@ -926,129 +1095,198 @@ const AISessionManagerPage: React.FC = () => {
       );
     }
 
-    return (
-      <div className="flex h-full min-h-0 flex-col bg-ide-bg">
-        <div className="border-b border-ide-border px-4 py-4">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <div className="text-lg font-semibold text-ide-text">
-                {selectedSession.title || selectedSession.sessionId}
-              </div>
-              <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-ide-mute">
-                <span className="rounded-md border border-ide-border bg-ide-panel px-2 py-0.5">
-                  {providerLabels[selectedSession.providerId as AIProviderId] || selectedSession.providerId}
+    const detailHeaderBody = (
+      <>
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <div className={cn("font-semibold text-ide-text", isMobile ? "text-base leading-7" : "text-lg")}>
+              {selectedSession.title || selectedSession.sessionId}
+            </div>
+            <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-ide-mute">
+              <span className="rounded-md border border-ide-border bg-ide-panel px-2 py-0.5">
+                {providerLabels[selectedSession.providerId as AIProviderId] || selectedSession.providerId}
+              </span>
+              {selectedSession.projectDir ? (
+                <span className="max-w-full truncate rounded-md border border-ide-border bg-ide-panel px-2 py-0.5">
+                  {selectedSession.projectDir}
                 </span>
-                {selectedSession.projectDir ? (
-                  <span className="rounded-md border border-ide-border bg-ide-panel px-2 py-0.5">
-                    {selectedSession.projectDir}
-                  </span>
-                ) : null}
-                <span className="inline-flex items-center gap-1">
-                  <Clock3 size={12} />
-                  {formatDateTime(selectedSession.lastActiveAt || selectedSession.createdAt, locale)}
-                </span>
-              </div>
+              ) : null}
+              <span className="inline-flex items-center gap-1">
+                <Clock3 size={12} />
+                {formatDateTime(selectedSession.lastActiveAt || selectedSession.createdAt, locale)}
+              </span>
             </div>
-            {isMobile ? (
-              <button
-                type="button"
-                onClick={() => setOutlineOpen(true)}
-                className="rounded-md border border-ide-border bg-ide-panel px-3 py-1.5 text-xs text-ide-text transition-colors hover:bg-ide-bg"
-              >
-                {t("plugin.aiSessionManager.outline")}
-              </button>
-            ) : null}
           </div>
-          <div className="mt-4 flex flex-wrap items-center gap-2">
-            {selectedSession.resumeCommand ? (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() =>
-                  void copyText(selectedSession.resumeCommand || "", "plugin.aiSessionManager.resumeCopied")
-                }
-              >
-                <Copy size={14} />
-                {t("plugin.aiSessionManager.copyResumeCommand")}
-              </Button>
-            ) : null}
-            {selectedSession.projectDir ? (
-              <Button variant="outline" size="sm" onClick={openProjectDir}>
-                <FolderOpen size={14} />
-                {t("plugin.aiSessionManager.openProject")}
-              </Button>
-            ) : null}
-            {selectedSession.projectDir ? (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => void copyText(selectedSession.projectDir || "", "plugin.aiSessionManager.projectCopied")}
-              >
-                <Copy size={14} />
-                {t("plugin.aiSessionManager.copyProjectPath")}
-              </Button>
-            ) : null}
-            <Button variant="destructive" size="sm" onClick={() => void requestDelete([selectedSession])}>
-              <Trash2 size={14} />
-              {t("plugin.aiSessionManager.deleteCurrent")}
-            </Button>
-          </div>
-          {selectedSession.parseError ? (
-            <div className="mt-3 rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-400">
-              {selectedSession.parseError}
-            </div>
-          ) : null}
-          <div className="relative mt-4">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ide-mute" />
-            <input
-              value={detailSearch}
-              onChange={(event) => setDetailSearch(event.target.value)}
-              placeholder={t("plugin.aiSessionManager.searchInSession")}
-              className="h-9 w-full rounded-md border border-ide-border bg-ide-panel pl-9 pr-3 text-sm text-ide-text placeholder:text-ide-mute outline-none transition-colors focus:border-ide-accent"
-            />
-          </div>
-          {detailSearch.trim() ? (
-            <div className="mt-2 text-xs text-ide-mute">
-              {formatCount(t("plugin.aiSessionManager.matchedMessages"), matchedMessageCount)}
-            </div>
-          ) : null}
         </div>
+        <div className={cn("mt-4 gap-2", isMobile ? "grid grid-cols-2" : "flex flex-wrap items-center")}>
+          {isMobile && outlineItems.length > 0 ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setOutlineOpen(true)}
+              className="h-9 min-w-0 justify-start gap-1.5 rounded-lg border-ide-border bg-ide-panel px-3 text-xs text-ide-text shadow-none hover:bg-ide-bg"
+            >
+              <ListTree size={13} />
+              <span className="truncate">{t("plugin.aiSessionManager.outline")}</span>
+            </Button>
+          ) : null}
+          {selectedSession.resumeCommand ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void copyText(selectedSession.resumeCommand || "", "plugin.aiSessionManager.resumeCopied")}
+              className="h-9 min-w-0 justify-start gap-1.5 rounded-lg border-ide-border bg-ide-panel px-3 text-xs text-ide-text shadow-none hover:bg-ide-bg"
+            >
+              <Copy size={13} />
+              <span className="truncate">{t("plugin.aiSessionManager.copyResumeCommand")}</span>
+            </Button>
+          ) : null}
+          {selectedSession.projectDir ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={openProjectDir}
+              className="h-9 min-w-0 justify-start gap-1.5 rounded-lg border-ide-border bg-ide-panel px-3 text-xs text-ide-text shadow-none hover:bg-ide-bg"
+            >
+              <FolderOpen size={13} />
+              <span className="truncate">{t("plugin.aiSessionManager.openProject")}</span>
+            </Button>
+          ) : null}
+          {selectedSession.projectDir ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void copyText(selectedSession.projectDir || "", "plugin.aiSessionManager.projectCopied")}
+              className="h-9 min-w-0 justify-start gap-1.5 rounded-lg border-ide-border bg-ide-panel px-3 text-xs text-ide-text shadow-none hover:bg-ide-bg"
+            >
+              <Copy size={13} />
+              <span className="truncate">{t("plugin.aiSessionManager.copyProjectPath")}</span>
+            </Button>
+          ) : null}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => void requestDelete([selectedSession])}
+            className={cn(
+              "h-9 min-w-0 justify-start gap-1.5 rounded-lg border-red-500/30 bg-red-500/10 px-3 text-xs text-red-400 shadow-none hover:bg-red-500/15 hover:text-red-300",
+              isMobile ? "col-span-2" : ""
+            )}
+          >
+            <Trash2 size={13} />
+            <span className="truncate">{t("plugin.aiSessionManager.deleteCurrent")}</span>
+          </Button>
+        </div>
+        {selectedSession.parseError ? (
+          <div className="mt-3 rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-400">
+            {selectedSession.parseError}
+          </div>
+        ) : null}
+        <div className="relative mt-4">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ide-mute" />
+          <input
+            value={detailSearch}
+            onChange={(event) => setDetailSearch(event.target.value)}
+            placeholder={t("plugin.aiSessionManager.searchInSession")}
+            className="h-9 w-full rounded-md border border-ide-border bg-ide-panel pl-9 pr-3 text-sm text-ide-text placeholder:text-ide-mute outline-none transition-colors focus:border-ide-accent"
+          />
+        </div>
+        {detailSearch.trim() ? (
+          <div className="mt-2 text-xs text-ide-mute">
+            {formatCount(t("plugin.aiSessionManager.matchedMessages"), matchedMessageCount)}
+          </div>
+        ) : null}
+      </>
+    );
+
+    return (
+      <div className="relative flex h-full min-h-0 flex-col bg-ide-bg">
+        {isMobile ? (
+          <>
+            <AnimatePresence>
+              {detailHeaderCollapsed ? (
+                <motion.div
+                  initial={{ opacity: 0, y: -6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -6 }}
+                  transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+                  className="pointer-events-none absolute left-0 right-0 top-0 z-20 flex justify-center"
+                >
+                  <button
+                    type="button"
+                    onClick={() => setDetailHeaderCollapsed(false)}
+                    className="pointer-events-auto inline-flex h-5 min-w-10 items-center justify-center rounded-b-lg border-x border-b border-ide-border bg-ide-panel/92 px-2.5 text-ide-mute shadow-[0_4px_10px_rgba(0,0,0,0.08)] backdrop-blur transition-colors hover:bg-ide-bg hover:text-ide-text"
+                    aria-label={t("plugin.aiSessionManager.expandHeader")}
+                    title={t("plugin.aiSessionManager.expandHeader")}
+                  >
+                    <svg width="10" height="6" viewBox="0 0 10 6" fill="none" aria-hidden="true">
+                      <path
+                        d="M1 1L5 5L9 1"
+                        stroke="currentColor"
+                        strokeWidth="1.4"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                  </button>
+                </motion.div>
+              ) : null}
+            </AnimatePresence>
+            <motion.div
+              ref={detailHeaderRef}
+              initial={false}
+              animate={{
+                y: detailHeaderCollapsed ? -(detailHeaderHeight + 12) : 0,
+                opacity: detailHeaderCollapsed ? 0 : 1,
+              }}
+              transition={detailHeaderTransition}
+              style={{ pointerEvents: detailHeaderCollapsed ? "none" : "auto" }}
+              className="absolute left-0 right-0 top-0 z-10 border-b border-ide-border bg-ide-bg px-3 py-3"
+            >
+              {detailHeaderBody}
+            </motion.div>
+          </>
+        ) : (
+          <div ref={detailHeaderRef} className="border-b border-ide-border px-4 py-4">
+            {detailHeaderBody}
+          </div>
+        )}
         <div
           className={cn(
             "grid min-h-0 flex-1 overflow-hidden",
             outlineItems.length > 0 ? "xl:grid-cols-[minmax(0,1fr)_240px]" : ""
           )}
         >
-          <div ref={scrollContainerRef} className="min-h-0 overflow-y-auto px-4 py-4">
-            {detailLoading ? (
-              <div className="flex h-full items-center justify-center text-sm text-ide-mute">{t("common.loading")}</div>
-            ) : detailError ? (
-              <div className="rounded-md border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-400">
-                {detailError}
-              </div>
-            ) : messages.length === 0 ? (
-              <div className="flex h-full items-center justify-center text-sm text-ide-mute">
-                {t("plugin.aiSessionManager.emptyMessages")}
-              </div>
-            ) : (
-              <div style={{ height: virtualizer.getTotalSize(), position: "relative" }}>
-                {virtualizer.getVirtualItems().map((item) => {
-                  const message = messages[item.index];
-                  return (
-                    <div
-                      key={item.key}
-                      id={`ai-session-message-${item.index}`}
-                      ref={virtualizer.measureElement}
-                      style={{
-                        position: "absolute",
-                        top: 0,
-                        left: 0,
-                        width: "100%",
-                        transform: `translateY(${item.start}px)`,
-                      }}
-                    >
+          <div className={cn("min-h-0 flex-1 min-w-0", !isMobile && outlineItems.length > 0 ? "min-w-0" : "")}>
+            <motion.div
+              ref={scrollContainerRef}
+              initial={false}
+              animate={{
+                paddingTop: isMobile ? (detailHeaderCollapsed ? 28 : Math.max(detailHeaderHeight + 12, 12)) : 16,
+              }}
+              transition={detailHeaderTransition}
+              className={cn(
+                "ai-session-scrollbar min-h-0 h-full max-w-full overflow-y-auto",
+                isMobile ? "px-3 pb-3" : "px-4 py-4"
+              )}
+            >
+              {detailLoading ? (
+                <div className="flex h-full items-center justify-center text-sm text-ide-mute">
+                  {t("common.loading")}
+                </div>
+              ) : detailError ? (
+                <div className="rounded-md border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-400">
+                  {detailError}
+                </div>
+              ) : messages.length === 0 ? (
+                <div className="flex h-full items-center justify-center text-sm text-ide-mute">
+                  {t("plugin.aiSessionManager.emptyMessages")}
+                </div>
+              ) : (
+                <div className="max-w-full space-y-3">
+                  {messages.map((message, index) => (
+                    <div key={`${message.role}-${index}`} id={`ai-session-message-${index}`} className="max-w-full">
                       <SessionMessageItem
-                        active={activeMessageIndex === item.index}
+                        active={activeMessageIndex === index}
                         locale={locale}
                         message={message}
                         query={detailSearch}
@@ -1056,17 +1294,17 @@ const AISessionManagerPage: React.FC = () => {
                         onCopy={(content) => void copyText(content, "plugin.aiSessionManager.messageCopied")}
                       />
                     </div>
-                  );
-                })}
-              </div>
-            )}
+                  ))}
+                </div>
+              )}
+            </motion.div>
           </div>
           {!isMobile && outlineItems.length > 0 ? (
             <SessionOutline compact={false} items={outlineItems} t={t} onSelect={scrollToMessage} />
           ) : null}
         </div>
         <Sheet open={outlineOpen} onOpenChange={setOutlineOpen}>
-          <SheetContent side="bottom" className="max-h-[70vh] rounded-t-xl border-ide-border bg-ide-bg p-0">
+          <SheetContent side="bottom" className="max-h-[75vh] rounded-t-2xl border-ide-border bg-ide-bg p-0">
             <SheetHeader className="border-b border-ide-border">
               <SheetTitle>{t("plugin.aiSessionManager.outline")}</SheetTitle>
             </SheetHeader>

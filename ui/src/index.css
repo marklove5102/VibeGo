@@ -345,6 +345,32 @@
     scrollbar-color: var(--ide-border) transparent;
   }
 
+  .ai-session-scrollbar::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  .ai-session-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .ai-session-scrollbar::-webkit-scrollbar-thumb {
+    background: color-mix(in srgb, var(--ide-border) 82%, transparent);
+    border-radius: 9999px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+
+  .ai-session-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: color-mix(in srgb, var(--ide-mute) 72%, transparent);
+    background-clip: padding-box;
+  }
+
+  .ai-session-scrollbar {
+    scrollbar-width: auto;
+    scrollbar-color: color-mix(in srgb, var(--ide-border) 82%, transparent) transparent;
+  }
+
   .no-scrollbar::-webkit-scrollbar {
     display: none;
   }

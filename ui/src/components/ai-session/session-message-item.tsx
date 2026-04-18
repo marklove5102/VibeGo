@@ -33,25 +33,29 @@ const SessionMessageItem: React.FC<SessionMessageItemProps> = ({ active, locale,
 
   return (
     <div
-      className={cn("rounded-md border px-3 py-3", roleTone(message.role), active ? "ring-2 ring-ide-accent/40" : "")}
+      className={cn(
+        "max-w-full overflow-hidden rounded-md border px-3 py-3",
+        roleTone(message.role),
+        active ? "ring-2 ring-ide-accent/40" : ""
+      )}
     >
-      <div className="mb-2 flex items-center justify-between gap-2 text-xs">
+      <div className="mb-2 flex min-w-0 items-center justify-between gap-2 text-xs">
         <span
           className={cn(
-            "inline-flex rounded-md border px-1.5 py-0.5 text-[11px] font-medium",
+            "inline-flex min-w-0 shrink rounded-md border px-1.5 py-0.5 text-[11px] font-medium",
             roleLabelTone(message.role)
           )}
         >
           {roleLabel(message.role, t)}
         </span>
-        <div className="flex items-center gap-1">
-          <span className="text-ide-mute">{formatDateTime(message.ts, locale)}</span>
+        <div className="flex shrink-0 items-center gap-1">
+          <span className="max-w-[40vw] truncate text-ide-mute">{formatDateTime(message.ts, locale)}</span>
           <Button variant="ghost" size="icon-xs" onClick={() => onCopy(message.content)}>
             <Copy size={12} />
           </Button>
         </div>
       </div>
-      <div className="whitespace-pre-wrap break-words text-sm leading-6 text-ide-text">
+      <div className="max-w-full overflow-hidden whitespace-pre-wrap break-words text-sm leading-6 text-ide-text">
         {renderHighlightedText(displayContent, query)}
       </div>
       {isLong && !hasSearchMatch ? (
