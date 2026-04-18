@@ -20,6 +20,9 @@ import (
 
 var osStderr io.Writer = os.Stderr
 var osStdout io.Writer = os.Stdout
+var installBinaryFunc = installBinary
+var newServiceFunc = newService
+var serviceConfigExistsFunc = serviceConfigExists
 
 const ServiceName = "vibego"
 const ServiceDescription = "VibeGo - Vibe Anywhere"
@@ -170,20 +173,15 @@ func handleService(args []string, runner Runner) {
 
 func runServiceCommand(cmd string, userService bool, extraArgs []string) error {
 	binPath := targetBinPath(userService)
-	if cmd == "install" {
-		if err := installBinary(binPath); err != nil {
-			return fmt.Errorf("install binary: %w", err)
-		}
-	}
-
-	svc, err := newService(userService, binPath, append([]string{"service", "run"}, extraArgs...), nil)
+	args := append([]string{"service", "run"}, extraArgs...)
+	svc, err := newServiceFunc(userService, binPath, args, nil)
 	if err != nil {
 		return err
 	}
 
 	switch cmd {
 	case "install":
-		if err := svc.Install(); err != nil {
+		if err := reinstallService(svc, binPath); err != nil {
 			return serviceError(cmd, err)
 		}
 		fmt.Printf("Service installed (%s): %s\n", scopeName(userService), binPath)
@@ -215,6 +213,134 @@ func runServiceCommand(cmd string, userService bool, extraArgs []string) error {
 		return fmt.Errorf("unknown service command: %s", cmd)
 	}
 	return nil
+}
+
+func reinstallService(svc kservice.Service, binPath string) error {
+	status, installed, err := serviceInstallState(svc)
+	if err != nil {
+		return err
+	}
+
+	wasRunning := installed && status == kservice.StatusRunning
+	if !installed || runtime.GOOS == "windows" {
+		if installed {
+			if err := stopInstalledService(svc, status); err != nil {
+				return err
+			}
+			if err := uninstallInstalledService(svc); err != nil {
+				return err
+			}
+		}
+		if err := installBinaryFunc(binPath); err != nil {
+			return fmt.Errorf("install binary: %w", err)
+		}
+		if err := svc.Install(); err != nil {
+			return err
+		}
+		if wasRunning {
+			if err := svc.Start(); err != nil {
+				return err
+			}
+			fmt.Println("Service restarted")
+		}
+		return nil
+	}
+
+	if err := installBinaryFunc(binPath); err != nil {
+		return fmt.Errorf("install binary: %w", err)
+	}
+	if installed {
+		if err := stopInstalledService(svc, status); err != nil {
+			return err
+		}
+		if err := uninstallInstalledService(svc); err != nil {
+			return err
+		}
+	}
+	if err := svc.Install(); err != nil {
+		return err
+	}
+	if wasRunning {
+		if err := svc.Start(); err != nil {
+			return err
+		}
+		fmt.Println("Service restarted")
+	}
+	return nil
+}
+
+func serviceInstallState(svc kservice.Service) (kservice.Status, bool, error) {
+	status, err := svc.Status()
+	if err == nil {
+		switch status {
+		case kservice.StatusRunning, kservice.StatusStopped:
+			return status, true, nil
+		default:
+			return status, false, nil
+		}
+	}
+	if errors.Is(err, kservice.ErrNotInstalled) || isServiceMissingError(err) {
+		return kservice.StatusUnknown, false, nil
+	}
+	if status == kservice.StatusUnknown && serviceConfigExistsFunc() {
+		return kservice.StatusStopped, true, nil
+	}
+	return status, false, err
+}
+
+func stopInstalledService(svc kservice.Service, status kservice.Status) error {
+	if status != kservice.StatusRunning {
+		return nil
+	}
+	if err := svc.Stop(); err != nil && !errors.Is(err, kservice.ErrNotInstalled) && !isServiceMissingError(err) {
+		return err
+	}
+	return nil
+}
+
+func uninstallInstalledService(svc kservice.Service) error {
+	if err := svc.Uninstall(); err != nil && !errors.Is(err, kservice.ErrNotInstalled) && !isServiceMissingError(err) {
+		return err
+	}
+	return nil
+}
+
+func isServiceMissingError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "not installed") ||
+		strings.Contains(msg, "does not exist") ||
+		strings.Contains(msg, "not found") ||
+		strings.Contains(msg, "failed to open service")
+}
+
+func serviceConfigExists() bool {
+	switch runtime.GOOS {
+	case "linux":
+		path := filepath.Join("/etc/systemd/system", ServiceName+".service")
+		if _, err := os.Stat(path); err == nil {
+			return true
+		}
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return false
+		}
+		_, err = os.Stat(filepath.Join(home, ".config", "systemd", "user", ServiceName+".service"))
+		return err == nil
+	case "darwin":
+		home, err := os.UserHomeDir()
+		if err == nil {
+			if _, err := os.Stat(filepath.Join(home, "Library", "LaunchAgents", ServiceName+".plist")); err == nil {
+				return true
+			}
+		}
+		_, err = os.Stat(filepath.Join("/Library/LaunchDaemons", ServiceName+".plist"))
+		return err == nil
+	default:
+		return false
+	}
 }
 
 func serviceError(cmd string, err error) error {

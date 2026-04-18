@@ -3,6 +3,7 @@ package svcctl
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"runtime"
 	"strings"
 	"testing"
@@ -185,7 +186,7 @@ func TestPrintServiceStatus(t *testing.T) {
 			var buf bytes.Buffer
 			osStdout = &buf
 
-			err := printServiceStatus(fakeService{status: tt.status, err: tt.err})
+			err := printServiceStatus(&fakeService{status: tt.status, err: tt.err})
 			if tt.wantError && err == nil {
 				t.Fatalf("expected error")
 			}
@@ -199,12 +200,219 @@ func TestPrintServiceStatus(t *testing.T) {
 	}
 }
 
+func TestRunServiceCommandInstallFresh(t *testing.T) {
+	restore := stubServiceLifecycle(t, []fakeServiceStatusResult{{status: kservice.StatusUnknown, err: kservice.ErrNotInstalled}})
+	defer restore()
+
+	var installBinaryCalls []string
+	installBinaryFunc = func(dst string) error {
+		installBinaryCalls = append(installBinaryCalls, dst)
+		return nil
+	}
+
+	if err := runServiceCommand("install", true, []string{"-port", "8080"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(installBinaryCalls) != 1 {
+		t.Fatalf("expected install binary once, got %d", len(installBinaryCalls))
+	}
+	svc := lastFakeService(t)
+	if svc.installCalls != 1 {
+		t.Fatalf("expected install once, got %d", svc.installCalls)
+	}
+	if svc.uninstallCalls != 0 {
+		t.Fatalf("expected no uninstall, got %d", svc.uninstallCalls)
+	}
+	if svc.startCalls != 0 {
+		t.Fatalf("expected no start, got %d", svc.startCalls)
+	}
+	if svc.stopCalls != 0 {
+		t.Fatalf("expected no stop, got %d", svc.stopCalls)
+	}
+}
+
+func TestRunServiceCommandInstallReinstallsRunningService(t *testing.T) {
+	restore := stubServiceLifecycle(t, []fakeServiceStatusResult{{status: kservice.StatusRunning}})
+	defer restore()
+
+	var installBinaryCalls []string
+	installBinaryFunc = func(dst string) error {
+		installBinaryCalls = append(installBinaryCalls, dst)
+		return nil
+	}
+
+	if err := runServiceCommand("install", false, []string{"-port", "8080"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(installBinaryCalls) != 1 {
+		t.Fatalf("expected install binary once, got %d", len(installBinaryCalls))
+	}
+	svc := lastFakeService(t)
+	if svc.stopCalls != 1 {
+		t.Fatalf("expected stop once, got %d", svc.stopCalls)
+	}
+	if svc.uninstallCalls != 1 {
+		t.Fatalf("expected uninstall once, got %d", svc.uninstallCalls)
+	}
+	if svc.installCalls != 1 {
+		t.Fatalf("expected install once, got %d", svc.installCalls)
+	}
+	if svc.startCalls != 1 {
+		t.Fatalf("expected start once, got %d", svc.startCalls)
+	}
+}
+
+func TestRunServiceCommandInstallReinstallsStoppedService(t *testing.T) {
+	restore := stubServiceLifecycle(t, []fakeServiceStatusResult{{status: kservice.StatusStopped}})
+	defer restore()
+
+	installBinaryFunc = func(string) error { return nil }
+
+	if err := runServiceCommand("install", false, nil); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	svc := lastFakeService(t)
+	if svc.stopCalls != 0 {
+		t.Fatalf("expected no stop, got %d", svc.stopCalls)
+	}
+	if svc.uninstallCalls != 1 {
+		t.Fatalf("expected uninstall once, got %d", svc.uninstallCalls)
+	}
+	if svc.installCalls != 1 {
+		t.Fatalf("expected install once, got %d", svc.installCalls)
+	}
+	if svc.startCalls != 0 {
+		t.Fatalf("expected no start, got %d", svc.startCalls)
+	}
+}
+
+func TestRunServiceCommandInstallStatusUnknownWithConfigReinstalls(t *testing.T) {
+	restore := stubServiceLifecycle(t, []fakeServiceStatusResult{{status: kservice.StatusUnknown, err: errors.New("service in failed state")}})
+	defer restore()
+
+	serviceConfigExistsFunc = func() bool { return true }
+	installBinaryFunc = func(string) error { return nil }
+
+	if err := runServiceCommand("install", false, nil); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	svc := lastFakeService(t)
+	if svc.uninstallCalls != 1 {
+		t.Fatalf("expected uninstall once, got %d", svc.uninstallCalls)
+	}
+	if svc.installCalls != 1 {
+		t.Fatalf("expected install once, got %d", svc.installCalls)
+	}
+}
+
+func TestRunServiceCommandInstallStatusUnknownWithoutConfigFails(t *testing.T) {
+	restore := stubServiceLifecycle(t, []fakeServiceStatusResult{{status: kservice.StatusUnknown, err: errors.New("boom")}})
+	defer restore()
+
+	serviceConfigExistsFunc = func() bool { return false }
+	installBinaryFunc = func(string) error { return nil }
+
+	err := runServiceCommand("install", false, nil)
+	if err == nil || !strings.Contains(err.Error(), "boom") {
+		t.Fatalf("expected boom error, got %v", err)
+	}
+}
+
 type fakeService struct {
 	kservice.Service
+	statuses       []fakeServiceStatusResult
+	status         kservice.Status
+	err            error
+	installCalls   int
+	uninstallCalls int
+	startCalls     int
+	stopCalls      int
+}
+
+func (s fakeService) Status() (kservice.Status, error) {
+	if len(s.statuses) == 0 {
+		return s.status, s.err
+	}
+	result := s.statuses[0]
+	s.statuses = s.statuses[1:]
+	s.status = result.status
+	s.err = result.err
+	return result.status, result.err
+}
+
+func (s *fakeService) Install() error {
+	s.installCalls++
+	return nil
+}
+
+func (s *fakeService) Uninstall() error {
+	s.uninstallCalls++
+	return nil
+}
+
+func (s *fakeService) Start() error {
+	s.startCalls++
+	return nil
+}
+
+func (s *fakeService) Stop() error {
+	s.stopCalls++
+	return nil
+}
+
+type fakeServiceStatusResult struct {
 	status kservice.Status
 	err    error
 }
 
-func (s fakeService) Status() (kservice.Status, error) {
-	return s.status, s.err
+var fakeServices []*fakeService
+
+func stubServiceLifecycle(t *testing.T, statuses []fakeServiceStatusResult) func() {
+	t.Helper()
+
+	prevInstallBinary := installBinaryFunc
+	prevNewService := newServiceFunc
+	prevConfigExists := serviceConfigExistsFunc
+	fakeServices = nil
+
+	newServiceFunc = func(bool, string, []string, Runner) (kservice.Service, error) {
+		svc := &fakeService{statuses: append([]fakeServiceStatusResult(nil), statuses...)}
+		fakeServices = append(fakeServices, svc)
+		return svc, nil
+	}
+
+	return func() {
+		installBinaryFunc = prevInstallBinary
+		newServiceFunc = prevNewService
+		serviceConfigExistsFunc = prevConfigExists
+		fakeServices = nil
+	}
+}
+
+func lastFakeService(t *testing.T) *fakeService {
+	t.Helper()
+	if len(fakeServices) == 0 {
+		t.Fatal("expected fake service")
+	}
+	return fakeServices[len(fakeServices)-1]
+}
+
+func (s *fakeService) Logger(chan<- error) (kservice.Logger, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+
+func (s *fakeService) SystemLogger(chan<- error) (kservice.Logger, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+
+func (s *fakeService) String() string {
+	return ServiceName
+}
+
+func (s *fakeService) Platform() string {
+	return runtime.GOOS
 }
