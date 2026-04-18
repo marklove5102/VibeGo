@@ -1,4 +1,4 @@
-export type SettingType = "select" | "toggle" | "text" | "number";
+export type SettingType = "select" | "toggle" | "text" | "number" | "action";
 
 export interface SettingOption {
   value: string;
@@ -159,6 +159,14 @@ export const SETTINGS_SCHEMA: SettingSchema[] = [
     labelKey: "settings.keyboardSound.label",
     descriptionKey: "settings.keyboardSound.description",
     defaultValue: "true",
+  },
+  {
+    key: "speechAssets",
+    type: "action",
+    category: "keyboard",
+    labelKey: "settings.speechAssets.label",
+    descriptionKey: "settings.speechAssets.description",
+    defaultValue: "",
   },
 ];
 

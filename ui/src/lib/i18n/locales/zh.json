@@ -310,6 +310,17 @@
       "label": "按键声音",
       "description": "按下虚拟键盘按键时播放仿 iOS 键盘按键音"
     },
+    "speechAssets": {
+      "label": "语音识别资源",
+      "description": "首次使用语音识别前，请先在这里下载离线语音识别资源",
+      "button": "下载资源",
+      "downloading": "正在下载语音识别资源",
+      "downloaded": "语音识别资源已下载",
+      "downloadFailed": "语音识别资源下载失败",
+      "missingTitle": "语音识别资源未下载",
+      "missingDescription": "请点击打开设置页的键盘设置页面，在那里下载语音识别资源。",
+      "openSettings": "打开设置"
+    },
     "option": {
       "light": "浅色",
       "dark": "深色",

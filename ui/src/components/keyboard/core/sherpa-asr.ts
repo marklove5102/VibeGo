@@ -1,5 +1,5 @@
 import { asrApi } from "@/api/asr";
-import { fetchBinaryAsset } from "./sherpa-asset";
+import { fetchBinaryAsset, hasBinaryAsset } from "./sherpa-asset";
 
 export type SherpaStatus = "idle" | "loading" | "recording" | "recognizing" | "error";
 export type SherpaResultCallback = (text: string) => void;
@@ -75,6 +75,20 @@ async function ensureAssetInfo(): Promise<void> {
   }
 }
 
+export async function hasRequiredSpeechAssets(): Promise<boolean> {
+  await ensureAssetInfo();
+  const [hasWasm, hasData] = await Promise.all([
+    hasBinaryAsset(sherpaVersion, "speech-engine"),
+    hasBinaryAsset(sherpaVersion, "speech-model"),
+  ]);
+  return hasWasm && hasData;
+}
+
+export async function preloadSpeechAssets(onStatus?: (status: SherpaStatus, progress?: string) => void): Promise<void> {
+  await ensureAssetInfo();
+  await ensureBinaryAssets(onStatus);
+}
+
 function assignGlobals(code: string) {
   const script = document.createElement("script");
   script.textContent = code;
@@ -86,7 +100,7 @@ async function ensureBinaryAssets(
   onStatus?: (status: SherpaStatus, progress?: string) => void
 ): Promise<{ wasmBinary: ArrayBuffer; dataPackage: ArrayBuffer }> {
   if (binaryAssetsPromise) return binaryAssetsPromise;
-  
+
   binaryAssetsPromise = (async () => {
     const wasmBinary = await fetchBinaryAsset(sherpaWasmUrl, sherpaVersion, "speech-engine", onStatus);
     const dataPackage = await fetchBinaryAsset(sherpaDataUrl, sherpaVersion, "speech-model", onStatus);

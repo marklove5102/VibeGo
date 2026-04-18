@@ -1,6 +1,7 @@
 import {
   AlignLeft,
   Bell,
+  Download,
   Eye,
   EyeOff,
   Grid,
@@ -14,7 +15,9 @@ import {
   WrapText,
   X,
 } from "lucide-react";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
+import { preloadSpeechAssets } from "@/components/keyboard/core/sherpa-asr";
 import { useFrameController } from "@/framework/frame/controller";
 import { type Locale, useTranslation } from "@/lib/i18n";
 import { getSettingsByCategory, SETTING_CATEGORIES, type SettingSchema, useSettingsStore } from "@/lib/settings";
@@ -47,6 +50,8 @@ const SettingItem: React.FC<{
         return <Vibrate size={18} />;
       case "keyboardSound":
         return <Volume2 size={18} />;
+      case "speechAssets":
+        return <Download size={18} />;
       default:
         return <Settings size={18} />;
     }
@@ -155,59 +160,115 @@ const SettingItem: React.FC<{
     );
   }
 
+  if (schema.type === "action") {
+    return (
+      <div className="p-4 bg-ide-bg rounded-lg border border-ide-border">
+        <div className="flex items-center gap-3 mb-3">
+          <div className="text-ide-mute">{getIcon()}</div>
+          <div>
+            <div className="text-sm font-medium text-ide-text">{t(schema.labelKey)}</div>
+            {schema.descriptionKey && <div className="text-xs text-ide-mute">{t(schema.descriptionKey)}</div>}
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={() => onChange("run")}
+          className="inline-flex items-center gap-2 px-3 py-1.5 text-xs border rounded-md transition-all bg-ide-panel text-ide-text border-ide-border hover:border-ide-accent"
+        >
+          <Download size={14} />
+          {t("settings.speechAssets.button")}
+        </button>
+      </div>
+    );
+  }
+
   return null;
 };
 
 const SettingsPage: React.FC = () => {
-  const { settings, init, set, loading } = useSettingsStore();
+  const settings = useSettingsStore((s) => s.settings);
+  const loading = useSettingsStore((s) => s.loading);
+  const initSettings = useSettingsStore((s) => s.init);
+  const updateSetting = useSettingsStore((s) => s.set);
   const locale = (settings.locale || "zh") as Locale;
   const t = useTranslation(locale);
   const { setTopBarConfig } = useFrameController();
   const removeGroup = useFrameStore((s) => s.removeGroup);
+  const settingsGroup = useFrameStore((s) => s.groups.find((group) => group.type === "settings"));
+  const setSettingsActiveCategory = useFrameStore((s) => s.setSettingsActiveCategory);
 
-  const [activeTab, setActiveTab] = useState(SETTING_CATEGORIES[0].key);
+  const [downloadingSpeechAssets, setDownloadingSpeechAssets] = useState(false);
+  const activeTab = settingsGroup?.activeCategory || SETTING_CATEGORIES[0].key;
 
-  const handleSettingChange = (key: string, value: string) => {
+  const handleSettingChange = async (key: string, value: string) => {
+    if (key === "speechAssets") {
+      if (downloadingSpeechAssets) return;
+      setDownloadingSpeechAssets(true);
+      toast.loading(t("settings.speechAssets.downloading"), { id: "speech-assets-download" });
+      try {
+        await preloadSpeechAssets((status, progress) => {
+          if (status === "loading") {
+            toast.loading(progress || t("settings.speechAssets.downloading"), { id: "speech-assets-download" });
+          }
+        });
+        toast.success(t("settings.speechAssets.downloaded"), { id: "speech-assets-download" });
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : t("settings.speechAssets.downloadFailed"), {
+          id: "speech-assets-download",
+        });
+      } finally {
+        setDownloadingSpeechAssets(false);
+      }
+      return;
+    }
     if (key === "terminalDesktopNotifications" && value === "true") {
       void requestTerminalNotificationPermission();
     }
-    void set(key, value);
+    void updateSetting(key, value);
   };
 
   useEffect(() => {
-    init();
-  }, [init]);
+    void initSettings();
+  }, [initSettings]);
+
+  const topBarCenterContent = useMemo(
+    () => (
+      <div className="flex items-center gap-2 overflow-x-auto custom-scrollbar touch-pan-x h-full">
+        {SETTING_CATEGORIES.map((cat) => (
+          <div
+            key={cat.key}
+            onClick={() => setSettingsActiveCategory(cat.key)}
+            className={`shrink-0 px-2 h-7 rounded-md flex items-center gap-1 text-xs border transition-all cursor-pointer ${
+              activeTab === cat.key
+                ? "bg-ide-panel border-ide-accent text-ide-accent border-b-2 shadow-sm"
+                : "bg-transparent border-transparent text-ide-mute hover:bg-ide-panel hover:text-ide-text"
+            }`}
+          >
+            <span className="font-medium">{t(cat.labelKey)}</span>
+          </div>
+        ))}
+      </div>
+    ),
+    [activeTab, setSettingsActiveCategory, t]
+  );
 
   useEffect(() => {
     setTopBarConfig({
       show: true,
       leftButtons: [{ icon: <X size={18} />, onClick: () => removeGroup("settings") }],
-      centerContent: (
-        <div className="flex items-center gap-2 overflow-x-auto custom-scrollbar touch-pan-x h-full">
-          {SETTING_CATEGORIES.map((cat) => (
-            <div
-              key={cat.key}
-              onClick={() => setActiveTab(cat.key)}
-              className={`shrink-0 px-2 h-7 rounded-md flex items-center gap-1 text-xs border transition-all cursor-pointer ${
-                activeTab === cat.key
-                  ? "bg-ide-panel border-ide-accent text-ide-accent border-b-2 shadow-sm"
-                  : "bg-transparent border-transparent text-ide-mute hover:bg-ide-panel hover:text-ide-text"
-              }`}
-            >
-              <span className="font-medium">{t(cat.labelKey)}</span>
-            </div>
-          ))}
-        </div>
-      ),
+      centerContent: topBarCenterContent,
       rightButtons: [
         {
           icon: <RefreshCw size={18} />,
-          onClick: () => init(),
+          onClick: () => void initSettings(),
         },
       ],
     });
+  }, [initSettings, removeGroup, setTopBarConfig, topBarCenterContent]);
+
+  useEffect(() => {
     return () => setTopBarConfig({ show: false });
-  }, [t, setTopBarConfig, init, removeGroup, activeTab]);
+  }, [setTopBarConfig]);
 
   if (loading) {
     return (
@@ -228,7 +289,7 @@ const SettingsPage: React.FC = () => {
               key={schema.key}
               schema={schema}
               value={settings[schema.key] || schema.defaultValue}
-              onChange={(v) => handleSettingChange(schema.key, v)}
+              onChange={(v) => void handleSettingChange(schema.key, v)}
               t={t}
             />
           ))}

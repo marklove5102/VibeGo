@@ -1,15 +1,18 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
 import { keyFeedback } from "@/components/keyboard/core/key-feedback";
 import { KEYBOARD_QWERTY } from "@/components/keyboard/core/layouts";
 import type { SherpaStatus } from "@/components/keyboard/core/sherpa-asr";
-import { startRecording, stopAndRecognize } from "@/components/keyboard/core/sherpa-asr";
+import { hasRequiredSpeechAssets, startRecording, stopAndRecognize } from "@/components/keyboard/core/sherpa-asr";
 import type { KeyEvent, LayoutDef, ModifiersState } from "@/components/keyboard/core/types";
 import { MODIFIER_KEYS } from "@/components/keyboard/core/types";
 import KeyButton from "@/components/keyboard/key-button";
+import { getTranslation } from "@/lib/i18n";
+import { useSettingsStore } from "@/lib/settings";
 import "@/components/keyboard/keyboard.css";
 import { translateKeyEvent } from "@/components/keyboard/core/key-translator";
-import { useKeyboardStore } from "@/stores/keyboard-store";
 import { useFrameStore } from "@/stores/frame-store";
+import { useKeyboardStore } from "@/stores/keyboard-store";
 
 interface KeyboardProps {
   onKeyEvent: (event: KeyEvent) => void;
@@ -31,6 +34,8 @@ const KeyboardCore: React.FC<KeyboardProps> = ({ onKeyEvent, layout = KEYBOARD_Q
   const [asrStatus, setAsrStatus] = useState<SherpaStatus>("idle");
   const [asrProgress, setAsrProgress] = useState("");
   const recordingRef = useRef(false);
+  const openingSpeechSettingsRef = useRef(false);
+  const openSettingsCategory = useFrameStore((s) => s.openSettingsCategory);
 
   const emitText = useCallback(
     (text: string) => {
@@ -50,10 +55,33 @@ const KeyboardCore: React.FC<KeyboardProps> = ({ onKeyEvent, layout = KEYBOARD_Q
     [onKeyEvent]
   );
 
+  const openKeyboardSpeechSettings = useCallback(() => {
+    if (openingSpeechSettingsRef.current) return;
+    openingSpeechSettingsRef.current = true;
+    const locale = (useSettingsStore.getState().settings.locale || "zh") as "zh" | "en";
+    toast.info(getTranslation(locale, "settings.speechAssets.missingTitle"), {
+      id: "speech-assets-missing",
+      description: getTranslation(locale, "settings.speechAssets.missingDescription"),
+      action: {
+        label: getTranslation(locale, "settings.speechAssets.openSettings"),
+        onClick: () => openSettingsCategory("keyboard"),
+      },
+      duration: 6000,
+    });
+    window.setTimeout(() => {
+      openingSpeechSettingsRef.current = false;
+    }, 800);
+  }, [openSettingsCategory]);
+
   const handleMicToggle = useCallback(
-    (action?: "start" | "stop") => {
+    async (action?: "start" | "stop") => {
       if (action === "start") {
         if (!recordingRef.current) {
+          const ready = await hasRequiredSpeechAssets().catch(() => false);
+          if (!ready) {
+            openKeyboardSpeechSettings();
+            return;
+          }
           recordingRef.current = true;
           setAsrProgress("");
           startRecording((status, progress) => {
@@ -79,6 +107,11 @@ const KeyboardCore: React.FC<KeyboardProps> = ({ onKeyEvent, layout = KEYBOARD_Q
           setAsrProgress("");
           if (text) emitText(text);
         } else {
+          const ready = await hasRequiredSpeechAssets().catch(() => false);
+          if (!ready) {
+            openKeyboardSpeechSettings();
+            return;
+          }
           recordingRef.current = true;
           setAsrProgress("");
           startRecording((status, progress) => {
@@ -90,7 +123,7 @@ const KeyboardCore: React.FC<KeyboardProps> = ({ onKeyEvent, layout = KEYBOARD_Q
         }
       }
     },
-    [emitText]
+    [emitText, openKeyboardSpeechSettings]
   );
 
   const modName = useCallback((value: string): keyof ModifiersState | null => {

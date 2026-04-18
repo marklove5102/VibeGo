@@ -53,13 +53,22 @@ function formatMegabytes(value: number): string {
   return (value / 1048576).toFixed(1);
 }
 
+export function getBinaryAssetCacheKey(version: string, label: string): string {
+  return `vibego-speech-v2-${label}-${version || "dev"}`;
+}
+
+export async function hasBinaryAsset(version: string, label: string): Promise<boolean> {
+  const cached = await getFromDB(getBinaryAssetCacheKey(version, label));
+  return !!cached;
+}
+
 export async function fetchBinaryAsset(
   url: string,
   version: string,
   label: string,
   onStatus?: (status: SherpaStatus, progress?: string) => void
 ): Promise<ArrayBuffer> {
-  const cacheKey = `vibego-speech-v2-${label}-${version || "dev"}`;
+  const cacheKey = getBinaryAssetCacheKey(version, label);
 
   onStatus?.("loading", `Checking cache for ${label}...`);
   const cached = await getFromDB(cacheKey);
@@ -69,7 +78,8 @@ export async function fetchBinaryAsset(
   }
 
   onStatus?.("loading", `Downloading ${label}...`);
-  const assetUrl = version && version !== "dev" ? `${url}${url.includes('?') ? '&' : '?'}v=${encodeURIComponent(version)}` : url;
+  const assetUrl =
+    version && version !== "dev" ? `${url}${url.includes("?") ? "&" : "?"}v=${encodeURIComponent(version)}` : url;
 
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
@@ -79,7 +89,10 @@ export async function fetchBinaryAsset(
     xhr.onprogress = (e) => {
       if (e.lengthComputable && e.total > 0) {
         const pct = (e.loaded / e.total) * 100;
-        onStatus?.("loading", `${label} ${pct.toFixed(0)}% (${formatMegabytes(e.loaded)}/${formatMegabytes(e.total)}MB)`);
+        onStatus?.(
+          "loading",
+          `${label} ${pct.toFixed(0)}% (${formatMegabytes(e.loaded)}/${formatMegabytes(e.total)}MB)`
+        );
       } else {
         onStatus?.("loading", `${label} downloading... (${formatMegabytes(e.loaded)}MB)`);
       }
